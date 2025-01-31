@@ -1,0 +1,22 @@
+name: ai_pdf_study_assistant
+description: AI를 활용한 PDF 학습 도우미 애플리케이션
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  syncfusion_flutter_pdfviewer: ^22.2.12
+  pdf_text: ^0.5.0
+  http: ^1.1.0
+  path_provider: ^2.1.1
+  sqflite: ^2.3.0
+  provider: ^6.0.5
+  file_picker: ^6.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0 
