@@ -56,4 +56,9 @@ build/
 .DS_Store
 
 # Environment variables
+.env
+.env.development
+.env.production
+
+# Environment files
 .env 

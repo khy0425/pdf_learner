@@ -1,15 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:window_size/window_size.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'providers/pdf_provider.dart';
-import 'providers/ai_service_provider.dart';
 import 'screens/home_page.dart';
+import 'screens/desktop_home_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 환경 변수 로드
+  await dotenv.load(fileName: ".env");
+  
+  // 윈도우 크기 설정 (데스크톱인 경우)
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    setWindowTitle('AI PDF 학습 도우미');
+    setWindowMinSize(const Size(800, 600));
+    setWindowMaxSize(Size.infinite);
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => PDFProvider()),
-        ChangeNotifierProvider(create: (_) => AIServiceProvider()),
       ],
       child: const MyApp(),
     ),
@@ -22,12 +36,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI PDF 학습 도우미',
+      title: 'PDF Learner',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const HomePage(),
+      home: Platform.isWindows || Platform.isLinux || Platform.isMacOS
+          ? const DesktopHomePage()
+          : const HomePage(),
     );
   }
 } 

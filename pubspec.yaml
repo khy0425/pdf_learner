@@ -15,8 +15,23 @@ dependencies:
   sqflite: ^2.3.0
   provider: ^6.0.5
   file_picker: ^6.1.1
+  window_size:
+    git:
+      url: https://github.com/google/flutter-desktop-embedding
+      path: plugins/window_size
+  flutter_acrylic: ^1.1.3  # 윈도우 투명효과
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0 
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+
+  # 플랫폼 설정 추가
+  windows:
+    enable: true 

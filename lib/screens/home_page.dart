@@ -5,8 +5,22 @@ import 'dart:io';
 import '../providers/pdf_provider.dart';
 import '../widgets/pdf_list_item.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    // 저장된 PDF 파일들 로드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PDFProvider>().loadSavedPDFs();
+    });
+  }
 
   Future<void> _pickPDF(BuildContext context) async {
     final result = await FilePicker.platform.pickFiles(
@@ -26,30 +40,41 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('AI PDF 학습 도우미'),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () => _pickPDF(context),
-              child: const Text('PDF 업로드'),
-            ),
-          ),
-          Expanded(
-            child: Consumer<PDFProvider>(
-              builder: (context, pdfProvider, child) {
-                return ListView.builder(
-                  itemCount: pdfProvider.pdfFiles.length,
-                  itemBuilder: (context, index) {
-                    return PDFListItem(
-                      pdfFile: pdfProvider.pdfFiles[index],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+      body: Consumer<PDFProvider>(
+        builder: (context, pdfProvider, child) {
+          if (pdfProvider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ElevatedButton(
+                  onPressed: () => _pickPDF(context),
+                  child: const Text('PDF 업로드'),
+                ),
+              ),
+              if (pdfProvider.pdfFiles.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Text('PDF 파일을 업로드해주세요'),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: pdfProvider.pdfFiles.length,
+                    itemBuilder: (context, index) {
+                      return PDFListItem(
+                        pdfFile: pdfProvider.pdfFiles[index],
+                      );
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
