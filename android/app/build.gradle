@@ -1,0 +1,15 @@
+android {
+    // ...existing config...
+    
+    buildTypes {
+        release {
+            // Firebase 관련 ProGuard 규칙 추가
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    // Firebase 종속성 추가
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+} 

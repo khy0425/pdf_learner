@@ -1,5 +1,5 @@
 # Project-level configuration.
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15...3.27)
 project(ai_pdf_study_assistant LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -39,7 +39,11 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  target_compile_options(${TARGET} PRIVATE 
+    /W4 
+    /wd"4100"  # 사용되지 않은 매개변수 경고 무시
+    /wd"4996"  # deprecated 함수 경고 무시
+  )
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
@@ -106,3 +110,21 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# 현대적인 CMake 정책 설정
+if(POLICY CMP0077)
+  cmake_policy(SET CMP0077 NEW)
+endif()
+
+# C++17 표준 사용
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Firebase Auth 플러그인 특별 설정
+if(TARGET firebase_auth_plugin)
+  target_compile_definitions(firebase_auth_plugin PRIVATE
+    _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+    _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS
+  )
+endif()

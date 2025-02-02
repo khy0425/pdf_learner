@@ -10,10 +10,18 @@ import 'screens/desktop_home_page.dart';
 import 'theme/app_theme.dart';
 import 'providers/bookmark_provider.dart';
 import 'providers/tutorial_provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'providers/firebase_auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Firebase 초기화
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   // 환경 변수 로드
   await dotenv.load(fileName: ".env");
   
@@ -31,6 +39,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => BookmarkProvider()),
         ChangeNotifierProvider(create: (_) => TutorialProvider()),
+        ChangeNotifierProvider(create: (_) => FirebaseAuthService()),
       ],
       child: const MyApp(),
     ),

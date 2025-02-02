@@ -107,3 +107,14 @@ add_custom_target(flutter_assemble DEPENDS
   ${CPP_WRAPPER_SOURCES_PLUGIN}
   ${CPP_WRAPPER_SOURCES_APP}
 )
+
+# Flutter Windows 플러그인 설정
+set(FLUTTER_PLUGIN_COMPILE_OPTIONS
+  "$<$<CONFIG:Debug>:/MDd>"
+  "$<$<CONFIG:Release>:/MD>"
+  "/wd4996"  # deprecated 경고 무시
+)
+
+if(PLUGIN_BUNDLED_LIBRARIES)
+  list(APPEND PLUGIN_BUNDLED_LIBRARIES ${FLUTTER_PLUGIN_BUNDLED_LIBRARIES})
+endif()
