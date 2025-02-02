@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../screens/pdf_viewer_screen.dart';
 import '../providers/pdf_provider.dart';
+import 'package:provider/provider.dart';
 
 class PDFListItem extends StatelessWidget {
   final File pdfFile;

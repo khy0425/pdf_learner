@@ -4,8 +4,12 @@ import 'dart:io';
 import 'package:window_size/window_size.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'providers/pdf_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/home_page.dart';
 import 'screens/desktop_home_page.dart';
+import 'theme/app_theme.dart';
+import 'providers/bookmark_provider.dart';
+import 'providers/tutorial_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +28,9 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => PDFProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => BookmarkProvider()),
+        ChangeNotifierProvider(create: (_) => TutorialProvider()),
       ],
       child: const MyApp(),
     ),
@@ -35,15 +42,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PDF Learner',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
-      home: Platform.isWindows || Platform.isLinux || Platform.isMacOS
-          ? const DesktopHomePage()
-          : const HomePage(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'PDF Learner',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeProvider.themeMode,
+          home: Platform.isWindows || Platform.isLinux || Platform.isMacOS
+              ? const DesktopHomePage()
+              : const HomePage(),
+        );
+      },
     );
   }
 } 
