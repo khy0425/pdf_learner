@@ -14,53 +14,65 @@ class PDFListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: ListTile(
-        leading: const Icon(Icons.picture_as_pdf),
-        title: Text(pdfFile.path.split('/').last),
-        subtitle: const Text('탭하여 열기'),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete),
-          onPressed: () async {
-            // 삭제 확인 다이얼로그
-            final shouldDelete = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('PDF 삭제'),
-                content: const Text('이 PDF를 삭제하시겠습니까?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('취소'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('삭제'),
-                  ),
-                ],
-              ),
-            );
+    final fileName = pdfFile.path.split(Platform.pathSeparator).last;
+    final filePath = pdfFile.path.substring(0, pdfFile.path.length - fileName.length);
 
-            if (shouldDelete == true && context.mounted) {
-              await context.read<PDFProvider>().deletePDF(pdfFile);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PDF가 삭제되었습니다')),
-                );
-              }
-            }
-          },
+    return ListTile(
+      leading: const Icon(Icons.picture_as_pdf),
+      title: Text(
+        fileName,
+        style: const TextStyle(
+          fontWeight: FontWeight.w500,
         ),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PDFViewerScreen(pdfFile: pdfFile),
+      ),
+      subtitle: Text(
+        filePath,
+        style: TextStyle(
+          fontSize: 12,
+          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline),
+        onPressed: () async {
+          // 삭제 확인 다이얼로그
+          final shouldDelete = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('PDF 삭제'),
+              content: const Text('이 PDF를 삭제하시겠습니까?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('취소'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('삭제'),
+                ),
+              ],
             ),
           );
+
+          if (shouldDelete == true && context.mounted) {
+            await context.read<PDFProvider>().deletePDF(pdfFile);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('PDF가 삭제되었습니다')),
+              );
+            }
+          }
         },
       ),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PDFViewerScreen(pdfFile: pdfFile),
+          ),
+        );
+      },
     );
   }
 } 

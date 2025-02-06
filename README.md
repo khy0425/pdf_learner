@@ -55,11 +55,29 @@ PDF 문서를 AI를 활용하여 효과적으로 학습할 수 있도록 도와�
 
 ## 시작하기
 
-### 필수 요구사항
-- Flutter SDK (3.0.0 이상)
-- Dart SDK (2.17.0 이상)
-- Android Studio 또는 VS Code
-- OpenAI API 키 (AI 기능 사용 시)
+### 일반 사용자
+1. 앱 설치 후 실행
+2. 다음 중 선택:
+   - [Google AI Studio](https://makersuite.google.com/app/apikey)에서 무료 API 키 발급 후 입력
+   - 프리미엄 구독 시작 (월 9,900원)
+
+### 구독 플랜
+- **무료 플랜**
+  - 개인 API 키 사용
+  - 기본 기능 제공
+- **프리미엄 플랜 (월 9,900원)**
+  - API 키 설정 불필요
+  - 무제한 AI 기능 사용
+  - 고급 기능 제공
+  - 광고 제거
+
+### 개발자 설정
+1. 소스 코드 클론
+2. Firebase 프로젝트 설정
+3. (선택사항) 자체 API 키로 개발 환경 구성:
+```bash
+GEMINI_API_KEY=your_api_key_here
+```
 
 ### 설치 방법
 

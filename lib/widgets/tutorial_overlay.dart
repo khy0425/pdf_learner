@@ -69,157 +69,190 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return RawKeyboardListener(
-      focusNode: _focusNode,
-      onKey: _handleKeyEvent,
-      autofocus: true,
-      child: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          if (details.primaryVelocity! > 0) {
-            if (_currentPage > 0) {
-              _pageController.previousPage(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            }
-          } else if (details.primaryVelocity! < 0) {
-            if (_currentPage < _pages.length - 1) {
-              _pageController.nextPage(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            }
-          }
-        },
-        child: Container(
-          color: colorScheme.background.withOpacity(0.9),
-          child: Stack(
-            children: [
-              PageView(
-                controller: _pageController,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentPage = index;
-                  });
-                },
-                children: _pages,
-              ),
-              if (_currentPage > 0)
-                Positioned(
-                  left: 16,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.arrow_back_ios,
-                        color: colorScheme.primary,
-                      ),
-                      onPressed: () {
-                        _pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                    ),
+    return Material(
+      color: Colors.black54,
+      child: Column(
+        children: [
+          AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Image.asset('assets/images/app_icon.png'),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI PDF 학습 도우미',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
-              if (_currentPage < _pages.length - 1)
-                Positioned(
-                  right: 16,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.arrow_forward_ios,
-                        color: colorScheme.primary,
-                      ),
-                      onPressed: () {
-                        _pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                    ),
+                Text(
+                  'PDF LEARNER',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
-              Positioned(
-                top: 16,
-                right: 16,
-                child: IconButton(
-                  icon: Icon(
-                    Icons.close,
-                    color: colorScheme.onBackground,
-                  ),
-                  onPressed: () {
-                    context.read<TutorialProvider>().completeTutorial(
-                      skipForToday: true,
+              ],
+            ),
+          ),
+          RawKeyboardListener(
+            focusNode: _focusNode,
+            onKey: _handleKeyEvent,
+            autofocus: true,
+            child: GestureDetector(
+              onHorizontalDragEnd: (details) {
+                if (details.primaryVelocity! > 0) {
+                  if (_currentPage > 0) {
+                    _pageController.previousPage(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
                     );
-                  },
-                ),
-              ),
-              Positioned(
-                bottom: 32,
-                left: 0,
-                right: 0,
-                child: Column(
+                  }
+                } else if (details.primaryVelocity! < 0) {
+                  if (_currentPage < _pages.length - 1) {
+                    _pageController.nextPage(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                }
+              },
+              child: Container(
+                color: Colors.transparent,
+                child: Stack(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        _pages.length,
-                        (index) => Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _currentPage == index
-                                ? colorScheme.primary
-                                : colorScheme.primary.withOpacity(0.2),
+                    PageView(
+                      controller: _pageController,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPage = index;
+                        });
+                      },
+                      children: _pages,
+                    ),
+                    if (_currentPage > 0)
+                      Positioned(
+                        left: 16,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.arrow_back_ios,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            onPressed: () {
+                              _pageController.previousPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            context.read<TutorialProvider>().completeTutorial(
-                              skipForToday: true,
-                            );
-                          },
-                          child: const Text('오늘 하루 보지 않기'),
-                        ),
-                        const SizedBox(width: 16),
-                        FilledButton(
-                          onPressed: () {
-                            if (_currentPage < _pages.length - 1) {
+                    if (_currentPage < _pages.length - 1)
+                      Positioned(
+                        right: 16,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.arrow_forward_ios,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            onPressed: () {
                               _pageController.nextPage(
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
                               );
-                            } else {
-                              context.read<TutorialProvider>().completeTutorial();
-                            }
-                          },
-                          child: Text(
-                            _currentPage < _pages.length - 1 ? '다음' : '시작하기',
+                            },
                           ),
                         ),
-                      ],
+                      ),
+                    Positioned(
+                      top: 16,
+                      right: 16,
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          color: Theme.of(context).colorScheme.onBackground,
+                        ),
+                        onPressed: () {
+                          context.read<TutorialProvider>().completeTutorial(
+                            skipForToday: true,
+                          );
+                        },
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 32,
+                      left: 0,
+                      right: 0,
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              _pages.length,
+                              (index) => Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _currentPage == index
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              TextButton(
+                                onPressed: () {
+                                  context.read<TutorialProvider>().completeTutorial(
+                                    skipForToday: true,
+                                  );
+                                },
+                                child: const Text('오늘 하루 보지 않기'),
+                              ),
+                              const SizedBox(width: 16),
+                              FilledButton(
+                                onPressed: () {
+                                  if (_currentPage < _pages.length - 1) {
+                                    _pageController.nextPage(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut,
+                                    );
+                                  } else {
+                                    context.read<TutorialProvider>().completeTutorial();
+                                  }
+                                },
+                                child: Text(
+                                  _currentPage < _pages.length - 1 ? '다음' : '시작하기',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

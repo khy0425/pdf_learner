@@ -12,6 +12,8 @@ import 'package:flutter/services.dart';  // 이 import가 있는지 확인
 import './quiz_result_screen.dart';  // QuizResultScreen import 추가
 import 'dart:math' show min;
 import 'dart:math';  // Random 클래스를 위한 import 추가
+import 'package:syncfusion_flutter_pdf/pdf.dart';  // PdfDocument import 추가
+import 'dart:convert';  // base64Encode를 위한 import
 
 class PDFViewerScreen extends StatefulWidget {
   final File pdfFile;
@@ -33,13 +35,15 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   final PDFService _pdfService = PDFService();
   final AIService _aiService = AIService();
   bool _showOutline = false;
-  List<Map<String, dynamic>>? _outlineData;  // 목차 데이터를 Map으로 저장
+  List<Map<String, dynamic>>? _outlineData;
   PdfTextSearchResult _searchResult = PdfTextSearchResult();
-  final ScrollController _thumbnailScrollController = ScrollController();  // 썸네일 스크롤 컨트롤러 추가
+  final ScrollController _thumbnailScrollController = ScrollController();
   final List<String> _highlightedSentences = [];
   bool _showHighlights = true;
   final Color _highlightColor = Colors.yellow.withOpacity(0.3);
   bool _isLoading = false;
+  List<Map<String, dynamic>> _bookmarks = [];  // PdfBookmark를 Map으로 변경
+  bool _showBookmarks = false;
 
   // 확대/축소 관련 상수 수정
   static const double _minZoomLevel = 0.05;   // 최소 5%까지 축소 가능
@@ -50,6 +54,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   void initState() {
     super.initState();
     _loadOutline();
+    _loadBookmarks();
   }
 
   @override
@@ -94,13 +99,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
           ),
         },
         child: Scaffold(
-          appBar: AppBar(
-            title: Text(widget.pdfFile.path.split('/').last),
-            actions: _buildActions(),
-            bottom: _showSearchBar
-                ? _buildSearchBar()
-                : null,
-          ),
+          appBar: _buildAppBar(),
           body: Stack(
             children: [
               Row(
@@ -218,6 +217,18 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
               _buildLoadingOverlay(),  // 로딩 오버레이 추가
             ],
           ),
+          floatingActionButton: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              FloatingActionButton(
+                heroTag: 'thumbnails',
+                onPressed: () => setState(() => _showThumbnails = !_showThumbnails),
+                child: const Icon(Icons.photo_library),
+              ),
+              const SizedBox(height: 8),
+              // ... 기존 FAB 버튼들
+            ],
+          ),
         ),
       ),
     );
@@ -260,6 +271,14 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
   Future<void> _showFullSummary(BuildContext context) async {
     try {
+      // API 사용량 체크
+      if (!await _aiService.checkUsageLimit()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('일일 사용량을 초과했습니다. 내일 다시 시도해주세요.')),
+        );
+        return;
+      }
+
       // 로딩 다이얼로그 표시
       showDialog(
         context: context,
@@ -313,7 +332,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       );
 
       // 텍스트 추출 및 요약 생성
-      final fullText = await _pdfService.extractText(
+      final text = await _pdfService.extractText(
         widget.pdfFile,
         onProgress: (current, total) {
           // 진행 상황 처리
@@ -322,12 +341,10 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
       if (!mounted) return;
       
-      final summary = await _aiService.generateSummary(
-        fullText,
-        onProgress: (status) {
-          // 상태 업데이트 처리
-        },
-      );
+      final summary = await _aiService.generateSummary(text);
+
+      // 사용량 증가
+      await _aiService.incrementUsage();
 
       if (!mounted) return;
       Navigator.pop(context);  // 로딩 다이얼로그 닫기
@@ -1336,6 +1353,127 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
           : const SizedBox.shrink(),
     );
   }
+
+  Future<void> _loadBookmarks() async {
+    try {
+      final bytes = await widget.pdfFile.readAsBytes();
+      final document = PdfDocument(inputBytes: bytes);
+
+      final bookmarkList = <Map<String, dynamic>>[];
+      
+      if (document.bookmarks != null) {
+        for (int i = 0; i < document.bookmarks!.count; i++) {
+          final bookmark = document.bookmarks![i];
+          if (bookmark != null) {
+            // 페이지 번호 직접 사용
+            bookmarkList.add({
+              'title': bookmark.title ?? '제목 없음',
+              'pageIndex': i + 1,  // 기본 페이지 번호 사용
+            });
+
+            // 하위 북마크 처리
+            for (int j = 0; j < bookmark.count; j++) {
+              final subBookmark = bookmark[j];
+              if (subBookmark != null) {
+                bookmarkList.add({
+                  'title': '  ${subBookmark.title ?? '제목 없음'}',
+                  'pageIndex': j + 1,  // 하위 북마크의 페이지 번호
+                });
+              }
+            }
+          }
+        }
+      }
+
+      setState(() {
+        _bookmarks = bookmarkList;
+      });
+
+      document.dispose();
+    } catch (e) {
+      print('목차 로딩 실패: $e');
+      setState(() {
+        _bookmarks = [];
+      });
+    }
+  }
+
+  Widget _buildBookmarkList() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      width: _showBookmarks ? 280 : 0,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Column(
+          children: [
+            ListTile(
+              title: const Text('목차'),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => _showBookmarks = false),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _bookmarks.length,
+                itemBuilder: (context, index) {
+                  final bookmark = _bookmarks[index];
+                  return ListTile(
+                    title: Text(bookmark['title']),
+                    onTap: () {
+                      _pdfViewerController.jumpToPage(bookmark['pageIndex']);
+                      setState(() => _showBookmarks = false);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // AppBar에 목차 버튼 추가
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      leading: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Image.asset(
+          'assets/images/app_icon.png',
+          fit: BoxFit.contain,  // 이미지가 패딩 영역에 맞게 조정
+        ),
+      ),
+      title: Column(  // Expanded 제거하고 단순화
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AI PDF 학습 도우미',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            'PDF LEARNER',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.list),
+          onPressed: () => setState(() => _showBookmarks = !_showBookmarks),
+        ),
+        ..._buildActions(),
+      ],
+      bottom: _showSearchBar ? _buildSearchBar() : null,
+    );
+  }
 }
 
 class _ExtractedTextView extends StatefulWidget {
@@ -1677,41 +1815,13 @@ class _QuizDialogState extends State<_QuizDialog> {
               final isCorrect = hasAnswered && index == correctAnswer;
               final isWrong = hasAnswered && isSelected && !isCorrect;
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Material(
-                  color: isCorrect
-                      ? Colors.green.withOpacity(0.1)
-                      : isWrong
-                          ? Colors.red.withOpacity(0.1)
-                          : null,
-                  borderRadius: BorderRadius.circular(8),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: isCorrect
-                            ? Colors.green
-                            : isWrong
-                                ? Colors.red
-                                : Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                    ),
-                    title: Text(option),
-                    leading: Radio<int>(
-                      value: index,
-                      groupValue: userAnswer,
-                      onChanged: hasAnswered
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _userAnswers[_currentQuizIndex] = value;
-                                _showExplanation = true;
-                              });
-                            },
-                    ),
-                  ),
-                ),
+              return _buildQuizOption(
+                index,
+                option,
+                isSelected,
+                hasAnswered,
+                isCorrect,
+                isWrong,
               );
             }).toList(),
             if (_showExplanation && hasAnswered) ...[
@@ -1796,6 +1906,85 @@ class _QuizDialogState extends State<_QuizDialog> {
           quizzes: widget.quizList,
           userAnswers: _userAnswers.cast<int>(),
           aiService: AIService(),
+        ),
+      ),
+    );
+  }
+
+  // 퀴즈 옵션 관련 코드 수정
+  Widget _buildQuizOption(
+    int index,
+    String option,
+    bool isSelected,
+    bool hasAnswered,
+    bool isCorrect,
+    bool isWrong,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: isCorrect
+            ? Colors.green.withOpacity(0.1)
+            : isWrong
+                ? Colors.red.withOpacity(0.1)
+                : null,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: hasAnswered 
+              ? null 
+              : () {
+                  setState(() {
+                    _userAnswers[_currentQuizIndex] = index;
+                    _showExplanation = true;
+                  });
+                },
+          borderRadius: BorderRadius.circular(8),
+          child: ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: isCorrect
+                    ? Colors.green
+                    : isWrong
+                        ? Colors.red
+                        : isSelected
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            title: Text(
+              option,
+              style: TextStyle(
+                color: hasAnswered
+                    ? isCorrect
+                        ? Colors.green
+                        : isWrong
+                            ? Colors.red
+                            : null
+                    : isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                fontWeight: isSelected ? FontWeight.bold : null,
+              ),
+            ),
+            trailing: isSelected
+                ? Icon(
+                    hasAnswered
+                        ? isCorrect
+                            ? Icons.check_circle
+                            : Icons.cancel
+                        : Icons.radio_button_checked,
+                    color: hasAnswered
+                        ? isCorrect
+                            ? Colors.green
+                            : Colors.red
+                        : Theme.of(context).colorScheme.primary,
+                  )
+                : hasAnswered
+                    ? null
+                    : const Icon(Icons.radio_button_unchecked),
+          ),
         ),
       ),
     );

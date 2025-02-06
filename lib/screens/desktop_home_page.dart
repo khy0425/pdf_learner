@@ -34,6 +34,58 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         return Stack(
           children: [
             Scaffold(
+              appBar: AppBar(
+                leading: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Image.asset('assets/images/app_icon.png'),
+                ),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'AI PDF 학습 도우미',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'PDF LEARNER',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.help_outline,
+                      color: colorScheme.primary,
+                    ),
+                    onPressed: _showHelpDialog,
+                    tooltip: '도움말',
+                    padding: const EdgeInsets.all(8),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      context.watch<ThemeProvider>().themeMode == ThemeMode.dark
+                          ? Icons.light_mode
+                          : Icons.dark_mode,
+                    ),
+                    onPressed: () {
+                      final themeProvider = context.read<ThemeProvider>();
+                      themeProvider.setThemeMode(
+                        themeProvider.themeMode == ThemeMode.dark
+                            ? ThemeMode.light
+                            : ThemeMode.dark,
+                      );
+                    },
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ],
+              ),
               body: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -94,36 +146,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                                       ),
                                     ],
                                   ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.help_outline,
-                                        color: colorScheme.primary,
-                                      ),
-                                      onPressed: _showHelpDialog,
-                                      tooltip: '도움말',
-                                      padding: const EdgeInsets.all(8),
-                                    ),
-                                    IconButton(
-                                      icon: Icon(
-                                        context.watch<ThemeProvider>().themeMode == ThemeMode.dark
-                                            ? Icons.light_mode
-                                            : Icons.dark_mode,
-                                      ),
-                                      onPressed: () {
-                                        final themeProvider = context.read<ThemeProvider>();
-                                        themeProvider.setThemeMode(
-                                          themeProvider.themeMode == ThemeMode.dark
-                                              ? ThemeMode.light
-                                              : ThemeMode.dark,
-                                        );
-                                      },
-                                      padding: const EdgeInsets.all(8),
-                                    ),
-                                  ],
                                 ),
                               ],
                             ),

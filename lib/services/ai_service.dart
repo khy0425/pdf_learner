@@ -2,10 +2,14 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AIService {
+  static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
+  static String get _hfApiKey => dotenv.env['HUGGING_FACE_API_KEY'] ?? '';
+
   // Gemini API 설정
-  static const String _apiKey = 'AIzaSyAjxIypX5iritXTZO3M_4mhJ8uwjWyyHJ8';  // API 키 직접 설정
   static const String _apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
 
   // 사용 가능한 한국어 요약 모델로 변경
@@ -32,29 +36,38 @@ class AIService {
     return result.trim();
   }
 
-  Future<String> generateSummary(
-    String text, {
-    Function(String)? onProgress,
-  }) async {
+  static Future<String> getApiKey() async {
     try {
-      if (onProgress != null) {
-        onProgress('AI가 텍스트를 분석중입니다...');
+      // 1. 먼저 .env 파일의 API 키 확인
+      final envApiKey = dotenv.env['GEMINI_API_KEY'];
+      if (envApiKey?.isNotEmpty ?? false) {
+        return envApiKey!;
       }
-      final processedText = _preprocessText(text);
-      print('요약 생성 시작...');
 
+      // 2. 사용자가 입력한 API 키 확인
+      final prefs = await SharedPreferences.getInstance();
+      final userApiKey = prefs.getString('user_api_key');
+      if (userApiKey?.isNotEmpty ?? false) {
+        return userApiKey!;
+      }
+
+      throw Exception('API 키가 설정되지 않았습니다. API 키를 입력해주세요.');
+    } catch (e) {
+      throw Exception('API 키 설정 오류: $e');
+    }
+  }
+
+  Future<String> generateSummary(String text) async {
+    try {
       final response = await http.post(
         Uri.parse('$_apiUrl?key=$_apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'contents': [{
             'parts': [{
-              'text': '''다음 텍스트를 한국어로 간단명료하게 요약해주세요. 
-              핵심 내용을 3-4개의 문장으로 요약하고, 각 문장은 번호를 붙여서 표시해주세요:
+              'text': '''다음 텍스트를 한국어로 간단명료하게 요약해주세요:
               
-              $processedText'''
+              $text'''
             }]
           }],
           'generationConfig': {
@@ -64,22 +77,14 @@ class AIService {
         }),
       );
 
-      print('응답 상태 코드: ${response.statusCode}');
-      
       if (response.statusCode == 200) {
         final result = jsonDecode(utf8.decode(response.bodyBytes));
-        print('응답 성공!');
-        
-        if (result['candidates']?[0]?['content'] != null) {
-          final summary = result['candidates'][0]['content']['parts'][0]['text'].trim();
-          return summary;
-        }
+        return result['candidates'][0]['content']['parts'][0]['text'];
       }
       
-      print('API 오류 응답: ${response.body}');
       throw Exception('요약 생성 실패');
     } catch (e) {
-      print('요약 생성 중 오류 발생: $e');
+      print('요약 생성 중 오류: $e');
       rethrow;
     }
   }
@@ -112,34 +117,41 @@ class AIService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> generateQuiz(
-    String text, {
-    int? count,
-  }) async {
+  Future<List<Map<String, dynamic>>> generateQuiz(String text, {int count = 5}) async {
     try {
-      final processedText = _preprocessText(text);
-      final quizCount = count ?? 5;
-
       final response = await http.post(
         Uri.parse('$_apiUrl?key=$_apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'contents': [{
             'parts': [{
-              'text': '''다음 텍스트를 바탕으로 $quizCount개의 4지선다형 퀴즈를 만들어주세요.
-              
-              다음 형식을 반드시 지켜주세요:
-              문제: [문제 내용]
-              ① [보기1]
-              ② [보기2]
-              ③ [보기3]
-              ④ [보기4]
-              정답: [1-4 중 선택]
-              해설: [해설 내용]
+              'text': '''다음 텍스트를 바탕으로 $count개의 퀴즈를 만들어주세요.
 
-              텍스트: $processedText'''
+              퀴즈 작성 규칙:
+              1. 육하원칙(누가, 언제, 어디서, 무엇을, 어떻게, 왜)을 최대한 활용해 구체적인 문제를 작성
+              2. 문제 내용이 모호하지 않도록 명확하게 작성
+              3. 정답과 오답의 구분이 명확해야 함
+              4. 해설에는 왜 그 답이 정답인지 구체적으로 설명
+              
+              다음 JSON 형식으로 작성해주세요:
+              {
+                "quizzes": [
+                  {
+                    "question": "구체적인 문제 내용 (육하원칙 활용)",
+                    "options": [
+                      "명확한 보기1",
+                      "명확한 보기2",
+                      "명확한 보기3",
+                      "명확한 보기4"
+                    ],
+                    "answer": 정답번호(0-3),
+                    "explanation": "왜 이 답이 정답인지 구체적인 설명",
+                    "category": "문제 유형(개념/사실/분석/추론 등)"
+                  }
+                ]
+              }
+              
+              텍스트: $text'''
             }]
           }],
           'generationConfig': {
@@ -149,95 +161,21 @@ class AIService {
         }),
       );
 
-      print('API 요청 완료: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final result = jsonDecode(utf8.decode(response.bodyBytes));
-        final content = result['candidates']?[0]?['content']?['parts']?[0]?['text'] as String?;
+        final content = result['candidates'][0]['content']['parts'][0]['text'];
         
-        print('AI 응답 내용:');
-        print(content);
-
-        if (content != null) {
-          final quizzes = <Map<String, dynamic>>[];
-          
-          // 문제 단위로 분리하는 부분 수정
-          final problems = content
-              .split(RegExp(r'\*\*문제\s*\d+:\*\*'))  // "문제 N:" 형식으로 분리
-              .where((s) => s.trim().isNotEmpty)
-              .toList();
-          
-          for (final problem in problems) {
-            try {
-              // 문제 내용 추출 수정
-              final questionLines = problem.split('\n');
-              final question = questionLines.first.trim();
-
-              // 보기 추출 부분 수정
-              final options = <String>[];
-              final optionsRegex = RegExp(r'[①②③④]\s*([^\n]+)');
-              final optionsText = problem.split('정답:')[0];  // 정답 이전 텍스트만 사용
-              final optionsMatches = optionsRegex.allMatches(optionsText);
-              
-              for (final match in optionsMatches) {
-                final option = match.group(1)?.trim();
-                if (option != null && option.isNotEmpty) {
-                  options.add(option);
-                }
-              }
-
-              // 정답 추출 부분 수정
-              var answer = -1;
-              if (problem.contains('정답:')) {
-                final answerPart = problem.split('정답:')[1].split('\n')[0].trim();
-                if (answerPart.contains('①') || answerPart == '1') answer = 0;
-                else if (answerPart.contains('②') || answerPart == '2') answer = 1;
-                else if (answerPart.contains('③') || answerPart == '3') answer = 2;
-                else if (answerPart.contains('④') || answerPart == '4') answer = 3;
-              }
-
-              // 해설 추출 부분 수정
-              var explanation = '';
-              if (problem.contains('해설:')) {
-                explanation = problem
-                    .split('해설:')[1]
-                    .split('**')[0]  // 다음 문제 시작 전까지
-                    .trim();
-              }
-
-              // 디버그 출력
-              print('처리 중인 문제:');
-              print('문제: $question');
-              print('보기: $options');
-              print('정답: $answer');
-              print('해설: $explanation');
-
-              if (question.isNotEmpty && options.length == 4 && answer >= 0 && explanation.isNotEmpty) {
-                quizzes.add({
-                  'question': question,
-                  'options': options,
-                  'answer': answer,
-                  'explanation': explanation,
-                });
-              }
-            } catch (e) {
-              print('개별 퀴즈 파싱 오류: $e');
-              print('문제 내용: $problem');
-            }
-          }
-
-          print('생성된 퀴즈 수: ${quizzes.length}');
-          if (quizzes.isEmpty) {
-            print('파싱된 퀴즈가 없습니다. 원본 응답:');
-            print(content);
-          }
-          return quizzes;
-        }
+        final jsonStart = content.indexOf('{');
+        final jsonEnd = content.lastIndexOf('}') + 1;
+        final jsonStr = content.substring(jsonStart, jsonEnd);
+        final parsed = jsonDecode(jsonStr);
+        
+        return List<Map<String, dynamic>>.from(parsed['quizzes']);
       }
       
-      throw Exception('퀴즈 생성 실패: 응답 형식 오류');
+      throw Exception('퀴즈 생성 실패');
     } catch (e) {
-      print('퀴즈 생성 중 오류 발생: $e');
+      print('퀴즈 생성 중 오류: $e');
       rethrow;
     }
   }
@@ -267,25 +205,15 @@ class AIService {
       final processedText = _preprocessText(text);
       print('핵심 문장 추출 시작...');
 
+      final apiKey = await getApiKey();
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
+        Uri.parse('$_apiUrl/key-sentences'),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',  // 사용자 인증 토큰
         },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음 텍스트에서 가장 중요한 핵심 문장들을 추출해주세요.
-              각 문장은 원문 그대로 추출하고, 줄바꿈으로 구분해주세요.
-              가능한 한 전체 내용을 포괄하는 5-7개의 핵심 문장을 선택해주세요:
-              
-              $processedText'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.3,
-            'maxOutputTokens': 1024,
-          },
+          'text': processedText,
         }),
       );
 
@@ -319,24 +247,15 @@ class AIService {
 
   Future<String> generateStudySuggestion(String content) async {
     try {
+      final apiKey = await getApiKey();
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
+        Uri.parse('$_apiUrl/study-suggestion'),
         headers: {
           'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer $apiKey',  // 사용자 인증 토큰
         },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음 학습 노트 내용을 분석하고, 추가 학습이 필요한 부분과 
-              심화 학습을 위한 제안사항을 제시해주세요:
-              
-              $content'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.7,
-            'maxOutputTokens': 1024,
-          },
+          'text': content,
         }),
       );
 
@@ -363,39 +282,19 @@ class AIService {
       final correctAnswer = quiz['answer'];
       final explanation = quiz['explanation'];
 
+      final apiKey = await getApiKey();
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
+        Uri.parse('$_apiUrl/mistake-analysis'),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',  // 사용자 인증 토큰
         },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음 퀴즈의 오답에 대한 상세 분석과 학습 제안을 해주세요.
-              
-              문제: $question
-              보기:
-              ${options.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')}
-              
-              학생의 답: ${userAnswer + 1}번
-              정답: ${correctAnswer + 1}번
-              기존 해설: $explanation
-              
-              다음 JSON 형식으로 응답해주세요:
-              {
-                "mistakeAnalysis": "오답 선택 이유 분석",
-                "conceptExplanation": "관련 개념 상세 설명",
-                "studyTips": ["학습 제안 1", "학습 제안 2", "학습 제안 3"],
-                "relatedTopics": ["연관 주제 1", "연관 주제 2"]
-              }'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.7,
-            'topK': 40,
-            'topP': 0.95,
-            'maxOutputTokens': 2048,
-          },
+          'question': question,
+          'options': options,
+          'userAnswer': userAnswer,
+          'correctAnswer': correctAnswer,
+          'explanation': explanation,
         }),
       );
 
@@ -426,38 +325,15 @@ class AIService {
         '문제: ${q['question']}\n정답: ${q['options'][q['answer']]}'
       ).join('\n\n');
 
+      final apiKey = await getApiKey();
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
+        Uri.parse('$_apiUrl/review-quizzes'),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',  // 사용자 인증 토큰
         },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음은 학생이 틀린 문제들입니다. 
-              이 문제들의 개념을 보강하기 위한 새로운 복습 문제 3개를 만들어주세요.
-              
-              틀린 문제들:
-              $quizzesStr
-              
-              위 문제들과 연관된 새로운 퀴즈를 다음 JSON 형식으로 만들어주세요:
-              {
-                "quizzes": [
-                  {
-                    "question": "문제",
-                    "options": ["보기1", "보기2", "보기3", "보기4"],
-                    "answer": 정답번호(0-3),
-                    "explanation": "해설",
-                    "relatedConcepts": ["관련 개념1", "관련 개념2"]
-                  }
-                ]
-              }'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.7,
-            'maxOutputTokens': 2048,
-          },
+          'text': quizzesStr,
         }),
       );
 
@@ -488,32 +364,15 @@ class AIService {
         '문제: ${q['question']}\n정답: ${q['options'][q['answer']]}'
       ).join('\n\n');
 
+      final apiKey = await getApiKey();
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
+        Uri.parse('$_apiUrl/study-guide'),
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',  // 사용자 인증 토큰
         },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음은 학생이 틀린 문제들입니다. 
-              이를 바탕으로 학습 가이드를 작성해주세요.
-              
-              틀린 문제들:
-              $quizzesStr
-              
-              다음 JSON 형식으로 응답해주세요:
-              {
-                "weakPoints": ["취약한 개념 1", "취약한 개념 2"],
-                "studyPlan": "단계별 학습 계획",
-                "recommendedResources": ["추천 자료 1", "추천 자료 2"]
-              }'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.7,
-            'maxOutputTokens': 2048,
-          },
+          'text': quizzesStr,
         }),
       );
 
@@ -533,5 +392,27 @@ class AIService {
       print('학습 가이드 생성 중 오류 발생: $e');
       rethrow;
     }
+  }
+
+  // API 사용량 제한 (옵션)
+  static const int _freeUsageLimit = 50;  // 무료 사용자 일일 제한
+  
+  Future<bool> checkUsageLimit() async {
+    // SharedPreferences로 간단히 구현
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    final usageKey = 'api_usage_$today';
+    
+    final usage = prefs.getInt(usageKey) ?? 0;
+    return usage < _freeUsageLimit;
+  }
+
+  Future<void> incrementUsage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    final usageKey = 'api_usage_$today';
+    
+    final usage = prefs.getInt(usageKey) ?? 0;
+    await prefs.setInt(usageKey, usage + 1);
   }
 } 

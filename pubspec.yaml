@@ -8,8 +8,8 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  syncfusion_flutter_pdfviewer: ^28.2.3
-  syncfusion_flutter_pdf: ^28.2.3
+  syncfusion_flutter_pdfviewer: ^24.1.41
+  syncfusion_flutter_pdf: ^24.1.41
   http: ^1.1.0
   path_provider: ^2.1.2
   sqflite: ^2.3.0
@@ -66,4 +66,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - .env 
+    - .env
+    - assets/images/
+    # 또는 직접 파일 지정
+    - assets/images/app_icon.png
