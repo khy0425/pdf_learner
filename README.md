@@ -63,13 +63,17 @@ PDF 문서를 AI를 활용하여 효과적으로 학습할 수 있도록 도와�
 
 ### 구독 플랜
 - **무료 플랜**
-  - 개인 API 키 사용
-  - 기본 기능 제공
-- **프리미엄 플랜 (월 9,900원)**
-  - API 키 설정 불필요
-  - 무제한 AI 기능 사용
-  - 고급 기능 제공
-  - 광고 제거
+  - 일일 5회 퀴즈 생성
+  - 기본 PDF 관리 기능
+
+- **베이직 플랜 (₩9,900/월)**
+  - 일일 20회 퀴즈 생성
+  - AI 분석 기능
+  
+- **프리미엄 플랜 (₩19,900/월)**
+  - 무제한 퀴즈 생성
+  - 고급 AI 분석
+  - 클라우드 동기화
 
 ### 개발자 설정
 1. 소스 코드 클론
@@ -156,58 +160,4 @@ lib/
 ## 기여하기
 
 1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 라이선스
-
-이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 문제 해결
-
-### 일반적인 문제
-- **PDF 로딩 실패**: 파일 권한 설정 확인
-- **AI 기능 오류**: API 키 설정 확인
-- **앱 크래시**: Flutter 및 패키지 버전 호환성 확인
-
-### 개발 환경 설정
-- Android Studio나 VS Code에 Flutter 및 Dart 플러그인 설치
-- `flutter doctor` 명령어로 환경 설정 확인
-
-## 연락처
-
-프로젝트 관리자 - [@khy0425](https://github.com/khy0425)
-
-프로젝트 링크: [https://github.com/khy0425/pdf_learner](https://github.com/khy0425/pdf_learner)
-
-## 단축키
-
-- `Ctrl + O`: 목차 열기
-- `Ctrl + B`: 북마크 목록 열기
-- `Ctrl + F`: 검색
-- `Ctrl + +`: 확대
-- `Ctrl + -`: 축소
-
-## 최근 업데이트 (2024-03-XX)
-
-### 퀴즈 생성 기능 개선
-- 퀴즈 파싱 로직 개선
-  - 문제 분리 패턴을 "문제 N:" 형식으로 변경
-  - 보기 추출 시 정답 이전 텍스트만 사용하도록 수정
-  - 해설 추출 시 다음 문제 시작 전까지만 추출하도록 개선
-- 디버그 로깅 추가
-  - 퀴즈 생성 과정의 상세 로그 출력
-  - 오류 발생 시 원인 파악이 용이하도록 개선
-
-### 변경된 파일
-- `lib/services/ai_service.dart`
-  - generateQuiz() 함수 로직 개선
-  - 퀴즈 파싱 정규식 패턴 수정
-  - 디버그 출력 추가
-
-## 향후 계획
-- 퀴즈 UI/UX 개선
-- 퀴즈 결과 저장 및 통계 기능 추가
-- 오답 노트 기능 구현
+2. Create your Feature Branch (`

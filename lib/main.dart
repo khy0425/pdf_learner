@@ -13,6 +13,9 @@ import 'providers/tutorial_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/firebase_auth_service.dart';
+import 'providers/auth_service.dart';
+import 'providers/storage_service.dart';
+import 'providers/subscription_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +24,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
+  
   // 환경 변수 로드
   await dotenv.load(fileName: ".env");
   
@@ -40,6 +43,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => BookmarkProvider()),
         ChangeNotifierProvider(create: (_) => TutorialProvider()),
         ChangeNotifierProvider(create: (_) => FirebaseAuthService()),
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        Provider(create: (_) => StorageService()),
+        Provider(create: (_) => SubscriptionService()),
       ],
       child: const MyApp(),
     ),

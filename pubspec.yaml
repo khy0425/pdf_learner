@@ -36,15 +36,16 @@ dependencies:
   file_picker: ^8.3.1  # 다시 추가
 
   # 드래그 앤 드롭 관련
-  desktop_drop: ^0.5.0  # flutter_dropzone 대신 추가
+  desktop_drop: ^0.5.0
 
   # Firebase 관련
   firebase_core: ^3.10.1
   firebase_auth: ^5.4.1
-  cloud_firestore: ^5.6.2
   firebase_storage: ^12.4.1
   firebase_analytics: ^11.4.1
-  
+  firebase_crashlytics: ^4.3.1
+  cloud_firestore: ^5.6.2
+
   # Windows 플랫폼 지원을 위한 플러그인
   firebase_core_platform_interface: ^5.0.0
   firebase_auth_platform_interface: ^7.0.9

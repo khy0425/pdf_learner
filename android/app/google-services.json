@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "189136888100",
+    "project_id": "pdf-learner",
+    "storage_bucket": "pdf-learner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:189136888100:android:01c48eb09fbfef553e93b1",
+        "android_client_info": {
+          "package_name": "com.reaf.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAaUaNUqLKupp0Il9OHczUyb5VXDU2EhM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
