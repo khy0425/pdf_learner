@@ -20,36 +20,51 @@ import 'providers/subscription_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Firebase 초기화
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  // 환경 변수 로드
-  await dotenv.load(fileName: ".env");
-  
-  // 윈도우 크기 설정 (데스크톱인 경우)
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    setWindowTitle('AI PDF 학습 도우미');
-    setWindowMinSize(const Size(800, 600));
-    setWindowMaxSize(Size.infinite);
-  }
+  try {
+    // Firebase 초기화
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // 환경 변수 로드
+    await dotenv.load(fileName: ".env");
+    
+    // 윈도우 크기 설정
+    if (Platform.isWindows) {
+      setWindowTitle('AI PDF 학습 도우미');
+      setWindowMinSize(const Size(800, 600));
+      setWindowMaxSize(Size.infinite);
+    }
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => PDFProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => BookmarkProvider()),
-        ChangeNotifierProvider(create: (_) => TutorialProvider()),
-        ChangeNotifierProvider(create: (_) => FirebaseAuthService()),
-        ChangeNotifierProvider(create: (_) => AuthService()),
-        Provider(create: (_) => StorageService()),
-        Provider(create: (_) => SubscriptionService()),
-      ],
-      child: const MyApp(),
-    ),
-  );
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => PDFProvider()),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => BookmarkProvider()),
+          ChangeNotifierProvider(create: (_) => TutorialProvider()),
+          // Firebase 관련 프로바이더는 초기화 후에 추가
+          ChangeNotifierProvider(create: (_) => FirebaseAuthService()),
+          ChangeNotifierProvider(create: (_) => AuthService()),
+          Provider(create: (_) => StorageService()),
+          Provider(create: (_) => SubscriptionService()),
+        ],
+        child: const MyApp(),
+      ),
+    );
+  } catch (e) {
+    print('초기화 오류: $e');
+    // 오류 발생 시 기본 에러 화면 표시
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('앱 초기화 중 오류가 발생했습니다: $e'),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {

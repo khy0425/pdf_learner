@@ -60,29 +60,21 @@ class AIService {
   Future<String> generateSummary(String text) async {
     try {
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse('$_apiUrl/summarize'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음 텍스트를 한국어로 간단명료하게 요약해주세요:
-              
-              $text'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.3,
-            'maxOutputTokens': 1024,
-          },
+          'text': text,
         }),
       );
 
       if (response.statusCode == 200) {
         final result = jsonDecode(utf8.decode(response.bodyBytes));
-        return result['candidates'][0]['content']['parts'][0]['text'];
+        return result['summary'] as String;
       }
-      
-      throw Exception('요약 생성 실패');
+      throw Exception('요약 생성 실패: ${response.statusCode}');
     } catch (e) {
       print('요약 생성 중 오류: $e');
       rethrow;
@@ -117,63 +109,31 @@ class AIService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> generateQuiz(String text, {int count = 5}) async {
+  Future<List<Map<String, dynamic>>> generateQuiz(String text) async {
     try {
       final response = await http.post(
-        Uri.parse('$_apiUrl?key=$_apiKey'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse('$_apiUrl/generate-quiz'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
         body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': '''다음 텍스트를 바탕으로 $count개의 퀴즈를 만들어주세요.
-
-              퀴즈 작성 규칙:
-              1. 육하원칙(누가, 언제, 어디서, 무엇을, 어떻게, 왜)을 최대한 활용해 구체적인 문제를 작성
-              2. 문제 내용이 모호하지 않도록 명확하게 작성
-              3. 정답과 오답의 구분이 명확해야 함
-              4. 해설에는 왜 그 답이 정답인지 구체적으로 설명
-              
-              다음 JSON 형식으로 작성해주세요:
-              {
-                "quizzes": [
-                  {
-                    "question": "구체적인 문제 내용 (육하원칙 활용)",
-                    "options": [
-                      "명확한 보기1",
-                      "명확한 보기2",
-                      "명확한 보기3",
-                      "명확한 보기4"
-                    ],
-                    "answer": 정답번호(0-3),
-                    "explanation": "왜 이 답이 정답인지 구체적인 설명",
-                    "category": "문제 유형(개념/사실/분석/추론 등)"
-                  }
-                ]
-              }
-              
-              텍스트: $text'''
-            }]
-          }],
-          'generationConfig': {
-            'temperature': 0.7,
-            'maxOutputTokens': 2048,
-          },
+          'text': text,
+          'format': 'json',
+          'num_questions': 5,
         }),
       );
 
       if (response.statusCode == 200) {
-        final result = jsonDecode(utf8.decode(response.bodyBytes));
-        final content = result['candidates'][0]['content']['parts'][0]['text'];
-        
-        final jsonStart = content.indexOf('{');
-        final jsonEnd = content.lastIndexOf('}') + 1;
-        final jsonStr = content.substring(jsonStart, jsonEnd);
-        final parsed = jsonDecode(jsonStr);
-        
-        return List<Map<String, dynamic>>.from(parsed['quizzes']);
+        try {
+          final List<dynamic> quizzes = jsonDecode(utf8.decode(response.bodyBytes));
+          return quizzes.map((quiz) => Map<String, dynamic>.from(quiz)).toList();
+        } catch (e) {
+          print('퀴즈 JSON 파싱 오류: $e');
+          throw Exception('퀴즈 데이터 형식이 올바르지 않습니다');
+        }
       }
-      
-      throw Exception('퀴즈 생성 실패');
+      throw Exception('퀴즈 생성 실패: ${response.statusCode}');
     } catch (e) {
       print('퀴즈 생성 중 오류: $e');
       rethrow;

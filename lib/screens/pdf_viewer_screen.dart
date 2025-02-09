@@ -14,6 +14,8 @@ import 'dart:math' show min;
 import 'dart:math';  // Random 클래스를 위한 import 추가
 import 'package:syncfusion_flutter_pdf/pdf.dart';  // PdfDocument import 추가
 import 'dart:convert';  // base64Encode를 위한 import
+import '../widgets/pdf_viewer_guide_overlay.dart';  // PDFViewerGuideOverlay import 추가
+import '../providers/tutorial_provider.dart';  // TutorialProvider import 추가
 
 class PDFViewerScreen extends StatefulWidget {
   final File pdfFile;
@@ -50,6 +52,13 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   static const double _maxZoomLevel = 5.0;    // 최대 500%까지 확대 가능
   static const double _zoomStep = 0.05;       // 더 작은 단위로 조절 가능
 
+  // GlobalKey 추가
+  final GlobalKey _menuBookKey = GlobalKey();
+  final GlobalKey _searchKey = GlobalKey();
+  final GlobalKey _summaryKey = GlobalKey();
+  final GlobalKey _quizKey = GlobalKey();
+  final GlobalKey _helpKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -59,178 +68,188 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Shortcuts(
-      shortcuts: <LogicalKeySet, Intent>{
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyO): 
-            const ShowOutlineIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyB): 
-            const ShowBookmarksIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyF): 
-            const ShowSearchIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.equal): 
-            const ZoomInIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.minus): 
-            const ZoomOutIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          ShowOutlineIntent: CallbackAction<ShowOutlineIntent>(
-            onInvoke: (intent) => _showOutlineDialog(),
-          ),
-          ShowBookmarksIntent: CallbackAction<ShowBookmarksIntent>(
-            onInvoke: (intent) => _showBookmarksList(),
-          ),
-          ShowSearchIntent: CallbackAction<ShowSearchIntent>(
-            onInvoke: (intent) => setState(() => _showSearchBar = !_showSearchBar),
-          ),
-          ZoomInIntent: CallbackAction<ZoomInIntent>(
-            onInvoke: (intent) => setState(() {
-              _zoomLevel = _zoomLevel + 0.25;
-              _pdfViewerController.zoomLevel = _zoomLevel;
-            }),
-          ),
-          ZoomOutIntent: CallbackAction<ZoomOutIntent>(
-            onInvoke: (intent) => setState(() {
-              _zoomLevel = _zoomLevel - 0.25;
-              _pdfViewerController.zoomLevel = _zoomLevel;
-            }),
-          ),
-        },
-        child: Scaffold(
-          appBar: _buildAppBar(),
-          body: Stack(
-            children: [
-              Row(
-                children: [
-                  if (_showThumbnails)
-                    SizedBox(
-                      width: 200,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: BorderSide(
-                              color: Theme.of(context).colorScheme.outlineVariant,
-                            ),
-                          ),
-                        ),
-                        child: ListView.builder(
-                          controller: _thumbnailScrollController,
-                          itemCount: _pdfViewerController.pageCount,
-                          itemBuilder: (context, index) {
-                            final isCurrentPage = _currentPage == index + 1;
-                            return GestureDetector(
-                              onTap: () => _pdfViewerController.jumpToPage(index + 1),
+    return Consumer<TutorialProvider>(
+      builder: (context, tutorialProvider, _) {
+        return Stack(
+          children: [
+            Shortcuts(
+              shortcuts: <LogicalKeySet, Intent>{
+                LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyO): 
+                    const ShowOutlineIntent(),
+                LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyB): 
+                    const ShowBookmarksIntent(),
+                LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyF): 
+                    const ShowSearchIntent(),
+                LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.equal): 
+                    const ZoomInIntent(),
+                LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.minus): 
+                    const ZoomOutIntent(),
+              },
+              child: Actions(
+                actions: <Type, Action<Intent>>{
+                  ShowOutlineIntent: CallbackAction<ShowOutlineIntent>(
+                    onInvoke: (intent) => _showOutlineDialog(),
+                  ),
+                  ShowBookmarksIntent: CallbackAction<ShowBookmarksIntent>(
+                    onInvoke: (intent) => _showBookmarksList(),
+                  ),
+                  ShowSearchIntent: CallbackAction<ShowSearchIntent>(
+                    onInvoke: (intent) => setState(() => _showSearchBar = !_showSearchBar),
+                  ),
+                  ZoomInIntent: CallbackAction<ZoomInIntent>(
+                    onInvoke: (intent) => setState(() {
+                      _zoomLevel = _zoomLevel + 0.25;
+                      _pdfViewerController.zoomLevel = _zoomLevel;
+                    }),
+                  ),
+                  ZoomOutIntent: CallbackAction<ZoomOutIntent>(
+                    onInvoke: (intent) => setState(() {
+                      _zoomLevel = _zoomLevel - 0.25;
+                      _pdfViewerController.zoomLevel = _zoomLevel;
+                    }),
+                  ),
+                },
+                child: Scaffold(
+                  appBar: _buildAppBar(),
+                  body: Stack(
+                    children: [
+                      Row(
+                        children: [
+                          if (_showThumbnails)
+                            SizedBox(
+                              width: 200,
                               child: Container(
-                                margin: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: isCurrentPage
-                                        ? colorScheme.primary
-                                        : colorScheme.outlineVariant,
-                                    width: isCurrentPage ? 2 : 1,
+                                  border: Border(
+                                    right: BorderSide(
+                                      color: Theme.of(context).colorScheme.outlineVariant,
+                                    ),
                                   ),
-                                  borderRadius: BorderRadius.circular(8),
-                                  color: isCurrentPage
-                                      ? colorScheme.primaryContainer.withOpacity(0.3)
-                                      : null,
                                 ),
-                                child: AspectRatio(
-                                  aspectRatio: 0.7,
-                                  child: Container(
-                                    color: colorScheme.surface,
-                                    child: Center(
-                                      child: Text(
-                                        '${index + 1}',
-                                        style: TextStyle(
+                                child: ListView.builder(
+                                  controller: _thumbnailScrollController,
+                                  itemCount: _pdfViewerController.pageCount,
+                                  itemBuilder: (context, index) {
+                                    final isCurrentPage = _currentPage == index + 1;
+                                    return GestureDetector(
+                                      onTap: () => _pdfViewerController.jumpToPage(index + 1),
+                                      child: Container(
+                                        margin: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: isCurrentPage
+                                                ? Theme.of(context).colorScheme.primary
+                                                : Theme.of(context).colorScheme.outlineVariant,
+                                            width: isCurrentPage ? 2 : 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(8),
                                           color: isCurrentPage
-                                              ? colorScheme.primary
-                                              : colorScheme.onSurface,
-                                          fontWeight: isCurrentPage
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                          fontSize: isCurrentPage ? 16 : 14,
+                                              ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)
+                                              : null,
                                         ),
+                                        child: AspectRatio(
+                                          aspectRatio: 0.7,
+                                          child: Container(
+                                            color: Theme.of(context).colorScheme.surface,
+                                            child: Center(
+                                              child: Text(
+                                                '${index + 1}',
+                                                style: TextStyle(
+                                                  color: isCurrentPage
+                                                      ? Theme.of(context).colorScheme.primary
+                                                      : Theme.of(context).colorScheme.onSurface,
+                                                  fontWeight: isCurrentPage
+                                                      ? FontWeight.bold
+                                                      : FontWeight.normal,
+                                                  fontSize: isCurrentPage ? 16 : 14,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                SfPdfViewer.file(
+                                  widget.pdfFile,
+                                  controller: _pdfViewerController,
+                                  key: _pdfViewerKey,
+                                  onPageChanged: (PdfPageChangedDetails details) {
+                                    if (_currentPage != details.newPageNumber) {
+                                      setState(() {
+                                        _currentPage = details.newPageNumber;
+                                      });
+                                      // 페이지 변경 시 썸네일 스크롤 조정
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        _scrollToCurrentThumbnail();
+                                      });
+                                    }
+                                  },
+                                ),
+                                // 페이지 표시기
+                                Positioned(
+                                  bottom: 16,
+                                  left: 0,
+                                  right: 0,
+                                  child: Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        '페이지: $_currentPage',
+                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        SfPdfViewer.file(
-                          widget.pdfFile,
-                          controller: _pdfViewerController,
-                          key: _pdfViewerKey,
-                          onPageChanged: (PdfPageChangedDetails details) {
-                            if (_currentPage != details.newPageNumber) {
-                              setState(() {
-                                _currentPage = details.newPageNumber;
-                              });
-                              // 페이지 변경 시 썸네일 스크롤 조정
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                _scrollToCurrentThumbnail();
-                              });
-                            }
-                          },
-                        ),
-                        // 페이지 표시기
-                        Positioned(
-                          bottom: 16,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface.withOpacity(0.9),
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: colorScheme.shadow.withOpacity(0.1),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                '페이지: $_currentPage',
-                                style: TextStyle(color: colorScheme.onSurface),
-                              ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      _buildLoadingOverlay(),  // 로딩 오버레이 추가
+                    ],
                   ),
-                ],
+                  floatingActionButton: FloatingActionButton(
+                    key: _helpKey,  // GlobalKey 추가
+                    onPressed: _showGuide,
+                    tooltip: 'PDF 학습 도우미',
+                    child: const Icon(Icons.help_outline),
+                  ),
+                ),
               ),
-              _buildLoadingOverlay(),  // 로딩 오버레이 추가
-            ],
-          ),
-          floatingActionButton: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              FloatingActionButton(
-                heroTag: 'thumbnails',
-                onPressed: () => setState(() => _showThumbnails = !_showThumbnails),
-                child: const Icon(Icons.photo_library),
+            ),
+            
+            // PDF 뷰어 가이드 오버레이
+            if (!tutorialProvider.isPdfViewerGuideShown)
+              PDFViewerGuideOverlay(
+                menuBookKey: _menuBookKey,
+                searchKey: _searchKey,
+                summaryKey: _summaryKey,
+                quizKey: _quizKey,
+                helpKey: _helpKey,
               ),
-              const SizedBox(height: 8),
-              // ... 기존 FAB 버튼들
-            ],
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -1007,7 +1026,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
               _showQuizDialog();
               break;
             case 'summary':
-              _showFullSummary(context);
+              _showSummaryDialog(context);
               break;
           }
         },
@@ -1250,7 +1269,6 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       // 퀴즈 생성 요청
       final quizList = await _aiService.generateQuiz(
         combinedText,
-        count: quizCount,  // quizCount를 count로 전달
       );
       
       if (!mounted) return;
@@ -1437,42 +1455,109 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   // AppBar에 목차 버튼 추가
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      leading: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Image.asset(
-          'assets/images/app_icon.png',
-          fit: BoxFit.contain,  // 이미지가 패딩 영역에 맞게 조정
-        ),
-      ),
-      title: Column(  // Expanded 제거하고 단순화
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'AI PDF 학습 도우미',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            'PDF LEARNER',
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ],
-      ),
+      title: const Text('PDF 학습'),
       actions: [
+        // 목차 버튼
         IconButton(
-          icon: const Icon(Icons.list),
+          key: _menuBookKey,  // GlobalKey 추가
+          icon: const Icon(Icons.menu_book),
+          tooltip: '목차',
           onPressed: () => setState(() => _showBookmarks = !_showBookmarks),
         ),
-        ..._buildActions(),
+        // 검색 버튼
+        IconButton(
+          key: _searchKey,  // GlobalKey 추가
+          icon: const Icon(Icons.search),
+          tooltip: '검색',
+          onPressed: () => setState(() => _showSearchBar = !_showSearchBar),
+        ),
+        // AI 요약 버튼
+        IconButton(
+          key: _summaryKey,  // GlobalKey 추가
+          icon: const Icon(Icons.summarize),
+          tooltip: 'AI 요약',
+          onPressed: () => _showSummaryDialog(context),
+        ),
+        // 퀴즈 생성 버튼
+        IconButton(
+          key: _quizKey,  // GlobalKey 추가
+          icon: const Icon(Icons.quiz),
+          tooltip: '퀴즈 생성',
+          onPressed: () => _showQuizDialog(),
+        ),
       ],
-      bottom: _showSearchBar ? _buildSearchBar() : null,
     );
+  }
+
+  // 도우미 버튼 클릭 시 가이드 표시
+  void _showGuide() {
+    context.read<TutorialProvider>().resetPDFViewerGuide();
+  }
+
+  Future<void> _showSummaryDialog(BuildContext context) async {
+    try {
+      // 현재 페이지의 텍스트 추출
+      final currentPageText = await _pdfService.extractPage(
+        widget.pdfFile,
+        _currentPage,
+      );
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const _LoadingOverlay(
+          message: 'AI가 내용을 요약하고 있습니다...',
+        ),
+      );
+
+      // AI 요약 생성
+      final summary = await _aiService.generateSummary(currentPageText);
+
+      if (!mounted) return;
+      Navigator.pop(context); // 로딩 다이얼로그 닫기
+
+      // 요약 결과 표시
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('${_currentPage}페이지 요약'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '주요 내용:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(summary),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('닫기'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      // 에러가 발생한 경우 로딩 다이얼로그가 떠있다면 닫기
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('요약 생성 실패: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 }
 
@@ -1808,22 +1893,15 @@ class _QuizDialogState extends State<_QuizDialog> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            ...options.asMap().entries.map((entry) {
-              final index = entry.key;
-              final option = entry.value;
-              final isSelected = userAnswer == index;
-              final isCorrect = hasAnswered && index == correctAnswer;
-              final isWrong = hasAnswered && isSelected && !isCorrect;
-
-              return _buildQuizOption(
-                index,
-                option,
-                isSelected,
+            for (final entry in options.asMap().entries)
+              _buildQuizOption(
+                entry.key,
+                entry.value,
+                userAnswer == entry.key,
                 hasAnswered,
-                isCorrect,
-                isWrong,
-              );
-            }).toList(),
+                hasAnswered && entry.key == correctAnswer,
+                hasAnswered && userAnswer == entry.key && entry.key != correctAnswer,
+              ),
             if (_showExplanation && hasAnswered) ...[
               const SizedBox(height: 16),
               Container(
@@ -1840,50 +1918,36 @@ class _QuizDialogState extends State<_QuizDialog> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      (currentQuiz['explanation'] as String?) ?? '설명이 없습니다.',
-                    ),
+                    Text(currentQuiz['explanation'] as String? ?? '설명이 없습니다.'),
                   ],
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                TextButton.icon(
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('이전'),
-                  onPressed: _currentQuizIndex > 0
-                      ? () {
-                          setState(() {
-                            _currentQuizIndex--;
-                            _showExplanation = _userAnswers[_currentQuizIndex] != null;
-                          });
-                        }
-                      : null,
+                if (_currentQuizIndex > 0)
+                  TextButton(
+                    onPressed: _previousQuiz,
+                    child: const Text('이전'),
+                  )
+                else
+                  const SizedBox(width: 80),
+                Text(
+                  '${_currentQuizIndex + 1} / ${widget.quizList.length}',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (_isQuizCompleted())
-                  FilledButton.icon(
-                    icon: const Icon(Icons.check_circle),
-                    label: const Text('결과 확인'),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showQuizResult(context);
-                    },
+                if (_currentQuizIndex < widget.quizList.length - 1)
+                  TextButton(
+                    onPressed: _nextQuiz,
+                    child: const Text('다음'),
+                  )
+                else
+                  TextButton(
+                    onPressed: _finishQuiz,
+                    child: const Text('완료'),
                   ),
-                TextButton.icon(
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('다음'),
-                  onPressed: _currentQuizIndex < widget.quizList.length - 1
-                      ? () {
-                          setState(() {
-                            _currentQuizIndex++;
-                            _showExplanation = _userAnswers[_currentQuizIndex] != null;
-                          });
-                        }
-                      : null,
-                ),
               ],
             ),
           ],
@@ -1892,9 +1956,33 @@ class _QuizDialogState extends State<_QuizDialog> {
     );
   }
 
+  // 이전 퀴즈로 이동
+  void _previousQuiz() {
+    setState(() {
+      _currentQuizIndex--;
+      _showExplanation = _userAnswers[_currentQuizIndex] != null;
+    });
+  }
+
+  // 다음 퀴즈로 이동
+  void _nextQuiz() {
+    setState(() {
+      _currentQuizIndex++;
+      _showExplanation = _userAnswers[_currentQuizIndex] != null;
+    });
+  }
+
+  // 퀴즈 완료
+  void _finishQuiz() {
+    Navigator.pop(context);
+    if (_isQuizCompleted()) {
+      _showQuizResult(context);
+    }
+  }
+
   // 모든 문제를 풀었는지 확인
   bool _isQuizCompleted() {
-    return !_userAnswers.contains(null);
+    return _userAnswers.every((answer) => answer != null);
   }
 
   // 퀴즈 결과 화면으로 이동
