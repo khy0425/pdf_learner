@@ -21,12 +21,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // Firebase 초기화
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    
-    // 환경 변수 로드
+    // 먼저 환경 변수 로드
     await dotenv.load(fileName: ".env");
     
     // 윈도우 크기 설정
@@ -36,6 +31,11 @@ void main() async {
       setWindowMaxSize(Size.infinite);
     }
 
+    // 그 다음 Firebase 초기화
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
     runApp(
       MultiProvider(
         providers: [
@@ -43,7 +43,6 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(create: (_) => BookmarkProvider()),
           ChangeNotifierProvider(create: (_) => TutorialProvider()),
-          // Firebase 관련 프로바이더는 초기화 후에 추가
           ChangeNotifierProvider(create: (_) => FirebaseAuthService()),
           ChangeNotifierProvider(create: (_) => AuthService()),
           Provider(create: (_) => StorageService()),

@@ -69,5 +69,4 @@ flutter:
   assets:
     - .env
     - assets/images/
-    # 또는 직접 파일 지정
     - assets/images/app_icon.png
