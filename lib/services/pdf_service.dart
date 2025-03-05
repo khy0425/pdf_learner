@@ -3,14 +3,19 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+import '../providers/pdf_provider.dart';
 
 class PDFService {
+  /// PDF 파일에서 텍스트 추출
   Future<String> extractText(
-    File pdfFile, {
+    PdfFileInfo pdfFile, {
     Function(int current, int total)? onProgress,
   }) async {
     try {
-      final document = PdfDocument(inputBytes: pdfFile.readAsBytesSync());
+      final Uint8List bytes = await _getPdfBytes(pdfFile);
+      final document = PdfDocument(inputBytes: bytes);
       final pageCount = document.pages.count;
       final buffer = StringBuffer();
 
@@ -38,9 +43,11 @@ class PDFService {
     }
   }
 
-  Future<List<String>> extractPages(File pdfFile) async {
+  /// PDF 파일에서 모든 페이지 추출
+  Future<List<String>> extractPages(PdfFileInfo pdfFile) async {
     try {
-      final PdfDocument document = PdfDocument(inputBytes: pdfFile.readAsBytesSync());
+      final Uint8List bytes = await _getPdfBytes(pdfFile);
+      final PdfDocument document = PdfDocument(inputBytes: bytes);
       final PdfTextExtractor extractor = PdfTextExtractor(document);
       List<String> pages = [];
       
@@ -57,9 +64,11 @@ class PDFService {
     }
   }
 
-  Future<String> extractPage(File pdfFile, int pageNumber) async {
+  /// PDF 파일에서 특정 페이지 추출
+  Future<String> extractPage(PdfFileInfo pdfFile, int pageNumber) async {
     try {
-      final PdfDocument document = PdfDocument(inputBytes: pdfFile.readAsBytesSync());
+      final Uint8List bytes = await _getPdfBytes(pdfFile);
+      final PdfDocument document = PdfDocument(inputBytes: bytes);
       if (pageNumber < 1 || pageNumber > document.pages.count) {
         throw Exception('잘못된 페이지 번호입니다');
       }
@@ -70,6 +79,22 @@ class PDFService {
       return text;
     } catch (e) {
       throw Exception('페이지 텍스트 추출 실패: $e');
+    }
+  }
+  
+  /// PdfFileInfo에서 바이트 데이터 가져오기
+  Future<Uint8List> _getPdfBytes(PdfFileInfo pdfFile) async {
+    if (pdfFile.isWeb) {
+      // 웹 URL에서 PDF 다운로드
+      final response = await http.get(Uri.parse(pdfFile.url!));
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
+      } else {
+        throw Exception('PDF 다운로드 실패: ${response.statusCode}');
+      }
+    } else {
+      // 로컬 파일에서 바이트 읽기
+      return await pdfFile.file!.readAsBytes();
     }
   }
 }

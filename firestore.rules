@@ -1,13 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    match /subscriptions/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-    }
-    match /pdfs/{document=**} {
+    // 테스트 모드: 모든 인증된 사용자에게 모든 문서에 대한 접근 허용
+    match /{document=**} {
       allow read, write: if request.auth != null;
     }
   }

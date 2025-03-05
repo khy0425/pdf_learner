@@ -265,7 +265,11 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
               ),
             ),
             if (tutorialProvider.isFirstTime)
-              const TutorialOverlay(),
+              TutorialOverlay(
+                onFinish: () {
+                  tutorialProvider.completeTutorial();
+                },
+              ),
           ],
         );
       },

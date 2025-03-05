@@ -16,9 +16,11 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';  // PdfDocument import 추가
 import 'dart:convert';  // base64Encode를 위한 import
 import '../widgets/pdf_viewer_guide_overlay.dart';  // PDFViewerGuideOverlay import 추가
 import '../providers/tutorial_provider.dart';  // TutorialProvider import 추가
+import '../providers/pdf_provider.dart';  // PdfFileInfo 클래스를 위한 import 추가
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PDFViewerScreen extends StatefulWidget {
-  final File pdfFile;
+  final PdfFileInfo pdfFile;
 
   const PDFViewerScreen({required this.pdfFile, super.key});
 
@@ -112,10 +114,10 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                 child: Scaffold(
                   appBar: _buildAppBar(),
                   body: Stack(
-                    children: [
+        children: [
                       Row(
                         children: [
-                          if (_showThumbnails)
+          if (_showThumbnails)
                             SizedBox(
                               width: 200,
                               child: Container(
@@ -173,25 +175,43 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                                 ),
                               ),
                             ),
-                          Expanded(
-                            child: Stack(
-                              children: [
-                                SfPdfViewer.file(
-                                  widget.pdfFile,
-                                  controller: _pdfViewerController,
-                                  key: _pdfViewerKey,
-                                  onPageChanged: (PdfPageChangedDetails details) {
-                                    if (_currentPage != details.newPageNumber) {
-                                      setState(() {
-                                        _currentPage = details.newPageNumber;
-                                      });
-                                      // 페이지 변경 시 썸네일 스크롤 조정
-                                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                                        _scrollToCurrentThumbnail();
-                                      });
-                                    }
-                                  },
-                                ),
+          Expanded(
+            child: Stack(
+              children: [
+                                // PdfFileInfo의 isWeb 또는 isLocal 속성에 따라 다른 SfPdfViewer 사용
+                                widget.pdfFile.isWeb
+                                ? SfPdfViewer.network(
+                                    widget.pdfFile.url!,
+                  controller: _pdfViewerController,
+                                    key: _pdfViewerKey,
+                                    onPageChanged: (PdfPageChangedDetails details) {
+                                      if (_currentPage != details.newPageNumber) {
+                                        setState(() {
+                                          _currentPage = details.newPageNumber;
+                                        });
+                                        // 페이지 변경 시 썸네일 스크롤 조정
+                                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                                          _scrollToCurrentThumbnail();
+                                        });
+                                      }
+                                    },
+                                  )
+                                : SfPdfViewer.file(
+                                    widget.pdfFile.file!,
+                                    controller: _pdfViewerController,
+                                    key: _pdfViewerKey,
+                                    onPageChanged: (PdfPageChangedDetails details) {
+                                      if (_currentPage != details.newPageNumber) {
+                                        setState(() {
+                                          _currentPage = details.newPageNumber;
+                                        });
+                                        // 페이지 변경 시 썸네일 스크롤 조정
+                                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                                          _scrollToCurrentThumbnail();
+                                        });
+                                      }
+                                    },
+                                  ),
                                 // 페이지 표시기
                                 Positioned(
                                   bottom: 16,
@@ -218,10 +238,10 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                                         style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                                       ),
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
+            ),
+          ),
+        ],
+      ),
                           ),
                         ],
                       ),
@@ -684,7 +704,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
             IconButton(
               icon: const Icon(Icons.close),
               onPressed: () {
-                setState(() {
+      setState(() {
                   _showSearchBar = false;
                   _searchController.clear();
                   _searchResult.clear();
@@ -1348,25 +1368,25 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       duration: const Duration(milliseconds: 200),
       child: _isLoading
           ? Container(
-              color: Colors.black54,
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          'AI가 분석중입니다...',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                  ),
+      color: Colors.black54,
+      child: Center(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  'AI가 분석중입니다...',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
+              ],
+            ),
+          ),
+        ),
+      ),
             )
           : const SizedBox.shrink(),
     );
@@ -1456,7 +1476,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       title: const Text('PDF 학습'),
-      actions: [
+          actions: [
         // 목차 버튼
         IconButton(
           key: _menuBookKey,  // GlobalKey 추가
@@ -1512,7 +1532,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
 
       // AI 요약 생성
       final summary = await _aiService.generateSummary(currentPageText);
-
+      
       if (!mounted) return;
       Navigator.pop(context); // 로딩 다이얼로그 닫기
 
@@ -1785,6 +1805,7 @@ class _SummaryDialog extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
                     ),
+                  ),
                   ),
                   const Spacer(),
                   IconButton(

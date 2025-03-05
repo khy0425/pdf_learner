@@ -1,30 +1,44 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_auth_service.dart';
 
 class AuthService extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  User? _currentUser;
+  final FirebaseAuthService _firebaseAuthService;
 
-  User? get currentUser => _currentUser;
+  AuthService() : _firebaseAuthService = FirebaseAuthService();
 
-  AuthService() {
-    _auth.authStateChanges().listen((user) {
-      _currentUser = user;
-      notifyListeners();
-    });
+  bool get isLoggedIn => _firebaseAuthService.currentUser != null;
+
+  Future<void> signUp({
+    required String email,
+    required String password,
+    required String name,
+  }) async {
+    await _firebaseAuthService.signUp(
+      email: email,
+      password: password,
+      name: name,
+    );
+    notifyListeners();
+  }
+
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {
+    await _firebaseAuthService.signIn(
+      email: email,
+      password: password,
+    );
+    notifyListeners();
   }
 
   Future<void> signInWithGoogle() async {
-    try {
-      final googleProvider = GoogleAuthProvider();
-      await _auth.signInWithPopup(googleProvider);
-    } catch (e) {
-      print('Google 로그인 실패: $e');
-      rethrow;
-    }
+    await _firebaseAuthService.signInWithGoogle();
+    notifyListeners();
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    await _firebaseAuthService.signOut();
+    notifyListeners();
   }
 } 

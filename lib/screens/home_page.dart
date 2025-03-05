@@ -18,20 +18,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     // 저장된 PDF 파일들 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PDFProvider>().loadSavedPDFs();
+      context.read<PDFProvider>().loadSavedPDFs(context);
     });
-  }
-
-  Future<void> _pickPDF(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-
-    if (result != null) {
-      final file = File(result.files.single.path!);
-      context.read<PDFProvider>().addPDF(file);
-    }
   }
 
   @override
@@ -73,7 +61,7 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: ElevatedButton(
-                  onPressed: () => _pickPDF(context),
+                  onPressed: () => pdfProvider.pickPDF(context),
                   child: const Text('PDF 업로드'),
                 ),
               ),

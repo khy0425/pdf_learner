@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:pdf_learner/utils/web_stub.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../screens/pdf_viewer_screen.dart';
 import '../providers/pdf_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 class PDFListItem extends StatelessWidget {
-  final File pdfFile;
+  final PdfFileInfo pdfFile;
   
   const PDFListItem({
     required this.pdfFile,
@@ -14,25 +16,40 @@ class PDFListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fileName = pdfFile.path.split(Platform.pathSeparator).last;
-    final filePath = pdfFile.path.substring(0, pdfFile.path.length - fileName.length);
+    // 파일 크기 포맷팅
+    final String fileSize = _formatFileSize(pdfFile.size);
+    
+    // 생성 날짜 포맷팅
+    final String createdDate = DateFormat('yyyy-MM-dd HH:mm').format(pdfFile.createdAt);
 
     return ListTile(
       leading: const Icon(Icons.picture_as_pdf),
       title: Text(
-        fileName,
+        pdfFile.fileName,
         style: const TextStyle(
           fontWeight: FontWeight.w500,
         ),
       ),
-      subtitle: Text(
-        filePath,
-        style: TextStyle(
-          fontSize: 12,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-        ),
-        overflow: TextOverflow.ellipsis,
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '크기: $fileSize',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+          Text(
+            '생성일: $createdDate',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+        ],
       ),
+      isThreeLine: true,
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
         onPressed: () async {
@@ -56,7 +73,7 @@ class PDFListItem extends StatelessWidget {
           );
 
           if (shouldDelete == true && context.mounted) {
-            await context.read<PDFProvider>().deletePDF(pdfFile);
+            await context.read<PDFProvider>().deletePDF(pdfFile, context);
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('PDF가 삭제되었습니다')),
@@ -74,5 +91,18 @@ class PDFListItem extends StatelessWidget {
         );
       },
     );
+  }
+  
+  /// 파일 크기를 읽기 쉬운 형식으로 변환
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
   }
 } 

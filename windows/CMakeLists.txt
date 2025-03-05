@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.15...3.27)
-project(ai_pdf_study_assistant LANGUAGES CXX)
+project(pdf_learner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "ai_pdf_study_assistant")
+set(BINARY_NAME "pdf_learner")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

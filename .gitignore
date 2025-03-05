@@ -61,4 +61,5 @@ build/
 .env.production
 
 # Environment files
-.env 
+.env
+lib/firebase_options.dart

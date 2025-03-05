@@ -4,8 +4,55 @@ import 'package:provider/provider.dart';
 import '../providers/tutorial_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-class TutorialOverlay extends StatelessWidget {
-  const TutorialOverlay({super.key});
+class TutorialOverlay extends StatefulWidget {
+  final VoidCallback onFinish;
+  
+  const TutorialOverlay({
+    super.key,
+    required this.onFinish,
+  });
+
+  @override
+  State<TutorialOverlay> createState() => _TutorialOverlayState();
+}
+
+class _TutorialOverlayState extends State<TutorialOverlay> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+  final int _totalPages = 4; // 튜토리얼 페이지 수
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _nextPage() {
+    if (_currentPage < _totalPages - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() {
+        _currentPage++;
+      });
+    } else {
+      // 마지막 페이지에서는 튜토리얼 종료
+      widget.onFinish();
+    }
+  }
+
+  void _previousPage() {
+    if (_currentPage > 0) {
+      _pageController.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() {
+        _currentPage--;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +72,12 @@ class TutorialOverlay extends StatelessWidget {
                 children: [
                   Expanded(
                     child: PageView(
+                      controller: _pageController,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPage = index;
+                        });
+                      },
                       children: [
                         // API 키 상태 확인 페이지
                         FutureBuilder<bool>(
@@ -55,22 +108,32 @@ class TutorialOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       TextButton(
-                        onPressed: () {
-                          context.read<TutorialProvider>().completeTutorial(
-                            skipForToday: true,
-                          );
-                        },
-                        child: const Text('오늘 하루 보지 않기'),
+                        onPressed: _currentPage > 0 ? _previousPage : null,
+                        child: const Text('이전'),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: () {
-                          context.read<TutorialProvider>().completeTutorial();
-                        },
-                        child: const Text('시작하기'),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(
+                          _totalPages,
+                          (index) => Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _currentPage == index
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _nextPage,
+                        child: Text(_currentPage < _totalPages - 1 ? '다음' : '완료'),
                       ),
                     ],
                   ),
@@ -84,9 +147,12 @@ class TutorialOverlay extends StatelessWidget {
   }
 
   Future<bool> _checkApiKeys() async {
-    final geminiKey = dotenv.env['GEMINI_API_KEY'];
-    final hfKey = dotenv.env['HUGGING_FACE_API_KEY'];
-    return (geminiKey?.isNotEmpty ?? false) && (hfKey?.isNotEmpty ?? false);
+    try {
+      final apiKey = dotenv.env['OPENAI_API_KEY'];
+      return apiKey != null && apiKey.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
   }
 }
 
