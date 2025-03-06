@@ -63,3 +63,9 @@ build/
 # Environment files
 .env
 lib/firebase_options.dart
+
+# Firebase config
+web/firebase-config.js
+
+# Firebase config
+web/firebase-config.js

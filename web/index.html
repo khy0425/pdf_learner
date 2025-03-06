@@ -40,15 +40,20 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
 
-  <!-- Firebase 설정은 Flutter에서 동적으로 로드됩니다 -->
+  <!-- Firebase 설정 스크립트 추가 -->
+  <script src="firebase-config.js"></script>
+  
+  <!-- Firebase 설정 스크립트 -->
   <script>
     // Firebase 설정을 저장할 전역 변수
-    let firebaseConfig = null;
     let firebaseInitialized = false;
     
-    // Flutter에서 호출할 함수
-    function initializeFirebase(config) {
+    // 페이지 로드 시 Firebase 초기화
+    window.addEventListener('load', function() {
       try {
+        // 전역 변수에서 Firebase 설정 가져오기
+        const config = window.firebaseConfig;
+        
         // 디버깅을 위해 설정 값 출력
         console.log("Firebase 설정 로드됨:", JSON.stringify(config));
         
@@ -64,8 +69,6 @@
           console.error("Firebase 설정 오류: apiKey 또는 projectId가 유효하지 않습니다", JSON.stringify(config));
           return;
         }
-
-        firebaseConfig = config;
         
         // Firebase가 이미 초기화되었는지 확인
         if (firebaseInitialized || firebase.apps.length > 0) {
@@ -74,12 +77,82 @@
         }
         
         // Firebase 초기화
+        firebase.initializeApp(config);
+        firebase.analytics();
+        firebaseInitialized = true;
+        console.log("Firebase 초기화 완료");
+      } catch (error) {
+        console.error("Firebase 초기화 오류:", error);
+      }
+    });
+
+    // Flutter에서 호출할 함수 - 이전 버전과의 호환성을 위해 유지
+    function initializeFirebase(config) {
+      try {
+        // 이미 초기화되었는지 확인
+        if (firebaseInitialized || firebase.apps.length > 0) {
+          console.log("Firebase가 이미 초기화되어 있습니다");
+          return;
+        }
+        
+        // 설정이 제공된 경우 사용, 그렇지 않으면 전역 설정 사용
+        const firebaseConfig = config || window.firebaseConfig;
+        
+        // 디버깅을 위해 설정 값 출력
+        console.log("Flutter에서 Firebase 설정 로드됨:", JSON.stringify(firebaseConfig));
+        
+        // 필수 설정 값 확인
+        if (typeof firebaseConfig.apiKey !== 'string' || firebaseConfig.apiKey === '' || 
+            typeof firebaseConfig.projectId !== 'string' || firebaseConfig.projectId === '') {
+          console.error("Firebase 설정 오류: apiKey 또는 projectId가 유효하지 않습니다", JSON.stringify(firebaseConfig));
+          return;
+        }
+
+        // Firebase 초기화
         firebase.initializeApp(firebaseConfig);
         firebase.analytics();
         firebaseInitialized = true;
         console.log("Firebase 초기화 완료");
       } catch (error) {
         console.error("Firebase 초기화 오류:", error);
+      }
+    }
+
+    // API 키 가져오기
+    function getApiKey(keyName) {
+      try {
+        if (!window.apiKeys) {
+          console.error("API 키 설정을 찾을 수 없습니다");
+          return null;
+        }
+        
+        const apiKey = window.apiKeys[keyName];
+        console.log(`API 키 요청: ${keyName}, 결과: ${apiKey ? '찾음' : '찾지 못함'}`);
+        return apiKey;
+      } catch (error) {
+        console.error(`API 키 가져오기 오류 (${keyName}):`, error);
+        return null;
+      }
+    }
+
+    // API 키 유효성 검사
+    function validateApiKey(keyName, apiKey) {
+      try {
+        console.log(`API 키 유효성 검사: ${keyName}, ${apiKey}`);
+        
+        // Gemini API 키 검증 (간단한 형식 검사)
+        if (keyName === 'gemini') {
+          // Gemini API 키는 'AIza'로 시작
+          const isValid = apiKey && apiKey.startsWith('AIza') && apiKey.length > 20;
+          console.log(`Gemini API 키 유효성 검사 결과: ${isValid}`);
+          return isValid;
+        }
+        
+        // 기본적으로 유효하지 않음
+        return false;
+      } catch (error) {
+        console.error(`API 키 유효성 검사 오류 (${keyName}):`, error);
+        return false;
       }
     }
 

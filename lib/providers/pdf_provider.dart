@@ -5,10 +5,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/anonymous_user_service.dart';
 import '../services/web_pdf_service.dart';
+import '../services/usage_limiter.dart';
 import '../providers/auth_service.dart';
 import '../widgets/signup_prompt_dialog.dart';
+import '../services/subscription_service.dart';
+import 'package:http/http.dart' as http;
 
 /// PDF 파일 정보를 담는 모델 클래스
 class PdfFileInfo {
@@ -30,6 +34,39 @@ class PdfFileInfo {
   
   bool get isWeb => url != null;
   bool get isLocal => file != null;
+  
+  // 파일 경로 반환 (로컬 파일인 경우 파일 경로, 웹 파일인 경우 URL)
+  String get path => isLocal ? file!.path : (url ?? '');
+  
+  // PDF 파일의 바이트 데이터 읽기
+  Future<Uint8List> readAsBytes() async {
+    if (isLocal) {
+      return await file!.readAsBytes();
+    } else if (isWeb && url != null) {
+      // Firestore 가상 URL 처리
+      if (url!.startsWith('firestore://')) {
+        // WebPdfService를 통해 Firestore에서 데이터 가져오기
+        final docId = url!.split('/').last;
+        final webPdfService = WebPdfService();
+        final bytes = await webPdfService.getPdfDataFromFirestore(docId);
+        if (bytes != null) {
+          return bytes;
+        } else {
+          throw Exception('Firestore에서 PDF 데이터를 가져올 수 없습니다');
+        }
+      }
+      
+      // 일반 웹 URL 처리
+      final response = await http.get(Uri.parse(url!));
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
+      } else {
+        throw Exception('PDF 파일을 다운로드할 수 없습니다: ${response.statusCode}');
+      }
+    } else {
+      throw Exception('PDF 파일을 읽을 수 없습니다');
+    }
+  }
 }
 
 class PDFProvider with ChangeNotifier {
@@ -56,8 +93,39 @@ class PDFProvider with ChangeNotifier {
           final userId = authService.currentUser?.id ?? await _anonymousUserService.getAnonymousUserId();
           
           if (file is PlatformFile) {
+            if (file.bytes == null || file.bytes!.isEmpty) {
+              debugPrint('PDF 파일 데이터가 비어 있습니다: ${file.name}');
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PDF 파일 데이터를 읽을 수 없습니다.')),
+                );
+              }
+              return;
+            }
+            
             final bytes = file.bytes!;
             final fileName = file.name;
+            
+            debugPrint('PDF 업로드 시작: 파일명=$fileName, 크기=${bytes.length}바이트');
+            
+            // 파일 크기 제한 확인 (100MB)
+            const maxSizeBytes = 100 * 1024 * 1024;
+            if (bytes.length > maxSizeBytes) {
+              debugPrint('PDF 파일 크기 초과: ${bytes.length}바이트');
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PDF 파일 크기가 너무 큽니다. 100MB 이하의 파일만 업로드할 수 있습니다.')),
+                );
+              }
+              return;
+            }
+            
+            // 업로드 진행 중 메시지 표시
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('PDF 파일을 업로드하는 중입니다...')),
+              );
+            }
             
             final downloadUrl = await _webPdfService.uploadPdfWeb(bytes, fileName, userId);
             
@@ -71,6 +139,20 @@ class PDFProvider with ChangeNotifier {
             
             _pdfFiles.add(newPdf);
             _currentPdf = newPdf;
+            
+            // 업로드 성공 메시지 표시
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('PDF 파일 "$fileName"이(가) 업로드되었습니다.')),
+              );
+            }
+          } else {
+            debugPrint('지원되지 않는 파일 유형: ${file.runtimeType}');
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('지원되지 않는 파일 유형입니다.')),
+              );
+            }
           }
         }
       } else {
@@ -207,6 +289,43 @@ class PDFProvider with ChangeNotifier {
     );
 
     if (result != null) {
+      // 파일 크기 및 텍스트 길이 제한 확인
+      final usageLimiter = Provider.of<UsageLimiter>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
+      // 임시 PdfFileInfo 객체 생성
+      PdfFileInfo tempPdfInfo;
+      if (kIsWeb) {
+        tempPdfInfo = PdfFileInfo(
+          id: 'temp',
+          fileName: result.files.first.name,
+          url: null,
+          createdAt: DateTime.now(),
+          size: result.files.first.size,
+        );
+      } else {
+        final file = File(result.files.single.path!);
+        tempPdfInfo = PdfFileInfo(
+          id: 'temp',
+          fileName: path.basename(file.path),
+          file: file,
+          createdAt: DateTime.now(),
+          size: await file.length(),
+        );
+      }
+      
+      // 사용 가능 여부 확인
+      final usabilityCheck = await usageLimiter.canUsePdf(tempPdfInfo);
+      
+      if (!usabilityCheck['usable']) {
+        // 사용 불가능한 경우 알림 표시
+        if (context.mounted) {
+          _showUpgradeDialog(context, usabilityCheck['message']);
+        }
+        return;
+      }
+      
+      // 사용 가능한 경우 PDF 추가
       if (kIsWeb) {
         await addPDF(result.files.first, context);
       } else {
@@ -214,5 +333,30 @@ class PDFProvider with ChangeNotifier {
         await addPDF(file, context);
       }
     }
+  }
+  
+  /// 업그레이드 안내 다이얼로그 표시
+  void _showUpgradeDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('프리미엄 기능 필요'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // 회원가입 또는 업그레이드 화면으로 이동
+              SignUpPromptDialog.show(context, forceShow: true);
+            },
+            child: const Text('업그레이드'),
+          ),
+        ],
+      ),
+    );
   }
 } 

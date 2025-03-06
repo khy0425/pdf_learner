@@ -9,14 +9,14 @@ class SignUpPromptDialog extends StatelessWidget {
   SignUpPromptDialog({Key? key}) : super(key: key);
   
   /// 다이얼로그 표시
-  static Future<void> show(BuildContext context) async {
+  static Future<void> show(BuildContext context, {bool forceShow = false}) async {
     final dialog = SignUpPromptDialog();
-    await dialog._showIfNeeded(context);
+    await dialog._showIfNeeded(context, forceShow: forceShow);
   }
   
   /// 필요한 경우에만 다이얼로그 표시
-  Future<void> _showIfNeeded(BuildContext context) async {
-    if (await _anonymousUserService.isFreeLimitExceeded()) {
+  Future<void> _showIfNeeded(BuildContext context, {bool forceShow = false}) async {
+    if (forceShow || await _anonymousUserService.isFreeLimitExceeded()) {
       if (context.mounted) {
         showDialog(
           context: context,

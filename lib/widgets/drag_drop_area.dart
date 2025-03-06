@@ -168,7 +168,7 @@ class _DragDropAreaState extends State<DragDropArea> {
                   label: const Text('파일 선택'),
                   onPressed: () async {
                     final pdfProvider = context.read<PDFProvider>();
-                    await pdfProvider.pickPDF();
+                    await pdfProvider.pickPDF(context);
                   },
                 ),
               ],

@@ -23,6 +23,7 @@ dependencies:
   shared_preferences: ^2.2.2
   shared_preferences_windows: ^2.3.2  # Windows 지원 추가
   js: ^0.6.7  # JavaScript 상호 운용성을 위한 패키지 추가
+  url_launcher: ^6.2.5  # URL 실행을 위한 패키지 추가
 
   # 파일 선택 구현
   file_selector: ^1.0.3
@@ -54,7 +55,6 @@ dependencies:
   firebase_storage_platform_interface: ^5.1.11
   
   # URL 실행 지원
-  url_launcher: ^6.2.2
   intl: ^0.19.0
 
 dev_dependencies:

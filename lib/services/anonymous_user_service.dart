@@ -43,6 +43,11 @@ class AnonymousUserService {
     return count;
   }
   
+  /// PDF 사용 횟수 증가 (incrementUsage와 동일한 기능)
+  Future<int> incrementUsageCount() async {
+    return incrementUsage();
+  }
+  
   /// 현재 사용 횟수 가져오기
   Future<int> getCurrentUsage() async {
     final storage = await _getLocalStorage();

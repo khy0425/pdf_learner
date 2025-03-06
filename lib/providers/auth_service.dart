@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'firebase_auth_service.dart';
+import '../models/user.dart';
 
 class AuthService extends ChangeNotifier {
   final FirebaseAuthService _firebaseAuthService;
@@ -7,6 +8,8 @@ class AuthService extends ChangeNotifier {
   AuthService() : _firebaseAuthService = FirebaseAuthService();
 
   bool get isLoggedIn => _firebaseAuthService.currentUser != null;
+  
+  User? get currentUser => _firebaseAuthService.currentUser;
 
   Future<void> signUp({
     required String email,

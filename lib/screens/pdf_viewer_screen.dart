@@ -1806,7 +1806,6 @@ class _SummaryDialog extends StatelessWidget {
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
                     ),
                   ),
-                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),

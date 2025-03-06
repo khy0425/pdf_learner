@@ -18,11 +18,13 @@ import 'firebase_options.dart';
 import 'providers/firebase_auth_service.dart';
 import 'providers/auth_service.dart';
 import 'providers/storage_service.dart';
-import 'providers/subscription_service.dart';
+import 'services/subscription_service.dart';
 import 'services/web_firebase_initializer.dart';
 import 'services/anonymous_user_service.dart';
 import 'services/api_key_service.dart';
 import 'services/web_pdf_service.dart';
+import 'services/pdf_service.dart';
+import 'services/usage_limiter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,30 +53,19 @@ void main() async {
 
     // Firebase 초기화
     if (kIsWeb) {
-      // 웹 환경에서는 먼저 Firebase SDK를 통해 초기화
-      final apiKey = dotenv.env['FIREBASE_API_KEY']?.replaceAll('"', '') ?? '';
-      final projectId = dotenv.env['FIREBASE_PROJECT_ID']?.replaceAll('"', '') ?? '';
-      
-      print('Firebase 웹 초기화 - API 키: $apiKey');
-      print('Firebase 웹 초기화 - 프로젝트 ID: $projectId');
-      
-      if (apiKey.isEmpty || projectId.isEmpty) {
-        throw Exception('Firebase 초기화 실패: API 키 또는 프로젝트 ID가 비어 있습니다.');
+      // 웹 환경에서는 JavaScript에서 로드된 Firebase 설정을 사용
+      try {
+        print('웹 환경에서 Firebase 초기화 시작');
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        print('Firebase 초기화 완료');
+        
+        // JavaScript를 통해 Firebase 초기화 (이중 초기화를 방지하기 위한 호출)
+        WebFirebaseInitializer.initializeFirebase();
+      } catch (e) {
+        print('Firebase 초기화 오류: $e');
       }
-      
-      await Firebase.initializeApp(
-        options: FirebaseOptions(
-          apiKey: apiKey,
-          appId: dotenv.env['FIREBASE_APP_ID']?.replaceAll('"', '') ?? '',
-          messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID']?.replaceAll('"', '') ?? '',
-          projectId: projectId,
-          authDomain: dotenv.env['FIREBASE_AUTH_DOMAIN']?.replaceAll('"', '') ?? '',
-          storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET']?.replaceAll('"', '') ?? '',
-          measurementId: dotenv.env['FIREBASE_MEASUREMENT_ID']?.replaceAll('"', '') ?? '',
-        ),
-      );
-      // 그 다음 JavaScript를 통해 Firebase 초기화
-      WebFirebaseInitializer.initializeFirebase();
     } else {
       // 네이티브 환경에서는 Firebase SDK를 통해 초기화
       await Firebase.initializeApp(
@@ -96,6 +87,13 @@ void main() async {
           Provider(create: (_) => AnonymousUserService()),
           Provider(create: (_) => ApiKeyService()),
           Provider(create: (_) => WebPdfService()),
+          Provider(create: (_) => PDFService()),
+          Provider(
+            create: (context) => UsageLimiter(
+              context.read<SubscriptionService>(),
+              context.read<PDFService>(),
+            ),
+          ),
         ],
         child: const MyApp(),
       ),
