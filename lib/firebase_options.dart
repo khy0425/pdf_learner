@@ -40,15 +40,15 @@ class DefaultFirebaseOptions {
     }
   }
 
-  /// Web 플랫폼 Firebase 설정
+  /// Web 플랫폼 Firebase 설정 - 최신 버전으로 업데이트됨
   static FirebaseOptions get web => FirebaseOptions(
-        apiKey: _getEnvValue('FIREBASE_API_KEY', 'AIzaSyBAaUaNUqLKupp0Il9OHczUyb5VXDU2EhM'),
-        appId: _getEnvValue('FIREBASE_APP_ID', '1:189136888100:web:3c36f821c673adc13e93b1'),
+        apiKey: _getEnvValue('FIREBASE_API_KEY', 'AIzaSyCpTt_AlV22_oeH9A2azgGfHAa19AoTjx0'),
+        appId: _getEnvValue('FIREBASE_APP_ID', '1:189136888100:web:784cc4e1fde143cc3e93b1'),
         messagingSenderId: _getEnvValue('FIREBASE_MESSAGING_SENDER_ID', '189136888100'),
         projectId: _getEnvValue('FIREBASE_PROJECT_ID', 'pdf-learner'),
         authDomain: _getEnvValue('FIREBASE_AUTH_DOMAIN', 'pdf-learner.firebaseapp.com'),
-        storageBucket: _getEnvValue('FIREBASE_STORAGE_BUCKET', 'pdf-learner.appspot.com'),
-        measurementId: _getEnvValue('FIREBASE_MEASUREMENT_ID', 'G-MEASUREMENT_ID'),
+        storageBucket: _getEnvValue('FIREBASE_STORAGE_BUCKET', 'pdf-learner.firebasestorage.app'),
+        measurementId: _getEnvValue('FIREBASE_MEASUREMENT_ID', 'G-0HLX196P5P'),
       );
 
   /// Android 플랫폼 Firebase 설정

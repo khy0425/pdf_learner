@@ -1,15 +1,38 @@
 import 'package:flutter/foundation.dart';
+import '../models/user_model.dart';
 import 'firebase_auth_service.dart';
-import '../models/user.dart';
 
-class AuthService extends ChangeNotifier {
+class AuthService with ChangeNotifier {
   final FirebaseAuthService _firebaseAuthService;
-
-  AuthService() : _firebaseAuthService = FirebaseAuthService();
-
-  bool get isLoggedIn => _firebaseAuthService.currentUser != null;
   
-  User? get currentUser => _firebaseAuthService.currentUser;
+  AuthService(this._firebaseAuthService);
+  
+  UserModel? get currentUser {
+    try {
+      return _firebaseAuthService.currentUser;
+    } catch (e) {
+      debugPrint('currentUser 접근 중 오류: $e');
+      return null;
+    }
+  }
+  
+  bool get isLoading {
+    try {
+      return _firebaseAuthService.isLoading;
+    } catch (e) {
+      debugPrint('isLoading 접근 중 오류: $e');
+      return false;
+    }
+  }
+  
+  bool get isLoggedIn {
+    try {
+      return currentUser != null;
+    } catch (e) {
+      debugPrint('isLoggedIn 접근 중 오류: $e');
+      return false;
+    }
+  }
 
   Future<void> signUp({
     required String email,

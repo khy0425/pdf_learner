@@ -107,7 +107,7 @@ class ApiKeyService {
   Future<bool> validateAPIKey(String apiKey) async {
     try {
       // 특정 API 키는 항상 유효하다고 처리 (테스트용)
-      if (apiKey == 'AIzaSyBS3xinuJpr9DIGLAqTCKHCg6XqZjeoB74') {
+      if (apiKey == 'AIzaSyBAaUaNUqLKupp0Il9OHczUyb5VXDU2EhM') {
         return true;
       }
       

@@ -124,7 +124,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const Text('테스트를 위해 다음 API 키를 사용할 수 있습니다:'),
               SelectableText(
-                'AIzaSyBS3xinuJpr9DIGLAqTCKHCg6XqZjeoB74',
+                'AIzaSyBAaUaNUqLKupp0Il9OHczUyb5VXDU2EhM',
                 style: const TextStyle(
                   fontFamily: 'monospace',
                   fontWeight: FontWeight.bold,

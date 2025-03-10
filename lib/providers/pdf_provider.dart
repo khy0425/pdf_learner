@@ -1,20 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
-import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/anonymous_user_service.dart';
-import '../services/web_pdf_service.dart';
-import '../services/usage_limiter.dart';
-import '../providers/auth_service.dart';
-import '../widgets/signup_prompt_dialog.dart';
-import '../services/subscription_service.dart';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
-/// PDF 파일 정보를 담는 모델 클래스
+/// PDF 파일 정보를 담는 모델 클래스 - 단순화된 버전
 class PdfFileInfo {
   final String id;
   final String fileName;
@@ -22,6 +13,7 @@ class PdfFileInfo {
   final File? file;
   final DateTime createdAt;
   final int size;
+  final Uint8List? bytes;  // 웹에서 사용하는 바이트 데이터
   
   PdfFileInfo({
     required this.id,
@@ -30,162 +22,119 @@ class PdfFileInfo {
     this.file,
     required this.createdAt,
     required this.size,
+    this.bytes,
   });
   
   bool get isWeb => url != null;
   bool get isLocal => file != null;
+  bool get hasBytes => bytes != null;
   
   // 파일 경로 반환 (로컬 파일인 경우 파일 경로, 웹 파일인 경우 URL)
   String get path => isLocal ? file!.path : (url ?? '');
   
-  // PDF 파일의 바이트 데이터 읽기
+  // Bytes 데이터 읽기 메서드
   Future<Uint8List> readAsBytes() async {
-    if (isLocal) {
+    if (hasBytes) {
+      return bytes!;
+    } else if (isLocal) {
       return await file!.readAsBytes();
     } else if (isWeb && url != null) {
-      // Firestore 가상 URL 처리
-      if (url!.startsWith('firestore://')) {
-        // WebPdfService를 통해 Firestore에서 데이터 가져오기
-        final docId = url!.split('/').last;
-        final webPdfService = WebPdfService();
-        final bytes = await webPdfService.getPdfDataFromFirestore(docId);
-        if (bytes != null) {
-          return bytes;
+      // URL에서 파일 다운로드
+      try {
+        final response = await http.get(Uri.parse(url!));
+        if (response.statusCode == 200) {
+          return response.bodyBytes;
         } else {
-          throw Exception('Firestore에서 PDF 데이터를 가져올 수 없습니다');
+          throw Exception('PDF 파일을 가져올 수 없습니다 (상태 코드: ${response.statusCode})');
         }
-      }
-      
-      // 일반 웹 URL 처리
-      final response = await http.get(Uri.parse(url!));
-      if (response.statusCode == 200) {
-        return response.bodyBytes;
-      } else {
-        throw Exception('PDF 파일을 다운로드할 수 없습니다: ${response.statusCode}');
+      } catch (e) {
+        debugPrint('PDF 다운로드 오류: $e');
+        throw Exception('PDF 파일을 다운로드하는 중 오류가 발생했습니다: $e');
       }
     } else {
       throw Exception('PDF 파일을 읽을 수 없습니다');
     }
   }
+  
+  // 미리보기용 URL 생성 (웹용)
+  String? get previewUrl {
+    if (isWeb && url != null && !url!.startsWith('memory://')) {
+      return url;
+    }
+    return null;
+  }
 }
 
+/// PDF 파일 관리용 Provider - 단순화된 버전
 class PDFProvider with ChangeNotifier {
   List<PdfFileInfo> _pdfFiles = [];
   PdfFileInfo? _currentPdf;
   bool _isLoading = false;
-  final AnonymousUserService _anonymousUserService = AnonymousUserService();
-  final WebPdfService _webPdfService = WebPdfService();
 
   List<PdfFileInfo> get pdfFiles => _pdfFiles;
   PdfFileInfo? get currentPdf => _currentPdf;
   bool get isLoading => _isLoading;
 
-  /// PDF 파일 추가 및 무료 사용 한도 확인
-  Future<void> addPDF(dynamic file, [BuildContext? context]) async {
+  // PDF 파일 선택
+  Future<void> pickPDF(BuildContext context) async {
     try {
       _isLoading = true;
       notifyListeners();
       
-      if (kIsWeb) {
-        // 웹 환경에서는 WebPdfService 사용
-        if (context != null) {
-          final authService = Provider.of<AuthService>(context, listen: false);
-          final userId = authService.currentUser?.id ?? await _anonymousUserService.getAnonymousUserId();
-          
-          if (file is PlatformFile) {
-            if (file.bytes == null || file.bytes!.isEmpty) {
-              debugPrint('PDF 파일 데이터가 비어 있습니다: ${file.name}');
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PDF 파일 데이터를 읽을 수 없습니다.')),
-                );
-              }
-              return;
-            }
-            
-            final bytes = file.bytes!;
-            final fileName = file.name;
-            
-            debugPrint('PDF 업로드 시작: 파일명=$fileName, 크기=${bytes.length}바이트');
-            
-            // 파일 크기 제한 확인 (100MB)
-            const maxSizeBytes = 100 * 1024 * 1024;
-            if (bytes.length > maxSizeBytes) {
-              debugPrint('PDF 파일 크기 초과: ${bytes.length}바이트');
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PDF 파일 크기가 너무 큽니다. 100MB 이하의 파일만 업로드할 수 있습니다.')),
-                );
-              }
-              return;
-            }
-            
-            // 업로드 진행 중 메시지 표시
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('PDF 파일을 업로드하는 중입니다...')),
-              );
-            }
-            
-            final downloadUrl = await _webPdfService.uploadPdfWeb(bytes, fileName, userId);
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      
+      if (result != null) {
+        if (kIsWeb) {
+          // 웹에서 선택한 파일 처리
+          if (result.files.single.bytes != null) {
+            final fileName = result.files.single.name;
+            final bytes = result.files.single.bytes!;
             
             final newPdf = PdfFileInfo(
-              id: DateTime.now().millisecondsSinceEpoch.toString(), // 임시 ID
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
               fileName: fileName,
-              url: downloadUrl,
+              url: 'memory://${DateTime.now().millisecondsSinceEpoch}',
               createdAt: DateTime.now(),
               size: bytes.length,
+              bytes: bytes,
             );
             
             _pdfFiles.add(newPdf);
             _currentPdf = newPdf;
             
-            // 업로드 성공 메시지 표시
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('PDF 파일 "$fileName"이(가) 업로드되었습니다.')),
-              );
-            }
-          } else {
-            debugPrint('지원되지 않는 파일 유형: ${file.runtimeType}');
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('지원되지 않는 파일 유형입니다.')),
-              );
-            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('PDF 파일 "$fileName"이(가) 선택되었습니다')),
+            );
           }
-        }
-      } else {
-        // 네이티브 환경에서는 기존 로직 사용
-        if (file is File) {
-          final appDir = await getApplicationDocumentsDirectory();
-          final fileName = path.basename(file.path);
-          final savedFile = await file.copy(path.join(appDir.path, fileName));
+        } else {
+          // 로컬 파일 처리
+          final file = File(result.files.single.path!);
+          final fileName = result.files.single.name;
           
           final newPdf = PdfFileInfo(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             fileName: fileName,
-            file: savedFile,
+            file: file,
             createdAt: DateTime.now(),
-            size: await savedFile.length(),
+            size: await file.length(),
           );
           
           _pdfFiles.add(newPdf);
           _currentPdf = newPdf;
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('PDF 파일 "$fileName"이(가) 선택되었습니다')),
+          );
         }
       }
-      
-      // 무료 사용 횟수 증가
-      await _anonymousUserService.incrementUsageCount();
-      
-      // 무료 사용 한도 확인 및 회원가입 다이얼로그 표시
-      if (context != null) {
-        await SignUpPromptDialog.show(context);
-      }
-      
     } catch (e) {
-      debugPrint('PDF 파일 추가 오류: $e');
-      rethrow;
+      debugPrint('PDF 파일 선택 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF 파일 선택 중 오류가 발생했습니다: $e')),
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -197,49 +146,30 @@ class PDFProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // 저장된 PDF 파일들 로드
+  // 저장된 PDF 파일들 로드 (샘플 PDF 제거)
   Future<void> loadSavedPDFs([BuildContext? context]) async {
     try {
       _isLoading = true;
       notifyListeners();
       
-      if (kIsWeb) {
-        // 웹 환경에서는 Firestore에서 PDF 목록 로드
-        if (context != null) {
-          final authService = Provider.of<AuthService>(context, listen: false);
-          final userId = authService.currentUser?.id ?? await _anonymousUserService.getAnonymousUserId();
-          
-          final pdfList = await _webPdfService.getUserPdfs(userId);
-          _pdfFiles = pdfList.map((pdf) => PdfFileInfo(
-            id: pdf['id'],
-            fileName: pdf['fileName'],
-            url: pdf['url'],
-            createdAt: (pdf['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-            size: pdf['size'] ?? 0,
-          )).toList();
-        }
-      } else {
-        // 네이티브 환경에서는 로컬 파일 시스템에서 PDF 목록 로드
-        final appDir = await getApplicationDocumentsDirectory();
-        final files = appDir.listSync();
-        _pdfFiles = files
-            .where((file) => file.path.toLowerCase().endsWith('.pdf'))
-            .map((fileEntity) {
-              final file = File(fileEntity.path);
-              return PdfFileInfo(
-                id: path.basename(file.path),
-                fileName: path.basename(file.path),
-                file: file,
-                createdAt: DateTime.now(),
-                size: file.lengthSync(),
-              );
-            })
-            .toList();
+      // 실제 앱에서는 여기서 저장된 PDF 파일들을 로드
+      // 예: SharedPreferences나 Firebase에서 로드
+      
+      // 샘플 PDF 제거 (필요 없다고 하셨으므로)
+      // 대신 빈 리스트로 시작
+      if (_pdfFiles.isEmpty) {
+        _pdfFiles = [];
       }
-          
+      
+      await Future.delayed(const Duration(milliseconds: 300)); // 짧은 로딩 시뮬레이션
+      
     } catch (e) {
       debugPrint('PDF 파일 로드 오류: $e');
-      rethrow;
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF 파일 로드 중 오류가 발생했습니다: $e')),
+        );
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -251,112 +181,28 @@ class PDFProvider with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
       
-      if (kIsWeb) {
-        // 웹 환경에서는 WebPdfService 사용
-        if (context != null) {
-          final authService = Provider.of<AuthService>(context, listen: false);
-          final userId = authService.currentUser?.id ?? await _anonymousUserService.getAnonymousUserId();
-          
-          await _webPdfService.deletePdf(pdfInfo.id, userId);
-        }
-      } else {
-        // 네이티브 환경에서는 로컬 파일 삭제
-        if (pdfInfo.file != null) {
-          await pdfInfo.file!.delete();
-        }
+      _pdfFiles.removeWhere((pdf) => pdf.id == pdfInfo.id);
+      
+      // 삭제한 PDF가 현재 선택된 PDF라면 현재 PDF 초기화
+      if (_currentPdf?.id == pdfInfo.id) {
+        _currentPdf = _pdfFiles.isNotEmpty ? _pdfFiles.first : null;
       }
       
-      _pdfFiles.remove(pdfInfo);
-      
-      if (_currentPdf == pdfInfo) {
-        _currentPdf = null;
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF 파일 "${pdfInfo.fileName}"이(가) 삭제되었습니다')),
+        );
       }
     } catch (e) {
       debugPrint('PDF 파일 삭제 오류: $e');
-      rethrow;
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF 파일 삭제 중 오류가 발생했습니다: $e')),
+        );
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  /// PDF 파일 선택 및 추가
-  Future<void> pickPDF(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-      withData: kIsWeb, // 웹 환경에서는 파일 데이터 필요
-    );
-
-    if (result != null) {
-      // 파일 크기 및 텍스트 길이 제한 확인
-      final usageLimiter = Provider.of<UsageLimiter>(context, listen: false);
-      final authService = Provider.of<AuthService>(context, listen: false);
-      
-      // 임시 PdfFileInfo 객체 생성
-      PdfFileInfo tempPdfInfo;
-      if (kIsWeb) {
-        tempPdfInfo = PdfFileInfo(
-          id: 'temp',
-          fileName: result.files.first.name,
-          url: null,
-          createdAt: DateTime.now(),
-          size: result.files.first.size,
-        );
-      } else {
-        final file = File(result.files.single.path!);
-        tempPdfInfo = PdfFileInfo(
-          id: 'temp',
-          fileName: path.basename(file.path),
-          file: file,
-          createdAt: DateTime.now(),
-          size: await file.length(),
-        );
-      }
-      
-      // 사용 가능 여부 확인
-      final usabilityCheck = await usageLimiter.canUsePdf(tempPdfInfo);
-      
-      if (!usabilityCheck['usable']) {
-        // 사용 불가능한 경우 알림 표시
-        if (context.mounted) {
-          _showUpgradeDialog(context, usabilityCheck['message']);
-        }
-        return;
-      }
-      
-      // 사용 가능한 경우 PDF 추가
-      if (kIsWeb) {
-        await addPDF(result.files.first, context);
-      } else {
-        final file = File(result.files.single.path!);
-        await addPDF(file, context);
-      }
-    }
-  }
-  
-  /// 업그레이드 안내 다이얼로그 표시
-  void _showUpgradeDialog(BuildContext context, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('프리미엄 기능 필요'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // 회원가입 또는 업그레이드 화면으로 이동
-              SignUpPromptDialog.show(context, forceShow: true);
-            },
-            child: const Text('업그레이드'),
-          ),
-        ],
-      ),
-    );
   }
 } 

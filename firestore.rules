@@ -1,7 +1,40 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 테스트 모드: 모든 인증된 사용자에게 모든 문서에 대한 접근 허용
+    // 사용자 인증 확인
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 자신의 문서인지 확인
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // 구독 정보 규칙
+    match /subscriptions/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || request.auth.token.admin == true);
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isAuthenticated() && (isOwner(userId) || request.auth.token.admin == true);
+      allow delete: if isAuthenticated() && request.auth.token.admin == true;
+    }
+    
+    // 사용자 문서 접근 규칙
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // PDF 문서 접근 규칙
+    match /pdfs/{pdfId} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid;
+    }
+    
+    // 기타 컬렉션 접근 규칙
     match /{document=**} {
       allow read, write: if request.auth != null;
     }

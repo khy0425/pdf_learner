@@ -1,411 +1,359 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="AI PDF Study Assistant - PDF 학습을 위한 스마트 도우미">
-
-  <!-- iOS meta tags & icons -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="PDF Learner">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
-
   <title>PDF Learner</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Firebase SDK 추가 -->
+  <!-- Flutter 기본 스타일 -->
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #FFFFFF;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    #flutter-target {
+      width: 100%;
+      height: 100%;
+      background-color: #FFFFFF;
+    }
+
+    /* 로딩 화면 */
+    #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #FFFFFF;
+      z-index: 9999;
+    }
+
+    .loading-logo {
+      width: 100px;
+      height: 100px;
+      margin-bottom: 24px;
+    }
+
+    .loading-text {
+      font-size: 24px;
+      font-weight: bold;
+      color: #2196F3;
+      margin-bottom: 16px;
+    }
+
+    .loading-spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+      border-top: 4px solid #2196F3;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    .loading-message {
+      font-size: 16px;
+      color: #666;
+    }
+
+    .loading-button {
+      margin-top: 32px;
+      padding: 12px 24px;
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    /* 오류 UI */
+    #error-ui {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #FFFFFF;
+      z-index: 999;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .error-title {
+      font-size: 24px;
+      font-weight: bold;
+      color: #F44336;
+      margin-bottom: 16px;
+    }
+
+    .error-message {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 24px;
+      max-width: 600px;
+    }
+
+    .error-button {
+      margin-top: 8px;
+      padding: 12px 24px;
+      background-color: #F44336;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    /* 애니메이션 */
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
+  <!-- Flutter.js 스크립트 -->
+  <script src="flutter.js" defer></script>
+
+  <!-- Firebase 설정 스크립트 -->
+  <script>
+    // Firebase 설정
+    const firebaseConfig = {
+      apiKey: "AIzaSyCpTt_AlV22_oeH9A2azgGfHAa19AoTjx0",
+      authDomain: "pdf-learner.firebaseapp.com",
+      projectId: "pdf-learner",
+      storageBucket: "pdf-learner.firebasestorage.app",
+      messagingSenderId: "189136888100",
+      appId: "1:189136888100:web:784cc4e1fde143cc3e93b1",
+      measurementId: "G-0HLX196P5P"
+    };
+
+    // 앱 상태 변수
+    window.appState = {
+      firebaseInitialized: false,
+      isUserLoggedIn: false,
+      userId: null,
+      flutterInitialized: false,
+      lastKnownUserIds: []
+    };
+
+    // 로딩 화면 표시/숨김
+    function showLoading() {
+      document.getElementById('loading').style.display = 'flex';
+    }
+
+    function hideLoading() {
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    // 사용자 상태 저장
+    function saveUserState(userId, isLoggedIn) {
+      try {
+        const userInfo = {
+          userId: userId,
+          isLoggedIn: isLoggedIn,
+          timestamp: new Date().getTime()
+        };
+        localStorage.setItem('pdf_learner_user_info', JSON.stringify(userInfo));
+      } catch (e) {
+        console.error('사용자 정보 저장 중 오류:', e);
+      }
+    }
+
+    // 로컬 스토리지에서 사용자 상태 복원
+    function restoreUserState() {
+      try {
+        const savedUserInfo = localStorage.getItem('pdf_learner_user_info');
+        if (savedUserInfo) {
+          return JSON.parse(savedUserInfo);
+        }
+      } catch (e) {
+        console.error('저장된 사용자 정보 복원 중 오류:', e);
+      }
+      return null;
+    }
+
+    // Firebase 초기화
+    async function initializeFirebase() {
+      if (window.appState.firebaseInitialized) {
+        return true;
+      }
+
+      try {
+        if (firebase.apps.length === 0) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        
+        try {
+          firebase.analytics();
+        } catch (e) {
+          // Firebase Analytics 초기화 오류 무시
+        }
+        
+        // 인증 상태 리스너
+        firebase.auth().onAuthStateChanged(function(user) {
+          if (user) {
+            window.appState.isUserLoggedIn = true;
+            window.appState.userId = user.uid;
+            saveUserState(user.uid, true);
+          } else {
+            window.appState.isUserLoggedIn = false;
+            window.appState.userId = null;
+            
+            // 저장된 사용자 정보가 있으면 복원
+            const savedUser = restoreUserState();
+            if (savedUser && savedUser.userId && savedUser.isLoggedIn) {
+              window.appState.isUserLoggedIn = true;
+              window.appState.userId = savedUser.userId;
+            }
+          }
+        });
+        
+        window.appState.firebaseInitialized = true;
+        return true;
+      } catch (error) {
+        console.error('Firebase 초기화 오류:', error);
+        return false;
+      }
+    }
+
+    // Flutter에서 호출할 인터페이스
+    window.getCurrentFirebaseUser = function() {
+      try {
+        const user = firebase.auth().currentUser;
+        if (user) {
+          return user.uid;
+        }
+        
+        // 현재 사용자가 없으면, 저장된 사용자 정보 확인
+        const savedUser = restoreUserState();
+        if (savedUser && savedUser.userId && savedUser.isLoggedIn) {
+          return savedUser.userId;
+        }
+        
+        return null;
+      } catch (e) {
+        console.error('사용자 ID 가져오기 오류:', e);
+        return null;
+      }
+    };
+
+    // 로컬 스토리지에서 사용자 정보 가져오기
+    window.getStoredUserInfo = function() {
+      return restoreUserState();
+    };
+
+    // 로그아웃 기능
+    window.logoutUser = function() {
+      try {
+        if (typeof firebase !== 'undefined' && firebase.auth) {
+          firebase.auth().signOut().then(function() {
+            window.appState.isUserLoggedIn = false;
+            window.appState.userId = null;
+            localStorage.removeItem('pdf_learner_user_info');
+          }).catch(function(error) {
+            console.error('로그아웃 오류:', error);
+          });
+        }
+      } catch (e) {
+        console.error('로그아웃 처리 중 오류:', e);
+      }
+    };
+    
+    // 구글 로그인 기능
+    window.signInWithGoogle = function() {
+      return new Promise((resolve, reject) => {
+        try {
+          if (typeof firebase === 'undefined' || !firebase.auth) {
+            reject(new Error('Firebase가 초기화되지 않아 로그인할 수 없습니다.'));
+            return;
+          }
+          
+          const provider = new firebase.auth.GoogleAuthProvider();
+          provider.addScope('profile');
+          provider.addScope('email');
+          
+          firebase.auth().signInWithPopup(provider)
+            .then((result) => {
+              window.appState.isUserLoggedIn = true;
+              window.appState.userId = result.user.uid;
+              saveUserState(result.user.uid, true);
+              resolve(result);
+            })
+            .catch((error) => {
+              console.error('구글 로그인 오류:', error);
+              reject(error);
+            });
+        } catch (e) {
+          console.error('구글 로그인 처리 중 오류:', e);
+          reject(e);
+        }
+      });
+    };
+
+    // Flutter 초기화
+    async function initializeFlutter() {
+      _flutter.loader.loadEntrypoint({
+        entrypointUrl: "./main.dart.js",
+        onEntrypointLoaded: async function(engineInitializer) {
+          let appRunner = await engineInitializer.initializeEngine({
+            hostElement: document.querySelector("#flutter-target"),
+            renderer: "html"
+          });
+          await appRunner.runApp();
+          hideLoading();
+        }
+      });
+    }
+
+    // 페이지 로드 시 초기화
+    window.addEventListener('load', async function() {
+      await initializeFirebase();
+      initializeFlutter();
+    });
+  </script>
+
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
-
-  <!-- Firebase 설정 스크립트 추가 -->
-  <script src="firebase-config.js"></script>
-  
-  <!-- Firebase 설정 스크립트 -->
-  <script>
-    // Firebase 설정을 저장할 전역 변수
-    let firebaseInitialized = false;
-    
-    // 페이지 로드 시 Firebase 초기화
-    window.addEventListener('load', function() {
-      try {
-        // 전역 변수에서 Firebase 설정 가져오기
-        const config = window.firebaseConfig;
-        
-        // 디버깅을 위해 설정 값 출력
-        console.log("Firebase 설정 로드됨:", JSON.stringify(config));
-        
-        // 필수 설정 값 확인 - 객체 구조 확인
-        if (!config || typeof config !== 'object') {
-          console.error("Firebase 설정 오류: 설정 객체가 유효하지 않습니다", config);
-          return;
-        }
-        
-        // apiKey와 projectId가 문자열이고 비어있지 않은지 확인
-        if (typeof config.apiKey !== 'string' || config.apiKey === '' || 
-            typeof config.projectId !== 'string' || config.projectId === '') {
-          console.error("Firebase 설정 오류: apiKey 또는 projectId가 유효하지 않습니다", JSON.stringify(config));
-          return;
-        }
-        
-        // Firebase가 이미 초기화되었는지 확인
-        if (firebaseInitialized || firebase.apps.length > 0) {
-          console.log("Firebase가 이미 초기화되어 있습니다");
-          return;
-        }
-        
-        // Firebase 초기화
-        firebase.initializeApp(config);
-        firebase.analytics();
-        firebaseInitialized = true;
-        console.log("Firebase 초기화 완료");
-      } catch (error) {
-        console.error("Firebase 초기화 오류:", error);
-      }
-    });
-
-    // Flutter에서 호출할 함수 - 이전 버전과의 호환성을 위해 유지
-    function initializeFirebase(config) {
-      try {
-        // 이미 초기화되었는지 확인
-        if (firebaseInitialized || firebase.apps.length > 0) {
-          console.log("Firebase가 이미 초기화되어 있습니다");
-          return;
-        }
-        
-        // 설정이 제공된 경우 사용, 그렇지 않으면 전역 설정 사용
-        const firebaseConfig = config || window.firebaseConfig;
-        
-        // 디버깅을 위해 설정 값 출력
-        console.log("Flutter에서 Firebase 설정 로드됨:", JSON.stringify(firebaseConfig));
-        
-        // 필수 설정 값 확인
-        if (typeof firebaseConfig.apiKey !== 'string' || firebaseConfig.apiKey === '' || 
-            typeof firebaseConfig.projectId !== 'string' || firebaseConfig.projectId === '') {
-          console.error("Firebase 설정 오류: apiKey 또는 projectId가 유효하지 않습니다", JSON.stringify(firebaseConfig));
-          return;
-        }
-
-        // Firebase 초기화
-        firebase.initializeApp(firebaseConfig);
-        firebase.analytics();
-        firebaseInitialized = true;
-        console.log("Firebase 초기화 완료");
-      } catch (error) {
-        console.error("Firebase 초기화 오류:", error);
-      }
-    }
-
-    // API 키 가져오기
-    function getApiKey(keyName) {
-      try {
-        if (!window.apiKeys) {
-          console.error("API 키 설정을 찾을 수 없습니다");
-          return null;
-        }
-        
-        const apiKey = window.apiKeys[keyName];
-        console.log(`API 키 요청: ${keyName}, 결과: ${apiKey ? '찾음' : '찾지 못함'}`);
-        return apiKey;
-      } catch (error) {
-        console.error(`API 키 가져오기 오류 (${keyName}):`, error);
-        return null;
-      }
-    }
-
-    // API 키 유효성 검사
-    function validateApiKey(keyName, apiKey) {
-      try {
-        console.log(`API 키 유효성 검사: ${keyName}, ${apiKey}`);
-        
-        // Gemini API 키 검증 (간단한 형식 검사)
-        if (keyName === 'gemini') {
-          // Gemini API 키는 'AIza'로 시작
-          const isValid = apiKey && apiKey.startsWith('AIza') && apiKey.length > 20;
-          console.log(`Gemini API 키 유효성 검사 결과: ${isValid}`);
-          return isValid;
-        }
-        
-        // 기본적으로 유효하지 않음
-        return false;
-      } catch (error) {
-        console.error(`API 키 유효성 검사 오류 (${keyName}):`, error);
-        return false;
-      }
-    }
-
-    // Google로 로그인
-    function signInWithGoogle(callback) {
-      try {
-        if (!firebaseInitialized) {
-          console.error("Firebase가 초기화되지 않았습니다");
-          callback(null, { code: 'firebase-not-initialized', message: 'Firebase가 초기화되지 않았습니다' });
-          return;
-        }
-        
-        console.log("Google 로그인 시도");
-        
-        // Firebase 인스턴스 확인
-        if (!firebase.auth) {
-          console.error("Firebase Auth를 사용할 수 없습니다");
-          callback(null, { code: 'firebase-auth-unavailable', message: 'Firebase 인증 서비스를 사용할 수 없습니다' });
-          return;
-        }
-        
-        const provider = new firebase.auth.GoogleAuthProvider();
-        provider.setCustomParameters({
-          prompt: 'select_account'
-        });
-        
-        firebase.auth().signInWithPopup(provider)
-          .then((result) => {
-            console.log("Google 로그인 성공:", result.user.uid);
-            // 사용자 정보를 JSON으로 변환
-            const user = result.user;
-            const userData = {
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              photoURL: user.photoURL,
-              emailVerified: user.emailVerified,
-              providerId: 'google.com'
-            };
-            callback(userData, null);
-          })
-          .catch((error) => {
-            console.error("Google 로그인 오류:", error.code, error.message);
-            callback(null, {
-              code: error.code,
-              message: error.message
-            });
-          });
-      } catch (error) {
-        console.error("Google 로그인 예외 발생:", error);
-        callback(null, {
-          code: 'unexpected-error',
-          message: error.toString()
-        });
-      }
-    }
-
-    // 이메일/비밀번호로 회원가입
-    function signUpWithEmailPassword(email, password, callback) {
-      try {
-        if (!firebaseInitialized) {
-          console.error("Firebase가 초기화되지 않았습니다");
-          callback(null, { code: 'firebase-not-initialized', message: 'Firebase가 초기화되지 않았습니다' });
-          return;
-        }
-        
-        console.log("회원가입 시도:", email);
-        
-        // Firebase 인스턴스 확인
-        if (!firebase.auth) {
-          console.error("Firebase Auth를 사용할 수 없습니다");
-          callback(null, { code: 'firebase-auth-unavailable', message: 'Firebase 인증 서비스를 사용할 수 없습니다' });
-          return;
-        }
-        
-        firebase.auth().createUserWithEmailAndPassword(email, password)
-          .then((userCredential) => {
-            console.log("회원가입 성공:", userCredential.user.uid);
-            // 사용자 정보를 JSON으로 변환
-            const user = userCredential.user;
-            const userData = {
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              photoURL: user.photoURL,
-              emailVerified: user.emailVerified,
-              createdAt: new Date().toISOString()
-            };
-            callback(userData, null);
-          })
-          .catch((error) => {
-            console.error("회원가입 오류:", error.code, error.message);
-            callback(null, {
-              code: error.code,
-              message: error.message
-            });
-          });
-      } catch (error) {
-        console.error("회원가입 예외 발생:", error);
-        callback(null, {
-          code: 'unexpected-error',
-          message: error.toString()
-        });
-      }
-    }
-
-    // 이메일/비밀번호로 로그인
-    function signInWithEmailPassword(email, password, callback) {
-      try {
-        if (!firebaseInitialized) {
-          console.error("Firebase가 초기화되지 않았습니다");
-          callback(null, { code: 'firebase-not-initialized', message: 'Firebase가 초기화되지 않았습니다' });
-          return;
-        }
-        
-        console.log("로그인 시도:", email);
-        
-        firebase.auth().signInWithEmailAndPassword(email, password)
-          .then((userCredential) => {
-            console.log("로그인 성공:", userCredential.user.uid);
-            // 사용자 정보를 JSON으로 변환
-            const user = userCredential.user;
-            const userData = {
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              photoURL: user.photoURL,
-              emailVerified: user.emailVerified
-            };
-            callback(userData, null);
-          })
-          .catch((error) => {
-            console.error("로그인 오류:", error.code, error.message);
-            callback(null, {
-              code: error.code,
-              message: error.message
-            });
-          });
-      } catch (error) {
-        console.error("로그인 예외 발생:", error);
-        callback(null, {
-          code: 'unexpected-error',
-          message: error.toString()
-        });
-      }
-    }
-
-    // 로그아웃
-    function signOut(callback) {
-      try {
-        if (!firebaseInitialized) {
-          callback({ code: 'firebase-not-initialized', message: 'Firebase가 초기화되지 않았습니다' });
-          return;
-        }
-        
-        firebase.auth().signOut()
-          .then(() => {
-            callback(null);
-          })
-          .catch((error) => {
-            callback({
-              code: error.code,
-              message: error.message
-            });
-          });
-      } catch (error) {
-        callback({
-          code: 'unexpected-error',
-          message: error.toString()
-        });
-      }
-    }
-
-    // 현재 로그인된 사용자 정보 가져오기
-    function getCurrentUser(callback) {
-      try {
-        if (!firebaseInitialized) {
-          callback(null, { code: 'firebase-not-initialized', message: 'Firebase가 초기화되지 않았습니다' });
-          return;
-        }
-        
-        const user = firebase.auth().currentUser;
-        if (user) {
-          const userData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            emailVerified: user.emailVerified
-          };
-          callback(userData, null);
-        } else {
-          callback(null, null);
-        }
-      } catch (error) {
-        callback(null, {
-          code: 'unexpected-error',
-          message: error.toString()
-        });
-      }
-    }
-  </script>
-
-  <script>
-    window.addEventListener('load', function() {
-      // Service Worker 등록
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('flutter_service_worker.js');
-      }
-      
-      // Firebase 직접 초기화 (백업 방법)
-      try {
-        // 하드코딩된 설정 제거 - Flutter에서 전달받은 설정만 사용
-        console.log("Firebase는 Flutter에서 초기화됩니다");
-        
-        // Firebase가 이미 초기화되었는지 확인
-        if (firebase.apps.length > 0) {
-          console.log("Firebase가 이미 초기화되어 있습니다");
-          firebaseInitialized = true;
-        }
-      } catch (error) {
-        console.error("Firebase 초기화 확인 오류:", error);
-      }
-    });
-  </script>
-
-  <style>
-    .loading {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 0;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      -ms-transform: translate(-50%, -50%);
-      transform: translate(-50%, -50%);
-    }
-    
-    .loading-text {
-      width: 100%;
-      text-align: center;
-      color: #2196F3;
-    }
-  </style>
 </head>
 <body>
-  <div id="loading" class="loading">
-    <div class="loading-text">
-      <h2>PDF Learner 로딩중...</h2>
-    </div>
+  <!-- 로딩 화면 -->
+  <div id="loading">
+    <img class="loading-logo" src="icons/Icon-192.png" alt="PDF Learner" onerror="this.src='favicon.png'">
+    <div class="loading-text">PDF Learner</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-message">애플리케이션을 로드하는 중입니다...</div>
   </div>
 
-  <script src="main.dart.js" type="application/javascript"></script>
+  <!-- Flutter 앱 컨테이너 -->
+  <div id="flutter-target"></div>
 </body>
-</html>
+</html> 

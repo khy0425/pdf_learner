@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:html' as html;
 
 /// 웹 환경에서 PDF 파일을 관리하는 서비스
 class WebPdfService {
@@ -43,11 +44,11 @@ class WebPdfService {
         'uploadTimestamp': timestamp,
       });
       
-      // 가상 URL 생성 (실제 URL은 아니지만 식별자로 사용)
-      final virtualUrl = 'firestore://pdfs/${docRef.id}';
+      // 문서 ID를 식별자로 사용 (가상 URL 대신 문서 ID만 저장)
+      final docId = docRef.id;
       
-      debugPrint('PDF 업로드 완료: 문서ID=${docRef.id}');
-      return virtualUrl;
+      debugPrint('PDF 업로드 완료: 문서ID=$docId');
+      return docId;
     } catch (e, stackTrace) {
       debugPrint('PDF 업로드 오류: $e');
       debugPrint('스택 트레이스: $stackTrace');
@@ -111,10 +112,8 @@ class WebPdfService {
           data.remove('pdfData');
         }
         
-        // 가상 URL 생성
-        if (!data.containsKey('url')) {
-          data['url'] = 'firestore://pdfs/${doc.id}';
-        }
+        // URL 필드 설정 (문서 ID만 저장)
+        data['url'] = doc.id;
         
         return data;
       }).toList();
@@ -162,22 +161,29 @@ class WebPdfService {
     }
   }
   
-  /// PDF 다운로드 URL 가져오기 (Firestore에서 직접 데이터 가져오기)
+  /// PDF 다운로드 URL 가져오기 (브라우저에서 사용 가능한 데이터 URL 생성)
   Future<String> getPdfDownloadUrl(String pdfId) async {
     try {
       debugPrint('PDF URL 조회 시작: 문서ID=$pdfId');
       
-      // Firestore에서 가상 URL 반환
-      return 'firestore://pdfs/$pdfId';
+      // Firestore에서 PDF 데이터 가져오기
+      final bytes = await getPdfDataFromFirestore(pdfId);
+      if (bytes == null) {
+        throw Exception('PDF 데이터를 가져올 수 없습니다');
+      }
+      
+      // 데이터 URL 생성 (브라우저에서 직접 사용 가능)
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      
+      debugPrint('PDF 데이터 URL 생성 완료: $url');
+      return url;
     } catch (e, stackTrace) {
       debugPrint('PDF URL 조회 오류: $e');
       debugPrint('스택 트레이스: $stackTrace');
       
-      if (e is FirebaseException) {
-        throw Exception('Firebase 오류: ${e.code} - ${e.message}');
-      } else {
-        throw Exception('PDF URL을 가져오는 중 오류가 발생했습니다: $e');
-      }
+      // 오류 발생 시 빈 문자열 반환
+      return '';
     }
   }
   
@@ -207,6 +213,25 @@ class WebPdfService {
     } catch (e) {
       debugPrint('PDF 데이터 가져오기 오류: $e');
       return null;
+    }
+  }
+  
+  /// 브라우저에서 PDF 데이터를 직접 열기
+  void openPdfInBrowser(Uint8List pdfData) {
+    try {
+      // Blob 생성
+      final blob = html.Blob([pdfData], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      
+      // 새 탭에서 PDF 열기
+      html.window.open(url, '_blank');
+      
+      // 메모리 누수 방지를 위해 URL 해제 예약
+      Future.delayed(const Duration(minutes: 5), () {
+        html.Url.revokeObjectUrl(url);
+      });
+    } catch (e) {
+      debugPrint('PDF를 브라우저에서 열지 못했습니다: $e');
     }
   }
 } 

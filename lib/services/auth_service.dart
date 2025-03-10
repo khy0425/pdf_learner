@@ -1,4 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:web_firebase_initializer/web_firebase_initializer.dart';
+import 'package:user_model/user_model.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -24,34 +27,163 @@ class AuthService {
   }
 
   // 소셜 로그인
-  Future<UserCredential> signInWithGoogle() async {
-    final googleProvider = GoogleAuthProvider();
-    return _auth.signInWithPopup(googleProvider);
+  Future<UserModel?> signInWithGoogle() async {
+    try {
+      debugPrint('Google 로그인 시작');
+      
+      if (kIsWeb) {
+        final userData = await WebFirebaseInitializer.signInWithGoogle();
+        if (userData != null) {
+          debugPrint('Google 로그인 성공: ${userData['id']}');
+          
+          // Firestore에 사용자 정보 저장
+          await WebFirebaseInitializer.saveUserData(userData);
+          
+          return UserModel.fromJson(userData);
+        }
+      } else {
+        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+        if (googleUser == null) {
+          debugPrint('Google 로그인 취소됨');
+          return null;
+        }
+        
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        
+        final UserCredential userCredential = await _auth.signInWithCredential(credential);
+        final User? user = userCredential.user;
+        
+        if (user != null) {
+          debugPrint('Google 로그인 성공: ${user.uid}');
+          
+          final userData = {
+            'id': user.uid,
+            'email': user.email,
+            'displayName': user.displayName,
+            'photoUrl': user.photoURL,
+            'emailVerified': user.emailVerified,
+            'providerId': user.providerData.first.providerId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'subscriptionTier': 'free',
+          };
+          
+          // Firestore에 사용자 정보 저장
+          await WebFirebaseInitializer.saveUserData(userData);
+          
+          return UserModel.fromJson(userData);
+        }
+      }
+      
+      debugPrint('Google 로그인 실패: 사용자 정보 없음');
+      return null;
+    } catch (e) {
+      debugPrint('Google 로그인 오류: $e');
+      rethrow;
+    }
   }
 
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
-    final results = await _db.query(
-      'users',
-      where: 'email = ?',
-      whereArgs: [email],
-    );
-
-    if (results.isEmpty) {
-      throw Exception('이메일 또는 비밀번호가 잘못되었습니다');
+  Future<UserModel?> signInWithEmailPassword(String email, String password) async {
+    try {
+      debugPrint('이메일/비밀번호 로그인 시작: $email');
+      
+      if (kIsWeb) {
+        final userData = await WebFirebaseInitializer.signInWithEmailPassword(email, password);
+        if (userData != null) {
+          debugPrint('이메일/비밀번호 로그인 성공: ${userData['id']}');
+          
+          // Firestore에 사용자 정보 저장
+          await WebFirebaseInitializer.saveUserData(userData);
+          
+          return UserModel.fromJson(userData);
+        }
+      } else {
+        final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        final User? user = userCredential.user;
+        if (user != null) {
+          debugPrint('이메일/비밀번호 로그인 성공: ${user.uid}');
+          
+          final userData = {
+            'id': user.uid,
+            'email': user.email,
+            'displayName': user.displayName,
+            'photoUrl': user.photoURL,
+            'emailVerified': user.emailVerified,
+            'providerId': user.providerData.first.providerId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'subscriptionTier': 'free',
+          };
+          
+          // Firestore에 사용자 정보 저장
+          await WebFirebaseInitializer.saveUserData(userData);
+          
+          return UserModel.fromJson(userData);
+        }
+      }
+      
+      debugPrint('이메일/비밀번호 로그인 실패: 사용자 정보 없음');
+      return null;
+    } catch (e) {
+      debugPrint('이메일/비밀번호 로그인 오류: $e');
+      rethrow;
     }
+  }
 
-    final userMap = results.first;
-    final storedHash = userMap['password'] as String;
-    final salt = userMap['salt'] as String;
-
-    if (hashPassword(password, salt) != storedHash) {
-      throw Exception('이메일 또는 비밀번호가 잘못되었습니다');
+  Future<UserModel?> signUpWithEmailPassword(String email, String password) async {
+    try {
+      debugPrint('이메일/비밀번호 회원가입 시작: $email');
+      
+      if (kIsWeb) {
+        final userData = await WebFirebaseInitializer.signUpWithEmailPassword(email, password);
+        if (userData != null) {
+          debugPrint('이메일/비밀번호 회원가입 성공: ${userData['id']}');
+          
+          // Firestore에 사용자 정보 저장
+          await WebFirebaseInitializer.saveUserData(userData);
+          
+          return UserModel.fromJson(userData);
+        }
+      } else {
+        final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        final User? user = userCredential.user;
+        if (user != null) {
+          debugPrint('이메일/비밀번호 회원가입 성공: ${user.uid}');
+          
+          final userData = {
+            'id': user.uid,
+            'email': user.email,
+            'displayName': user.displayName,
+            'photoUrl': user.photoURL,
+            'emailVerified': user.emailVerified,
+            'providerId': user.providerData.first.providerId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'subscriptionTier': 'free',
+          };
+          
+          // Firestore에 사용자 정보 저장
+          await WebFirebaseInitializer.saveUserData(userData);
+          
+          return UserModel.fromJson(userData);
+        }
+      }
+      
+      debugPrint('이메일/비밀번호 회원가입 실패: 사용자 정보 없음');
+      return null;
+    } catch (e) {
+      debugPrint('이메일/비밀번호 회원가입 오류: $e');
+      rethrow;
     }
-
-    _auth.currentUser = User.fromMap(userMap);
   }
 
   Future<void> signOut() {

@@ -3,81 +3,238 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../services/web_firebase_initializer.dart';
+import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import '../models/user_model.dart';
 
-class FirebaseAuthService extends ChangeNotifier {
+class FirebaseAuthService with ChangeNotifier {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  User? _currentUser;
+  UserModel? _currentUser;
+  bool _isLoading = false;
+  bool _isInitialized = false;
+  
+  // 싱글톤 패턴 구현
+  static final FirebaseAuthService _instance = FirebaseAuthService._internal();
+  factory FirebaseAuthService() => _instance;
+  FirebaseAuthService._internal() {
+    try {
+      _initializeAuth();
+    } catch (e) {
+      debugPrint('FirebaseAuthService 생성자 오류: $e');
+    }
+  }
+  
+  UserModel? get currentUser {
+    try {
+      return _currentUser;
+    } catch (e) {
+      return null;
+    }
+  }
+  bool get isLoading => _isLoading;
+  bool get isLoggedIn => _currentUser != null;
+  bool get isInitialized => _isInitialized;
 
-  User? get currentUser => _currentUser;
-
-  FirebaseAuthService() {
-    if (kIsWeb) {
-      // 웹 환경에서는 JavaScript를 통해 현재 사용자 정보 가져오기
-      _initWebAuth();
-    } else {
-      // 네이티브 환경에서는 Firebase SDK를 통해 인증 상태 변경 감지
+  Future<void> _initializeAuth() async {
+    try {
+      // 웹 환경에서 인증 상태 유지 설정
+      if (kIsWeb) {
+        try {
+          // LOCAL: 브라우저를 닫아도 로그인 상태 유지
+          await _auth.setPersistence(firebase_auth.Persistence.LOCAL);
+        } catch (e) {
+          // 오류 무시
+        }
+      }
+      
+      // 인증 상태 변경 리스너 설정
       _auth.authStateChanges().listen(_onAuthStateChanged);
+      
+      // 현재 사용자 확인
+      final currentUser = _auth.currentUser;
+      if (currentUser != null) {
+        await _loadUserFromFirestore(currentUser.uid);
+      }
+      
+      _isInitialized = true;
+      notifyListeners();
+    } catch (e) {
+      _isInitialized = false;
     }
   }
 
-  Future<void> _initWebAuth() async {
+  // Firestore에서 사용자 정보 로드
+  Future<void> _loadUserFromFirestore(String userId) async {
     try {
-      final userData = await WebFirebaseInitializer.getCurrentUser();
-      if (userData != null) {
-        await _onWebAuthStateChanged(userData);
+      _isLoading = true;
+      notifyListeners();
+      
+      // Firestore에서 사용자 정보 가져오기
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        
+        // UserModel 생성
+        _currentUser = _createUserModelFromMap(userData, userId);
+      } else {
+        // 기본 사용자 정보 생성
+        _currentUser = _createDefaultUserModel(userId);
+        
+        // Firestore에 기본 사용자 정보 저장
+        await _saveDefaultUserToFirestore(userId);
       }
     } catch (e) {
-      print('웹 인증 초기화 오류: $e');
+      // 오류 발생 시 기본 사용자 모델 생성
+      _currentUser = _createDefaultUserModel(userId);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  // 사용자 정보 맵에서 UserModel 생성
+  UserModel _createUserModelFromMap(Map<String, dynamic> userData, String userId) {
+    try {
+      return UserModel(
+        id: userId,
+        email: userData['email']?.toString() ?? '',
+        displayName: userData['name']?.toString() ?? userData['displayName']?.toString() ?? '사용자',
+        photoUrl: userData['photoURL']?.toString() ?? userData['photoUrl']?.toString() ?? '',
+        createdAt: userData['createdAt'] != null 
+            ? DateTime.tryParse(userData['createdAt'].toString()) ?? DateTime.now() 
+            : DateTime.now(),
+        lastLoginAt: DateTime.now(),
+        subscriptionTier: SubscriptionTier.free,
+        subscriptionExpiresAt: null,
+        apiKey: null,
+        apiKeyExpiresAt: null,
+        usageCount: 0,
+        lastUsageAt: null,
+        maxUsagePerDay: 10,
+        maxPdfSize: 5 * 1024 * 1024,
+        maxTextLength: 10000,
+        maxPdfsPerDay: 5,
+        maxPdfsTotal: 20,
+        maxPdfPages: 50,
+        maxPdfTextLength: 50000,
+        maxPdfTextLengthPerPage: 1000,
+        maxPdfTextLengthPerDay: 100000,
+        maxPdfTextLengthPerMonth: 1000000,
+        maxPdfTextLengthPerYear: 10000000,
+        maxPdfTextLengthPerLifetime: 100000000,
+        maxPdfTextLengthPerPdf: 10000,
+        maxPdfTextLengthPerPdfPerPage: 1000,
+        maxPdfTextLengthPerPdfPerDay: 100000,
+        maxPdfTextLengthPerPdfPerMonth: 1000000,
+        maxPdfTextLengthPerPdfPerYear: 10000000,
+        maxPdfTextLengthPerPdfPerLifetime: 100000000,
+        maxPdfTextLengthPerPdfPerPagePerDay: 10000,
+        maxPdfTextLengthPerPdfPerPagePerMonth: 100000,
+        maxPdfTextLengthPerPdfPerPagePerYear: 1000000,
+        maxPdfTextLengthPerPdfPerPagePerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonth: 100000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerYear: 1000000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerMonthPerYear: 1000000,
+        maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerYearPerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear: 1000000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime: 10000000,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime: 10000000,
+      );
+    } catch (e) {
+      return _createDefaultUserModel(userId);
+    }
+  }
+  
+  // 기본 UserModel 생성
+  UserModel _createDefaultUserModel(String userId) {
+    return UserModel(
+      id: userId,
+      email: '',
+      displayName: '사용자',
+      photoUrl: '',
+      createdAt: DateTime.now(),
+      lastLoginAt: DateTime.now(),
+      subscriptionTier: SubscriptionTier.free,
+      subscriptionExpiresAt: null,
+      apiKey: null,
+      apiKeyExpiresAt: null,
+      usageCount: 0,
+      lastUsageAt: null,
+      maxUsagePerDay: 10,
+      maxPdfSize: 5 * 1024 * 1024,
+      maxTextLength: 10000,
+      maxPdfsPerDay: 5,
+      maxPdfsTotal: 20,
+      maxPdfPages: 50,
+      maxPdfTextLength: 50000,
+      maxPdfTextLengthPerPage: 1000,
+      maxPdfTextLengthPerDay: 100000,
+      maxPdfTextLengthPerMonth: 1000000,
+      maxPdfTextLengthPerYear: 10000000,
+      maxPdfTextLengthPerLifetime: 100000000,
+      maxPdfTextLengthPerPdf: 10000,
+      maxPdfTextLengthPerPdfPerPage: 1000,
+      maxPdfTextLengthPerPdfPerDay: 100000,
+      maxPdfTextLengthPerPdfPerMonth: 1000000,
+      maxPdfTextLengthPerPdfPerYear: 10000000,
+      maxPdfTextLengthPerPdfPerLifetime: 100000000,
+      maxPdfTextLengthPerPdfPerPagePerDay: 10000,
+      maxPdfTextLengthPerPdfPerPagePerMonth: 100000,
+      maxPdfTextLengthPerPdfPerPagePerYear: 1000000,
+      maxPdfTextLengthPerPdfPerPagePerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonth: 100000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerYear: 1000000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerMonthPerYear: 1000000,
+      maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerYearPerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear: 1000000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime: 10000000,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime: 10000000,
+    );
+  }
+  
+  // Firestore에 기본 사용자 정보 저장
+  Future<void> _saveDefaultUserToFirestore(String userId) async {
+    try {
+      await _firestore.collection('users').doc(userId).set({
+        'id': userId,
+        'email': '',
+        'name': '사용자',
+        'photoURL': '',
+        'createdAt': DateTime.now().toIso8601String(),
+        'subscription': 'free',
+        'provider': 'unknown',
+      });
+    } catch (e) {
+      // 오류 무시
     }
   }
 
   Future<void> _onAuthStateChanged(firebase_auth.User? firebaseUser) async {
-    if (firebaseUser == null) {
-      _currentUser = null;
+    try {
+      _isLoading = true;
       notifyListeners();
-      return;
+      
+      if (firebaseUser == null) {
+        _currentUser = null;
+      } else {
+        await _loadUserFromFirestore(firebaseUser.uid);
+      }
+    } catch (e) {
+      _currentUser = null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    // Firestore에서 사용자 데이터 가져오기
-    final doc = await _firestore.collection('users').doc(firebaseUser.uid).get();
-    if (doc.exists) {
-      _currentUser = User.fromMap(doc.data()!);
-    } else {
-      // 신규 사용자인 경우 기본 데이터 생성
-      _currentUser = User(
-        id: firebaseUser.uid,
-        email: firebaseUser.email!,
-        name: firebaseUser.displayName ?? '사용자',
-        createdAt: DateTime.now(),
-      );
-      await _firestore.collection('users').doc(firebaseUser.uid).set(
-            _currentUser!.toMap(),
-          );
-    }
-    notifyListeners();
-  }
-
-  Future<void> _onWebAuthStateChanged(Map<String, dynamic> userData) async {
-    // Firestore에서 사용자 데이터 가져오기
-    final doc = await _firestore.collection('users').doc(userData['uid']).get();
-    if (doc.exists) {
-      _currentUser = User.fromMap(doc.data()!);
-    } else {
-      // 신규 사용자인 경우 기본 데이터 생성
-      _currentUser = User(
-        id: userData['uid'],
-        email: userData['email'],
-        name: userData['displayName'] ?? '사용자',
-        createdAt: userData['createdAt'] != null 
-            ? DateTime.parse(userData['createdAt']) 
-            : DateTime.now(),
-      );
-      await _firestore.collection('users').doc(userData['uid']).set(
-            _currentUser!.toMap(),
-          );
-    }
-    notifyListeners();
   }
 
   Future<void> signUp({
@@ -86,34 +243,28 @@ class FirebaseAuthService extends ChangeNotifier {
     required String name,
   }) async {
     try {
-      if (kIsWeb) {
-        // 웹 환경에서는 JavaScript를 통해 회원가입
-        debugPrint('웹 환경에서 회원가입 시도: $email');
-        final userData = await WebFirebaseInitializer.signUpWithEmailPassword(email, password);
-        debugPrint('웹 회원가입 성공, 사용자 데이터 저장 중');
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (userCredential.user != null) {
+        await userCredential.user?.updateDisplayName(name);
         
-        // 사용자 이름 업데이트는 Firestore에서 처리
-        await _firestore.collection('users').doc(userData['uid']).set({
-          'id': userData['uid'],
+        // Firestore에 사용자 데이터 저장
+        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+          'id': userCredential.user!.uid,
           'email': email,
           'name': name,
+          'photoURL': '',
           'createdAt': DateTime.now().toIso8601String(),
           'subscription': 'free',
+          'provider': 'email',
         });
-        debugPrint('사용자 데이터 저장 완료');
-        await _onWebAuthStateChanged(userData);
-      } else {
-        // 네이티브 환경에서는 Firebase SDK를 통해 회원가입
-        final userCredential = await _auth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-
-        await userCredential.user?.updateDisplayName(name);
-        // Firestore에 사용자 데이터 저장은 _onAuthStateChanged에서 처리됨
+        
+        await _loadUserFromFirestore(userCredential.user!.uid);
       }
     } catch (e) {
-      debugPrint('회원가입 오류: $e');
       throw _handleFirebaseAuthError(e);
     }
   }
@@ -123,17 +274,10 @@ class FirebaseAuthService extends ChangeNotifier {
     required String password,
   }) async {
     try {
-      if (kIsWeb) {
-        // 웹 환경에서는 JavaScript를 통해 로그인
-        final userData = await WebFirebaseInitializer.signInWithEmailPassword(email, password);
-        await _onWebAuthStateChanged(userData);
-      } else {
-        // 네이티브 환경에서는 Firebase SDK를 통해 로그인
-        await _auth.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      }
+      await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } catch (e) {
       throw _handleFirebaseAuthError(e);
     }
@@ -141,75 +285,81 @@ class FirebaseAuthService extends ChangeNotifier {
 
   Future<void> signInWithGoogle() async {
     try {
+      _isLoading = true;
+      notifyListeners();
+      
       if (kIsWeb) {
-        // 웹 환경에서는 JavaScript를 통해 Google 로그인
-        debugPrint('웹 환경에서 Google 로그인 시도');
-        final userData = await WebFirebaseInitializer.signInWithGoogle();
-        debugPrint('Google 로그인 성공, 사용자 데이터 처리 중');
+        // 웹 환경에서는 팝업으로 Google 로그인
+        final googleProvider = firebase_auth.GoogleAuthProvider();
+        final userCredential = await _auth.signInWithPopup(googleProvider);
         
-        try {
+        if (userCredential.user != null) {
           // Firestore에 사용자 데이터가 없으면 저장
-          final doc = await _firestore.collection('users').doc(userData['uid']).get();
-          debugPrint('사용자 문서 조회 성공: ${doc.exists ? '문서 존재' : '문서 없음'}');
+          final doc = await _firestore.collection('users').doc(userCredential.user!.uid).get();
           
           if (!doc.exists) {
-            debugPrint('새 사용자 문서 생성 시도');
-            await _firestore.collection('users').doc(userData['uid']).set({
-              'id': userData['uid'],
-              'email': userData['email'],
-              'name': userData['displayName'] ?? '사용자',
-              'photoURL': userData['photoURL'],
+            await _firestore.collection('users').doc(userCredential.user!.uid).set({
+              'id': userCredential.user!.uid,
+              'email': userCredential.user!.email ?? '',
+              'name': userCredential.user!.displayName ?? '사용자',
+              'photoURL': userCredential.user!.photoURL ?? '',
               'createdAt': DateTime.now().toIso8601String(),
               'subscription': 'free',
               'provider': 'google',
             });
-            debugPrint('Google 사용자 데이터 저장 완료');
           }
-        } catch (firestoreError) {
-          debugPrint('Firestore 오류 상세: $firestoreError');
-          // Firestore 오류가 발생해도 로그인은 계속 진행
-          // 사용자 데이터는 나중에 다시 시도할 수 있음
+          
+          await _loadUserFromFirestore(userCredential.user!.uid);
         }
-        
-        // 로그인 성공으로 처리
-        _currentUser = User(
-          id: userData['uid'],
-          email: userData['email'],
-          name: userData['displayName'] ?? '사용자',
-          createdAt: DateTime.now(),
-          photoUrl: userData['photoURL'],
-          subscription: SubscriptionTier.free,
-        );
-        notifyListeners();
-        return;
       } else {
-        // 네이티브 환경에서는 Firebase SDK를 통해 Google 로그인
-        final googleProvider = firebase_auth.GoogleAuthProvider();
-        final userCredential = await _auth.signInWithPopup(googleProvider);
+        // 네이티브 환경에서는 GoogleSignIn 사용
+        final googleSignIn = GoogleSignIn();
+        final googleUser = await googleSignIn.signIn();
         
-        // Firestore에 사용자 데이터 저장은 _onAuthStateChanged에서 처리됨
+        if (googleUser != null) {
+          final googleAuth = await googleUser.authentication;
+          final credential = firebase_auth.GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+          
+          final userCredential = await _auth.signInWithCredential(credential);
+          
+          if (userCredential.user != null) {
+            // Firestore에 사용자 데이터가 없으면 저장
+            final doc = await _firestore.collection('users').doc(userCredential.user!.uid).get();
+            
+            if (!doc.exists) {
+              await _firestore.collection('users').doc(userCredential.user!.uid).set({
+                'id': userCredential.user!.uid,
+                'email': userCredential.user!.email ?? '',
+                'name': userCredential.user!.displayName ?? '사용자',
+                'photoURL': userCredential.user!.photoURL ?? '',
+                'createdAt': DateTime.now().toIso8601String(),
+                'subscription': 'free',
+                'provider': 'google',
+              });
+            }
+            
+            await _loadUserFromFirestore(userCredential.user!.uid);
+          }
+        }
       }
     } catch (e) {
-      debugPrint('Google 로그인 오류: $e');
       throw _handleFirebaseAuthError(e);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<void> signOut() async {
-    if (kIsWeb) {
-      // 웹 환경에서는 JavaScript를 통해 로그아웃
-      await WebFirebaseInitializer.signOut();
-      _currentUser = null;
-      notifyListeners();
-    } else {
-      // 네이티브 환경에서는 Firebase SDK를 통해 로그아웃
-      await _auth.signOut();
-    }
+    await _auth.signOut();
+    _currentUser = null;
+    notifyListeners();
   }
 
   Exception _handleFirebaseAuthError(dynamic e) {
-    debugPrint('Firebase 인증 오류 처리: $e');
-    
     if (e is firebase_auth.FirebaseAuthException) {
       switch (e.code) {
         case 'email-already-in-use':
@@ -233,42 +383,6 @@ class FirebaseAuthService extends ChangeNotifier {
       }
     }
     
-    // 웹 환경에서 발생하는 오류 처리
-    if (e is Map) {
-      debugPrint('웹 인증 오류 맵: $e');
-      final code = e['code'] as String? ?? '';
-      final message = e['message'] as String? ?? '알 수 없는 오류';
-      
-      switch (code) {
-        case 'auth/email-already-in-use':
-          return Exception('이미 사용 중인 이메일입니다');
-        case 'auth/invalid-email':
-          return Exception('잘못된 이메일 형식입니다');
-        case 'auth/weak-password':
-          return Exception('비밀번호가 너무 약합니다');
-        case 'auth/user-not-found':
-          return Exception('등록되지 않은 이메일입니다');
-        case 'auth/wrong-password':
-          return Exception('잘못된 비밀번호입니다');
-        case 'auth/operation-not-allowed':
-          return Exception('이 인증 방식이 비활성화되어 있습니다. Firebase 콘솔에서 이메일/비밀번호 인증을 활성화해주세요.');
-        case 'auth/account-exists-with-different-credential':
-          return Exception('이미 다른 방식으로 가입된 이메일입니다');
-        case 'auth/popup-closed-by-user':
-          return Exception('로그인 창이 닫혔습니다');
-        case 'auth/cancelled-popup-request':
-          return Exception('이전 로그인 요청이 진행 중입니다');
-        case 'auth/popup-blocked':
-          return Exception('팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
-        case 'firebase-not-initialized':
-          return Exception('Firebase가 초기화되지 않았습니다');
-        case 'firebase-auth-unavailable':
-          return Exception('Firebase 인증 서비스를 사용할 수 없습니다');
-        default:
-          return Exception('인증 오류: $message');
-      }
-    }
-    
-    return Exception('알 수 없는 오류가 발생했습니다: $e');
+    return Exception('알 수 없는 오류가 발생했습니다');
   }
 } 
