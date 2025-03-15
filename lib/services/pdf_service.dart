@@ -9,6 +9,8 @@ import 'package:http/http.dart' as http;
 import '../providers/pdf_provider.dart';
 import '../services/subscription_service.dart';
 import '../services/web_pdf_service.dart';
+import 'dart:convert';
+import 'package:universal_html/html.dart' as html;
 
 class PDFService {
   // 무료 사용자 PDF 크기 제한 (5MB)
@@ -287,6 +289,140 @@ class PDFService {
       };
     }
   }
+
+  /// URL에서 PDF 다운로드
+  Future<Uint8List> downloadPdfFromUrl(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode != 200) {
+        throw Exception('PDF 다운로드 실패: ${response.statusCode}');
+      }
+      
+      return response.bodyBytes;
+    } catch (e) {
+      debugPrint('PDF 다운로드 오류: $e');
+      throw Exception('PDF 다운로드에 실패했습니다: ${e.toString()}');
+    }
+  }
+  
+  /// PDF 정보 추출
+  Future<PdfInfo> extractPdfInfo(Uint8List pdfData) async {
+    try {
+      final document = PdfDocument(inputBytes: pdfData);
+      
+      // 페이지 수 가져오기
+      final pageCount = document.pages.count;
+      
+      // 텍스트 추출
+      final text = await extractTextFromPdfDocument(document);
+      final textLength = text.length;
+      
+      document.dispose();
+      
+      return PdfInfo(
+        pageCount: pageCount,
+        textLength: textLength,
+      );
+    } catch (e) {
+      debugPrint('PDF 정보 추출 오류: $e');
+      throw Exception('PDF 정보 추출에 실패했습니다: ${e.toString()}');
+    }
+  }
+  
+  /// PDF에서 텍스트 추출
+  Future<String> extractTextFromPdf(Uint8List pdfData) async {
+    try {
+      final document = PdfDocument(inputBytes: pdfData);
+      final text = await extractTextFromPdfDocument(document);
+      document.dispose();
+      return text;
+    } catch (e) {
+      debugPrint('PDF 텍스트 추출 오류: $e');
+      throw Exception('PDF 텍스트 추출에 실패했습니다: ${e.toString()}');
+    }
+  }
+  
+  /// PdfDocument에서 텍스트 추출
+  Future<String> extractTextFromPdfDocument(PdfDocument document) async {
+    try {
+      final pageCount = document.pages.count;
+      final buffer = StringBuffer();
+      
+      for (var i = 0; i < pageCount; i++) {
+        final page = document.pages[i];
+        final text = PdfTextExtractor(document).extractText(startPageIndex: i, endPageIndex: i);
+        buffer.write(text);
+        buffer.write('\n\n');
+      }
+      
+      return buffer.toString();
+    } catch (e) {
+      debugPrint('PdfDocument 텍스트 추출 오류: $e');
+      throw Exception('PDF 텍스트 추출에 실패했습니다: ${e.toString()}');
+    }
+  }
+  
+  /// AI를 사용하여 텍스트 분석
+  Future<String> analyzeTextWithAI(String text, String apiKey) async {
+    try {
+      // API 요청 URL
+      final url = Uri.parse('https://api.openai.com/v1/chat/completions');
+      
+      // 요청 헤더
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      };
+      
+      // 요청 본문
+      final body = {
+        'model': 'gpt-3.5-turbo',
+        'messages': [
+          {
+            'role': 'system',
+            'content': '당신은 PDF 문서를 분석하고 요약하는 AI 비서입니다. 주어진 텍스트를 분석하여 핵심 내용을 요약하고, 중요한 정보를 추출하세요.'
+          },
+          {
+            'role': 'user',
+            'content': '다음 PDF 내용을 분석하고 요약해주세요:\n\n$text'
+          }
+        ],
+        'temperature': 0.7,
+        'max_tokens': 1000,
+      };
+      
+      // API 요청
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode(body),
+      );
+      
+      // 응답 처리
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        return jsonResponse['choices'][0]['message']['content'];
+      } else {
+        throw Exception('AI 분석 실패: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('AI 분석 오류: $e');
+      throw Exception('AI 분석에 실패했습니다: ${e.toString()}');
+    }
+  }
+  
+  /// PDF 다운로드 (웹용)
+  void downloadPdfForWeb(Uint8List pdfData, String fileName) {
+    if (kIsWeb) {
+      final blob = html.Blob([pdfData]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', fileName)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    }
+  }
 }
 
 // isolate에서 실행될 함수
@@ -295,4 +431,60 @@ String _extractPageText(Map<String, dynamic> params) {
   final pageIndex = params['pageIndex'] as int;
   final extractor = PdfTextExtractor(document);
   return extractor.extractText(startPageIndex: pageIndex);
+}
+
+/// PDF 정보 클래스
+class PdfInfo {
+  final int pageCount;
+  final int textLength;
+  
+  PdfInfo({
+    required this.pageCount,
+    required this.textLength,
+  });
+}
+
+/// JSON 인코딩/디코딩 함수
+dynamic jsonDecode(String source) {
+  return const JsonDecoder().convert(source);
+}
+
+String jsonEncode(dynamic object) {
+  return const JsonEncoder().convert(object);
+}
+
+/// JSON 인코더/디코더
+class JsonDecoder {
+  const JsonDecoder();
+  
+  dynamic convert(String source) {
+    return json.decode(source);
+  }
+}
+
+class JsonEncoder {
+  const JsonEncoder();
+  
+  String convert(dynamic object) {
+    return json.encode(object);
+  }
+}
+
+/// JSON 라이브러리 (웹 환경에서는 dart:convert를 사용할 수 없으므로 대체)
+class json {
+  static dynamic decode(String source) {
+    if (kIsWeb) {
+      return html.window.JSON.parse(source);
+    } else {
+      return const JsonDecoder().convert(source);
+    }
+  }
+  
+  static String encode(dynamic object) {
+    if (kIsWeb) {
+      return html.window.JSON.stringify(object);
+    } else {
+      return const JsonEncoder().convert(object);
+    }
+  }
 } 

@@ -1,0 +1,90 @@
+{
+  "appTitle": "PDF Learner",
+  "welcome": "Welcome!",
+  "guestUser": "Guest User",
+  "login": "Login",
+  "logout": "Logout",
+  "totalPdfs": "Total {count} PDFs",
+  "@totalPdfs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "uploadPdf": "Upload PDF",
+  "upgrade": "Upgrade",
+  "viewTutorial": "View Tutorial",
+  "tutorialTitle": "Welcome to PDF Learner!",
+  "tutorialDesc": "This app is a tool for managing PDF documents and learning with AI. Let's explore the main features.",
+  "uploadButtonTitle": "Upload PDF",
+  "uploadButtonDesc": "Click this button to choose a PDF file and upload it to the app. Uploaded PDFs will be displayed in the list.",
+  "upgradeTitle": "Upgrade Subscription",
+  "upgradeDesc": "Upgrade to premium subscription to get unlimited AI analysis, cross-device sync, and more features.",
+  "pdfListTitle": "PDF List",
+  "pdfListDesc": "Your uploaded PDF files will appear in this area. Click a file to view the PDF and create AI summaries and quizzes.",
+  "loginTitle": "Login or Sign up",
+  "loginDesc": "Log in with Google or sign up with an API key. Logging in allows you to sync PDFs across devices.",
+  "requireLogin": "Login Required",
+  "loginPrompt": "Do you want to log in?",
+  "cancel": "Cancel",
+  "emailLogin": "Login with Email",
+  "googleLogin": "Login with Google",
+  "uploadPdfPrompt": "Please upload a PDF file",
+  "aiAnalysisDesc": "AI will analyze uploaded PDFs to assist your learning",
+  "fileSize": "File size: {size} KB",
+  "@fileSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "view": "View",
+  "delete": "Delete",
+  "skip": "Skip",
+  "next": "Next",
+  "previous": "Previous",
+  "freePlan": "Free Plan",
+  "basicPlan": "Basic Plan ($4.99/month)",
+  "premiumPlan": "Premium Plan ($9.99/month)",
+  "freeDesc": "Free, Limited Features",
+  "basicDesc": "$4.99/month, Additional Features",
+  "premiumDesc": "$9.99/month, All Features",
+  "chooseSubscription": "Choose Subscription Plan",
+  "guestUsage": "Guest Usage: {current}/{max}",
+  "@guestUsage": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingDays": "{days} days remaining",
+  "@remainingDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingHours": "{hours} hours remaining",
+  "@remainingHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "trialExpired": "Trial period expired",
+  "expired": "Expired",
+  "premiumTrial": "Premium Trial",
+  "language": "Language",
+  "changeLanguage": "Change Language",
+  "english": "English",
+  "korean": "Korean",
+  "systemDefault": "System Default"
+} 

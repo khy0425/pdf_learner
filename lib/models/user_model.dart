@@ -3,16 +3,16 @@ import 'user.dart';
 import 'package:flutter/foundation.dart';
 
 class UserModel {
-  final String id;
+  final String uid;
   final String email;
   final String displayName;
-  final String photoUrl;
-  final DateTime createdAt;
-  final DateTime lastLoginAt;
-  final SubscriptionTier subscriptionTier;
-  final DateTime? subscriptionExpiresAt;
+  final String? photoURL;
+  final bool emailVerified;
   final String? apiKey;
-  final DateTime? apiKeyExpiresAt;
+  final DateTime createdAt;
+  final DateTime? lastLoginAt;
+  final String subscriptionTier;
+  final DateTime? subscriptionExpiresAt;
   final int usageCount;
   final DateTime? lastUsageAt;
   final int maxUsagePerDay;
@@ -50,24 +50,24 @@ class UserModel {
   final int maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime;
 
   UserModel({
-    required this.id,
+    required this.uid,
     required this.email,
     required this.displayName,
-    required this.photoUrl,
+    this.photoURL,
+    this.emailVerified = false,
+    this.apiKey,
     required this.createdAt,
-    required this.lastLoginAt,
+    this.lastLoginAt,
     required this.subscriptionTier,
     this.subscriptionExpiresAt,
-    this.apiKey,
-    this.apiKeyExpiresAt,
-    required this.usageCount,
+    this.usageCount = 0,
     this.lastUsageAt,
-    required this.maxUsagePerDay,
-    required this.maxPdfSize,
-    required this.maxTextLength,
-    required this.maxPdfsPerDay,
-    required this.maxPdfsTotal,
-    required this.maxPdfPages,
+    this.maxUsagePerDay = 10,
+    this.maxPdfSize = 5 * 1024 * 1024, // 5MB
+    this.maxTextLength = 10000,
+    this.maxPdfsPerDay = 5,
+    this.maxPdfsTotal = 20,
+    this.maxPdfPages = 50,
     required this.maxPdfTextLength,
     required this.maxPdfTextLengthPerPage,
     required this.maxPdfTextLengthPerDay,
@@ -97,79 +97,210 @@ class UserModel {
     required this.maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime,
   });
 
-  factory UserModel.fromJson(Map<String, dynamic> json) {
+  factory UserModel.fromMap(Map<String, dynamic> map) {
     try {
-      debugPrint('UserModel.fromJson 시작: $json');
-      
-      // 필수 필드 검증
-      if (json['id'] == null) {
-        debugPrint('UserModel.fromJson 오류: id가 null입니다');
-        throw Exception('사용자 ID가 없습니다');
-      }
-      
-      // 기본값 설정
-      final now = DateTime.now();
-      
-      // 구독 정보 안전하게 처리
-      final subscriptionValue = json['subscriptionTier'] ?? json['subscription'] ?? 'free';
-      debugPrint('구독 정보 원본 값: $subscriptionValue');
-      
-      // 사용자 정보 매핑
-      final user = UserModel(
-        id: json['id'].toString(),
-        email: json['email']?.toString() ?? '',
-        displayName: json['displayName']?.toString() ?? json['name']?.toString() ?? '사용자',
-        photoUrl: json['photoUrl']?.toString() ?? json['photoURL']?.toString() ?? '',
-        createdAt: now,
-        lastLoginAt: now,
-        subscriptionTier: SubscriptionTier.free, // 기본값으로 설정
-        subscriptionExpiresAt: null,
-        apiKey: null,
-        apiKeyExpiresAt: null,
-        usageCount: 0,
-        lastUsageAt: null,
-        maxUsagePerDay: 10,
-        maxPdfSize: 5 * 1024 * 1024,
-        maxTextLength: 10000,
-        maxPdfsPerDay: 5,
-        maxPdfsTotal: 20,
-        maxPdfPages: 50,
-        maxPdfTextLength: 50000,
-        maxPdfTextLengthPerPage: 1000,
-        maxPdfTextLengthPerDay: 100000,
-        maxPdfTextLengthPerMonth: 1000000,
-        maxPdfTextLengthPerYear: 10000000,
-        maxPdfTextLengthPerLifetime: 100000000,
-        maxPdfTextLengthPerPdf: 10000,
-        maxPdfTextLengthPerPdfPerPage: 1000,
-        maxPdfTextLengthPerPdfPerDay: 100000,
-        maxPdfTextLengthPerPdfPerMonth: 1000000,
-        maxPdfTextLengthPerPdfPerYear: 10000000,
-        maxPdfTextLengthPerPdfPerLifetime: 100000000,
-        maxPdfTextLengthPerPdfPerPagePerDay: 10000,
-        maxPdfTextLengthPerPdfPerPagePerMonth: 100000,
-        maxPdfTextLengthPerPdfPerPagePerYear: 1000000,
-        maxPdfTextLengthPerPdfPerPagePerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerMonth: 100000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerYear: 1000000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerMonthPerYear: 1000000,
-        maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerYearPerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear: 1000000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime: 10000000,
-        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime: 10000000,
+      return UserModel(
+        uid: map['uid'] as String,
+        email: map['email'] as String,
+        displayName: map['displayName'] as String,
+        photoURL: map['photoURL'] as String?,
+        emailVerified: map['emailVerified'] as bool? ?? false,
+        apiKey: map['apiKey'] as String?,
+        createdAt: DateTime.parse(map['createdAt'] as String),
+        lastLoginAt: map['lastLoginAt'] != null ? DateTime.parse(map['lastLoginAt'] as String) : null,
+        subscriptionTier: map['subscriptionTier'] as String? ?? 'free',
+        subscriptionExpiresAt: map['subscriptionExpiresAt'] != null ? DateTime.parse(map['subscriptionExpiresAt'] as String) : null,
+        usageCount: map['usageCount'] as int? ?? 0,
+        lastUsageAt: map['lastUsageAt'] != null ? DateTime.parse(map['lastUsageAt'] as String) : null,
+        maxUsagePerDay: map['maxUsagePerDay'] as int? ?? 10,
+        maxPdfSize: map['maxPdfSize'] as int? ?? 5 * 1024 * 1024,
+        maxTextLength: map['maxTextLength'] as int? ?? 10000,
+        maxPdfsPerDay: map['maxPdfsPerDay'] as int? ?? 5,
+        maxPdfsTotal: map['maxPdfsTotal'] as int? ?? 20,
+        maxPdfPages: map['maxPdfPages'] as int? ?? 50,
+        maxPdfTextLength: map['maxPdfTextLength'] as int? ?? 0,
+        maxPdfTextLengthPerPage: map['maxPdfTextLengthPerPage'] as int? ?? 0,
+        maxPdfTextLengthPerDay: map['maxPdfTextLengthPerDay'] as int? ?? 0,
+        maxPdfTextLengthPerMonth: map['maxPdfTextLengthPerMonth'] as int? ?? 0,
+        maxPdfTextLengthPerYear: map['maxPdfTextLengthPerYear'] as int? ?? 0,
+        maxPdfTextLengthPerLifetime: map['maxPdfTextLengthPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdf: map['maxPdfTextLengthPerPdf'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPage: map['maxPdfTextLengthPerPdfPerPage'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerDay: map['maxPdfTextLengthPerPdfPerDay'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerMonth: map['maxPdfTextLengthPerPdfPerMonth'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerYear: map['maxPdfTextLengthPerPdfPerYear'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerLifetime: map['maxPdfTextLengthPerPdfPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDay: map['maxPdfTextLengthPerPdfPerPagePerDay'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerMonth: map['maxPdfTextLengthPerPdfPerPagePerMonth'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerYear: map['maxPdfTextLengthPerPdfPerPagePerYear'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerLifetime: map['maxPdfTextLengthPerPdfPerPagePerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonth: map['maxPdfTextLengthPerPdfPerPagePerDayPerMonth'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerYear: map['maxPdfTextLengthPerPdfPerPagePerDayPerYear'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerDayPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerMonthPerYear: map['maxPdfTextLengthPerPdfPerPagePerMonthPerYear'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerYearPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerYearPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear: map['maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime'] as int? ?? 0,
+        maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime: map['maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime'] as int? ?? 0,
       );
-      
-      debugPrint('UserModel.fromJson 완료: ${user.id}');
-      return user;
-    } catch (e, stackTrace) {
-      debugPrint('UserModel.fromJson 오류: $e');
-      debugPrint('스택 트레이스: $stackTrace');
+    } catch (e) {
+      debugPrint('UserModel.fromMap 오류: $e');
       rethrow;
     }
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid,
+      'email': email,
+      'displayName': displayName,
+      'photoURL': photoURL,
+      'emailVerified': emailVerified,
+      'apiKey': apiKey,
+      'createdAt': createdAt.toIso8601String(),
+      'lastLoginAt': lastLoginAt?.toIso8601String(),
+      'subscriptionTier': subscriptionTier,
+      'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
+      'usageCount': usageCount,
+      'lastUsageAt': lastUsageAt?.toIso8601String(),
+      'maxUsagePerDay': maxUsagePerDay,
+      'maxPdfSize': maxPdfSize,
+      'maxTextLength': maxTextLength,
+      'maxPdfsPerDay': maxPdfsPerDay,
+      'maxPdfsTotal': maxPdfsTotal,
+      'maxPdfPages': maxPdfPages,
+      'maxPdfTextLength': maxPdfTextLength,
+      'maxPdfTextLengthPerPage': maxPdfTextLengthPerPage,
+      'maxPdfTextLengthPerDay': maxPdfTextLengthPerDay,
+      'maxPdfTextLengthPerMonth': maxPdfTextLengthPerMonth,
+      'maxPdfTextLengthPerYear': maxPdfTextLengthPerYear,
+      'maxPdfTextLengthPerLifetime': maxPdfTextLengthPerLifetime,
+      'maxPdfTextLengthPerPdf': maxPdfTextLengthPerPdf,
+      'maxPdfTextLengthPerPdfPerPage': maxPdfTextLengthPerPdfPerPage,
+      'maxPdfTextLengthPerPdfPerDay': maxPdfTextLengthPerPdfPerDay,
+      'maxPdfTextLengthPerPdfPerMonth': maxPdfTextLengthPerPdfPerMonth,
+      'maxPdfTextLengthPerPdfPerYear': maxPdfTextLengthPerPdfPerYear,
+      'maxPdfTextLengthPerPdfPerLifetime': maxPdfTextLengthPerPdfPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerDay': maxPdfTextLengthPerPdfPerPagePerDay,
+      'maxPdfTextLengthPerPdfPerPagePerMonth': maxPdfTextLengthPerPdfPerPagePerMonth,
+      'maxPdfTextLengthPerPdfPerPagePerYear': maxPdfTextLengthPerPdfPerPagePerYear,
+      'maxPdfTextLengthPerPdfPerPagePerLifetime': maxPdfTextLengthPerPdfPerPagePerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerMonth': maxPdfTextLengthPerPdfPerPagePerDayPerMonth,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerYear': maxPdfTextLengthPerPdfPerPagePerDayPerYear,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerMonthPerYear': maxPdfTextLengthPerPdfPerPagePerMonthPerYear,
+      'maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime': maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerYearPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear': maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime,
+      'maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime,
+    };
+  }
+
+  UserModel copyWith({
+    String? uid,
+    String? email,
+    String? displayName,
+    String? photoURL,
+    bool? emailVerified,
+    String? apiKey,
+    DateTime? createdAt,
+    DateTime? lastLoginAt,
+    String? subscriptionTier,
+    DateTime? subscriptionExpiresAt,
+    int? usageCount,
+    DateTime? lastUsageAt,
+    int? maxUsagePerDay,
+    int? maxPdfSize,
+    int? maxTextLength,
+    int? maxPdfsPerDay,
+    int? maxPdfsTotal,
+    int? maxPdfPages,
+    int? maxPdfTextLength,
+    int? maxPdfTextLengthPerPage,
+    int? maxPdfTextLengthPerDay,
+    int? maxPdfTextLengthPerMonth,
+    int? maxPdfTextLengthPerYear,
+    int? maxPdfTextLengthPerLifetime,
+    int? maxPdfTextLengthPerPdf,
+    int? maxPdfTextLengthPerPdfPerPage,
+    int? maxPdfTextLengthPerPdfPerDay,
+    int? maxPdfTextLengthPerPdfPerMonth,
+    int? maxPdfTextLengthPerPdfPerYear,
+    int? maxPdfTextLengthPerPdfPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerDay,
+    int? maxPdfTextLengthPerPdfPerPagePerMonth,
+    int? maxPdfTextLengthPerPdfPerPagePerYear,
+    int? maxPdfTextLengthPerPdfPerPagePerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerMonth,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerYear,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerMonthPerYear,
+    int? maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerYearPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime,
+    int? maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime,
+  }) {
+    return UserModel(
+      uid: uid ?? this.uid,
+      email: email ?? this.email,
+      displayName: displayName ?? this.displayName,
+      photoURL: photoURL ?? this.photoURL,
+      emailVerified: emailVerified ?? this.emailVerified,
+      apiKey: apiKey ?? this.apiKey,
+      createdAt: createdAt ?? this.createdAt,
+      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+      subscriptionTier: subscriptionTier ?? this.subscriptionTier,
+      subscriptionExpiresAt: subscriptionExpiresAt ?? this.subscriptionExpiresAt,
+      usageCount: usageCount ?? this.usageCount,
+      lastUsageAt: lastUsageAt ?? this.lastUsageAt,
+      maxUsagePerDay: maxUsagePerDay ?? this.maxUsagePerDay,
+      maxPdfSize: maxPdfSize ?? this.maxPdfSize,
+      maxTextLength: maxTextLength ?? this.maxTextLength,
+      maxPdfsPerDay: maxPdfsPerDay ?? this.maxPdfsPerDay,
+      maxPdfsTotal: maxPdfsTotal ?? this.maxPdfsTotal,
+      maxPdfPages: maxPdfPages ?? this.maxPdfPages,
+      maxPdfTextLength: maxPdfTextLength ?? this.maxPdfTextLength,
+      maxPdfTextLengthPerPage: maxPdfTextLengthPerPage ?? this.maxPdfTextLengthPerPage,
+      maxPdfTextLengthPerDay: maxPdfTextLengthPerDay ?? this.maxPdfTextLengthPerDay,
+      maxPdfTextLengthPerMonth: maxPdfTextLengthPerMonth ?? this.maxPdfTextLengthPerMonth,
+      maxPdfTextLengthPerYear: maxPdfTextLengthPerYear ?? this.maxPdfTextLengthPerYear,
+      maxPdfTextLengthPerLifetime: maxPdfTextLengthPerLifetime ?? this.maxPdfTextLengthPerLifetime,
+      maxPdfTextLengthPerPdf: maxPdfTextLengthPerPdf ?? this.maxPdfTextLengthPerPdf,
+      maxPdfTextLengthPerPdfPerPage: maxPdfTextLengthPerPdfPerPage ?? this.maxPdfTextLengthPerPdfPerPage,
+      maxPdfTextLengthPerPdfPerDay: maxPdfTextLengthPerPdfPerDay ?? this.maxPdfTextLengthPerPdfPerDay,
+      maxPdfTextLengthPerPdfPerMonth: maxPdfTextLengthPerPdfPerMonth ?? this.maxPdfTextLengthPerPdfPerMonth,
+      maxPdfTextLengthPerPdfPerYear: maxPdfTextLengthPerPdfPerYear ?? this.maxPdfTextLengthPerPdfPerYear,
+      maxPdfTextLengthPerPdfPerLifetime: maxPdfTextLengthPerPdfPerLifetime ?? this.maxPdfTextLengthPerPdfPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerDay: maxPdfTextLengthPerPdfPerPagePerDay ?? this.maxPdfTextLengthPerPdfPerPagePerDay,
+      maxPdfTextLengthPerPdfPerPagePerMonth: maxPdfTextLengthPerPdfPerPagePerMonth ?? this.maxPdfTextLengthPerPdfPerPagePerMonth,
+      maxPdfTextLengthPerPdfPerPagePerYear: maxPdfTextLengthPerPdfPerPagePerYear ?? this.maxPdfTextLengthPerPdfPerPagePerYear,
+      maxPdfTextLengthPerPdfPerPagePerLifetime: maxPdfTextLengthPerPdfPerPagePerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonth: maxPdfTextLengthPerPdfPerPagePerDayPerMonth ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerMonth,
+      maxPdfTextLengthPerPdfPerPagePerDayPerYear: maxPdfTextLengthPerPdfPerPagePerDayPerYear ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerYear,
+      maxPdfTextLengthPerPdfPerPagePerDayPerLifetime: maxPdfTextLengthPerPdfPerPagePerDayPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerMonthPerYear: maxPdfTextLengthPerPdfPerPagePerMonthPerYear ?? this.maxPdfTextLengthPerPdfPerPagePerMonthPerYear,
+      maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime: maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerYearPerLifetime: maxPdfTextLengthPerPdfPerPagePerYearPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerYearPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear: maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime: maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime: maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime: maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime,
+      maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime: maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime ?? this.maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, photoURL: $photoURL, emailVerified: $emailVerified, apiKey: ${apiKey != null ? "***" : "null"}, createdAt: $createdAt, lastLoginAt: $lastLoginAt, subscriptionTier: $subscriptionTier, subscriptionExpiresAt: $subscriptionExpiresAt, usageCount: $usageCount, lastUsageAt: $lastUsageAt, maxUsagePerDay: $maxUsagePerDay, maxPdfSize: $maxPdfSize, maxTextLength: $maxTextLength, maxPdfsPerDay: $maxPdfsPerDay, maxPdfsTotal: $maxPdfsTotal, maxPdfPages: $maxPdfPages)';
   }
 
   static DateTime _parseDateTime(dynamic value) {
@@ -238,61 +369,5 @@ class UserModel {
       debugPrint('_parseInt 오류: $e, 기본값 사용: $defaultValue');
       return defaultValue;
     }
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'email': email,
-      'displayName': displayName,
-      'photoUrl': photoUrl,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'lastLoginAt': Timestamp.fromDate(lastLoginAt),
-      'subscriptionTier': subscriptionTier.toString(),
-      'subscriptionExpiresAt': subscriptionExpiresAt != null 
-          ? Timestamp.fromDate(subscriptionExpiresAt!)
-          : null,
-      'apiKey': apiKey,
-      'apiKeyExpiresAt': apiKeyExpiresAt != null 
-          ? Timestamp.fromDate(apiKeyExpiresAt!)
-          : null,
-      'usageCount': usageCount,
-      'lastUsageAt': lastUsageAt != null 
-          ? Timestamp.fromDate(lastUsageAt!)
-          : null,
-      'maxUsagePerDay': maxUsagePerDay,
-      'maxPdfSize': maxPdfSize,
-      'maxTextLength': maxTextLength,
-      'maxPdfsPerDay': maxPdfsPerDay,
-      'maxPdfsTotal': maxPdfsTotal,
-      'maxPdfPages': maxPdfPages,
-      'maxPdfTextLength': maxPdfTextLength,
-      'maxPdfTextLengthPerPage': maxPdfTextLengthPerPage,
-      'maxPdfTextLengthPerDay': maxPdfTextLengthPerDay,
-      'maxPdfTextLengthPerMonth': maxPdfTextLengthPerMonth,
-      'maxPdfTextLengthPerYear': maxPdfTextLengthPerYear,
-      'maxPdfTextLengthPerLifetime': maxPdfTextLengthPerLifetime,
-      'maxPdfTextLengthPerPdf': maxPdfTextLengthPerPdf,
-      'maxPdfTextLengthPerPdfPerPage': maxPdfTextLengthPerPdfPerPage,
-      'maxPdfTextLengthPerPdfPerDay': maxPdfTextLengthPerPdfPerDay,
-      'maxPdfTextLengthPerPdfPerMonth': maxPdfTextLengthPerPdfPerMonth,
-      'maxPdfTextLengthPerPdfPerYear': maxPdfTextLengthPerPdfPerYear,
-      'maxPdfTextLengthPerPdfPerLifetime': maxPdfTextLengthPerPdfPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerDay': maxPdfTextLengthPerPdfPerPagePerDay,
-      'maxPdfTextLengthPerPdfPerPagePerMonth': maxPdfTextLengthPerPdfPerPagePerMonth,
-      'maxPdfTextLengthPerPdfPerPagePerYear': maxPdfTextLengthPerPdfPerPagePerYear,
-      'maxPdfTextLengthPerPdfPerPagePerLifetime': maxPdfTextLengthPerPdfPerPagePerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerMonth': maxPdfTextLengthPerPdfPerPagePerDayPerMonth,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerYear': maxPdfTextLengthPerPdfPerPagePerDayPerYear,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerMonthPerYear': maxPdfTextLengthPerPdfPerPagePerMonthPerYear,
-      'maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime': maxPdfTextLengthPerPdfPerPagePerMonthPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerYearPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear': maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYear,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerYearPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerMonthPerYearPerLifetime,
-      'maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime': maxPdfTextLengthPerPdfPerPagePerDayPerMonthPerYearPerLifetime,
-    };
   }
 } 

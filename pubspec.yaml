@@ -20,10 +20,13 @@ dependencies:
       path: plugins/window_size
   flutter_acrylic: ^1.1.3
   flutter_dotenv: ^5.1.0
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.2
   shared_preferences_windows: ^2.3.2  # Windows 지원 추가
   js: ^0.6.7  # JavaScript 상호 운용성을 위한 패키지 추가
   url_launcher: ^6.2.5  # URL 실행을 위한 패키지 추가
+  flutter_localizations:  # 다국어 지원 패키지 추가
+    sdk: flutter
+  intl: ^0.19.0  # 버전 업데이트
 
   # 파일 선택 구현
   file_selector: ^1.0.3
@@ -41,8 +44,8 @@ dependencies:
   desktop_drop: ^0.5.0
 
   # Firebase 관련
-  firebase_core: ^3.10.1
-  firebase_auth: ^5.4.1
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.1
   firebase_storage: ^12.4.1
   firebase_analytics: ^11.4.1
   firebase_crashlytics: ^4.3.1
@@ -55,9 +58,10 @@ dependencies:
   firebase_storage_platform_interface: ^5.1.11
   
   # URL 실행 지원
-  intl: ^0.19.0
-  google_sign_in: ^6.2.2
+  google_sign_in: ^6.3.0
   universal_html: ^2.2.4
+  crypto: ^3.0.3  # 암호화 패키지 추가
+  lottie: ^3.3.1
 
 dev_dependencies:
   flutter_test:
@@ -70,7 +74,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  
+  # 국제화 설정 추가
+  generate: true
+  
+  # PDF 에셋 경로 설정
   assets:
-    - .env
+    - assets/
+    - assets/sample/
     - assets/images/
-    - assets/images/app_icon.png

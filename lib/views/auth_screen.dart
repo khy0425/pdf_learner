@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/auth_service.dart';
-import '../services/api_key_service.dart';
-import '../providers/pdf_provider.dart';
+import '../view_models/auth_view_model.dart';
 import '../models/user_model.dart';
 
 class AuthScreen extends StatelessWidget {
@@ -10,15 +8,15 @@ class AuthScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthService>(
-      builder: (context, authService, _) {
-        if (authService.isLoading) {
+    return Consumer<AuthViewModel>(
+      builder: (context, authViewModel, _) {
+        if (authViewModel.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
         // 로그인된 경우 사용자 정보 표시
-        if (authService.isLoggedIn) {
-          final user = authService.user!;
+        if (authViewModel.isLoggedIn) {
+          final user = authViewModel.user!;
           return Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -53,7 +51,7 @@ class AuthScreen extends StatelessWidget {
                       ),
                     ),
                     TextButton.icon(
-                      onPressed: () => authService.signOut(),
+                      onPressed: () => authViewModel.signOut(),
                       icon: const Icon(Icons.logout),
                       label: const Text('로그아웃'),
                     ),
@@ -76,8 +74,11 @@ class AuthScreen extends StatelessWidget {
                   title: const Text('API 키 관리'),
                   subtitle: Text(user.apiKey != null ? '설정됨' : '설정되지 않음'),
                   trailing: TextButton(
-                    onPressed: () {
-                      // TODO: API 키 관리 페이지로 이동
+                    onPressed: () async {
+                      final apiKey = await _showApiKeyDialog(context, authViewModel, user.apiKey);
+                      if (apiKey != null && apiKey.isNotEmpty) {
+                        await authViewModel.updateApiKey(apiKey);
+                      }
                     },
                     child: const Text('API 키 설정'),
                   ),
@@ -98,6 +99,43 @@ class AuthScreen extends StatelessWidget {
         // 로그인되지 않은 경우 로그인 폼 표시
         return const LoginForm();
       },
+    );
+  }
+  
+  Future<String?> _showApiKeyDialog(BuildContext context, AuthViewModel authViewModel, String? currentApiKey) async {
+    final controller = TextEditingController(text: currentApiKey);
+    
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('API 키 설정'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('OpenAI API 키를 입력해주세요.'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'API 키',
+                hintText: 'sk-...',
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('저장'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -134,26 +172,27 @@ class _LoginFormState extends State<LoginForm> {
       return;
     }
 
-    final authService = context.read<AuthService>();
+    final authViewModel = context.read<AuthViewModel>();
     
     if (_isSignUp) {
-      await authService.signUpWithEmailPassword(
+      await authViewModel.signUpWithEmailPassword(
         _emailController.text,
         _passwordController.text,
         _displayNameController.text,
       );
     } else {
-      await authService.signInWithEmailPassword(
+      await authViewModel.signInWithEmailPassword(
         _emailController.text,
         _passwordController.text,
       );
     }
 
-    if (authService.error != null) {
+    if (authViewModel.error != null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(authService.error!)),
+          SnackBar(content: Text(authViewModel.error!)),
         );
+        authViewModel.clearError();
       }
     }
   }
@@ -166,13 +205,14 @@ class _LoginFormState extends State<LoginForm> {
       return;
     }
 
-    final authService = context.read<AuthService>();
-    await authService.signInWithGoogle();
+    final authViewModel = context.read<AuthViewModel>();
+    await authViewModel.signInWithGoogle();
 
-    if (authService.error != null && mounted) {
+    if (authViewModel.error != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authService.error!)),
+        SnackBar(content: Text(authViewModel.error!)),
       );
+      authViewModel.clearError();
     }
   }
 

@@ -8,206 +8,96 @@ import 'package:flutter/foundation.dart';
 import 'dart:js' as js;
 import 'dart:async';
 import '../services/web_firebase_initializer.dart';
+import '../repositories/user_repository.dart';
 
-/// API 키 관리를 위한 서비스
+/// API 키 관리를 담당하는 Service 클래스
 class ApiKeyService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static const String _userApiKeyKey = 'user_api_key';
+  final UserRepository _userRepository;
   
-  /// 현재 사용자 API 키 가져오기
-  Future<String> getCurrentApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? userApiKey = prefs.getString(_userApiKeyKey);
-    
-    // 사용자 API 키가 있으면 사용, 없으면 개발자 키 사용
-    return userApiKey ?? _getDeveloperApiKey();
+  ApiKeyService({UserRepository? userRepository}) 
+      : _userRepository = userRepository ?? UserRepository();
+  
+  /// API 키 저장
+  Future<void> saveApiKey(String? userId, String apiKey) async {
+    try {
+      // 유효성 검사
+      if (!isValidApiKey(apiKey)) {
+        throw Exception('유효하지 않은 API 키입니다.');
+      }
+      
+      // 로그인된 사용자인 경우 Firestore에 저장
+      if (userId != null) {
+        await _userRepository.saveApiKey(userId, apiKey);
+      }
+      
+      // 로컬 저장소에도 저장 (오프라인 사용 지원)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('api_key', apiKey);
+      
+      debugPrint('API 키 저장 완료');
+    } catch (e) {
+      debugPrint('API 키 저장 오류: $e');
+      rethrow;
+    }
   }
   
-  /// 개발자 API 키 가져오기
-  String _getDeveloperApiKey() {
-    // .env 파일에서 API 키 가져오기
-    return dotenv.env['OPENAI_API_KEY'] ?? '';
+  /// API 키 가져오기
+  Future<String?> getApiKey(String? userId) async {
+    try {
+      String? apiKey;
+      
+      // 로그인된 사용자인 경우 Firestore에서 가져오기
+      if (userId != null) {
+        apiKey = await _userRepository.getApiKey(userId);
+        if (apiKey != null) {
+          return apiKey;
+        }
+      }
+      
+      // Firestore에 없거나 로그인되지 않은 경우 로컬 저장소에서 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      apiKey = prefs.getString('api_key');
+      
+      // 로컬 저장소에도 없는 경우 환경 변수에서 가져오기
+      if (apiKey == null || apiKey.isEmpty) {
+        apiKey = dotenv.env['OPENAI_API_KEY'];
+      }
+      
+      return apiKey;
+    } catch (e) {
+      debugPrint('API 키 가져오기 오류: $e');
+      return null;
+    }
   }
   
-  /// 사용자 API 키 저장
-  Future<void> saveUserApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userApiKeyKey, apiKey);
+  /// API 키 삭제
+  Future<void> deleteApiKey(String? userId) async {
+    try {
+      // 로그인된 사용자인 경우 Firestore에서 삭제
+      if (userId != null) {
+        await _userRepository.updateUser(userId, {'apiKey': null});
+      }
+      
+      // 로컬 저장소에서도 삭제
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('api_key');
+      
+      debugPrint('API 키 삭제 완료');
+    } catch (e) {
+      debugPrint('API 키 삭제 오류: $e');
+      rethrow;
+    }
   }
   
-  /// 사용자 API 키 제거
-  Future<void> removeUserApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userApiKeyKey);
-  }
-  
-  /// 사용자 API 키 존재 여부 확인
-  Future<bool> hasUserApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey(_userApiKeyKey) && 
-           prefs.getString(_userApiKeyKey)?.isNotEmpty == true;
-  }
-  
-  /// API 키 유효성 검사 (간단한 형식 검사)
+  /// API 키 유효성 검사
   bool isValidApiKey(String apiKey) {
-    // Gemini API 키는 일반적으로 'AIza'로 시작
-    return apiKey.startsWith('AIza') && apiKey.length > 20;
+    // OpenAI API 키 형식 검사 (sk-로 시작하는 51자 문자열)
+    return apiKey.startsWith('sk-') && apiKey.length >= 51;
   }
-
-  // 사용자의 구독 등급에 따라 적절한 API 키 반환
-  Future<String> getAPIKey(String userId, SubscriptionTier tier) async {
-    switch (tier) {
-      case SubscriptionTier.free:
-      case SubscriptionTier.basic:
-        // 무료 사용자는 자신의 API 키 사용
-        final doc = await _firestore
-            .collection('users')
-            .doc(userId)
-            .get();
-        return doc.data()?['apiKey'] ?? '';
-        
-      case SubscriptionTier.premium:
-      case SubscriptionTier.enterprise:
-      case SubscriptionTier.plus:
-      case SubscriptionTier.premiumTrial:
-      case SubscriptionTier.guest:
-        // 유료 회원은 개발자 API 키 사용
-        if (kIsWeb) {
-          // 웹 환경에서는 JavaScript를 통해 API 키 가져오기
-          return await _getWebApiKey('gemini') ?? dotenv.env['GEMINI_API_KEY'] ?? '';
-        } else {
-          return dotenv.env['GEMINI_API_KEY'] ?? '';
-        }
-    }
-  }
-
-  // 웹 환경에서 JavaScript를 통해 API 키 가져오기
-  Future<String?> _getWebApiKey(String keyName) async {
-    if (!kIsWeb) return null;
-    
-    try {
-      return await WebFirebaseInitializer.getApiKey(keyName);
-    } catch (e) {
-      print('웹 API 키 가져오기 예외: $e');
-      return null;
-    }
-  }
-
-  // API 키 저장 (무료 사용자용)
-  Future<void> saveAPIKey(String userId, String apiKey) async {
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .set({
-          'apiKey': apiKey,
-        }, SetOptions(merge: true));
-  }
-
-  // API 키 유효성 검사
-  Future<bool> validateAPIKey(String apiKey) async {
-    try {
-      // 특정 API 키는 항상 유효하다고 처리 (테스트용)
-      if (apiKey == 'AIzaSyBAaUaNUqLKupp0Il9OHczUyb5VXDU2EhM') {
-        return true;
-      }
-      
-      if (kIsWeb) {
-        // 웹 환경에서는 JavaScript를 통해 API 키 검증
-        return await WebFirebaseInitializer.validateApiKey('gemini', apiKey);
-      }
-      
-      // Gemini API 키 검증 로직
-      final response = await http.post(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'contents': [
-            {
-              'parts': [
-                {
-                  'text': 'Hello',
-                },
-              ],
-            },
-          ],
-        }),
-      );
-      
-      return response.statusCode == 200;
-    } catch (e) {
-      print('API 키 검증 오류: $e');
-      return false;
-    }
-  }
-
-  // API 키 가져오기
-  Future<String?> getApiKey() async {
-    try {
-      if (kIsWeb) {
-        // 웹 환경에서는 JavaScript를 통해 API 키 가져오기
-        final webApiKey = await _getWebApiKey('gemini');
-        if (webApiKey?.isNotEmpty ?? false) {
-          return webApiKey;
-        }
-      }
-      
-      // 1. 먼저 .env 파일의 API 키 확인
-      final envApiKey = dotenv.env['GEMINI_API_KEY'];
-      if (envApiKey?.isNotEmpty ?? false) {
-        return envApiKey;
-      }
-
-      // 2. 사용자가 입력한 API 키 확인
-      final prefs = await SharedPreferences.getInstance();
-      final userApiKey = prefs.getString(_userApiKeyKey);
-      if (userApiKey?.isNotEmpty ?? false) {
-        return userApiKey;
-      }
-
-      return null;
-    } catch (e) {
-      print('API 키 조회 오류: $e');
-      return null;
-    }
-  }
-
-  // 사용자 API 키 저장
-  Future<void> saveApiKey(String apiKey) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_userApiKeyKey, apiKey);
-    } catch (e) {
-      print('API 키 저장 오류: $e');
-      throw Exception('API 키를 저장할 수 없습니다.');
-    }
-  }
-
-  // 사용자 API 키 제거
-  Future<void> clearApiKey() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_userApiKeyKey);
-    } catch (e) {
-      print('API 키 제거 오류: $e');
-      throw Exception('API 키를 제거할 수 없습니다.');
-    }
-  }
-
-  // Firebase API 키 가져오기
-  String? getFirebaseApiKey() {
-    if (kIsWeb) {
-      // 웹 환경에서는 JavaScript를 통해 Firebase 설정에서 API 키 가져오기
-      try {
-        final config = js.context['firebaseConfig'];
-        if (config != null) {
-          return config['apiKey']?.toString();
-        }
-      } catch (e) {
-        print('웹 Firebase API 키 가져오기 오류: $e');
-      }
-    }
-    return dotenv.env['FIREBASE_API_KEY'];
+  
+  /// API 키 마스킹 (보안을 위해 일부만 표시)
+  String maskApiKey(String apiKey) {
+    if (apiKey.length <= 8) return '********';
+    return '${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}';
   }
 } 

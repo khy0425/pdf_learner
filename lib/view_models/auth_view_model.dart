@@ -1,45 +1,51 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
-import 'database_helper.dart';
-import 'web_firebase_initializer.dart';
+import '../repositories/auth_repository.dart';
+import '../repositories/user_repository.dart';
+import '../services/api_key_service.dart';
 
-class AuthService extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-  final DatabaseHelper _databaseHelper = DatabaseHelper();
+/// 인증 관련 비즈니스 로직을 담당하는 ViewModel 클래스
+class AuthViewModel extends ChangeNotifier {
+  final AuthRepository _authRepository;
+  final UserRepository _userRepository;
+  final ApiKeyService _apiKeyService;
   
   UserModel? _user;
   bool _isLoading = false;
   String? _error;
   
+  /// 현재 로그인된 사용자
   UserModel? get user => _user;
+  
+  /// 로딩 상태
   bool get isLoading => _isLoading;
+  
+  /// 오류 메시지
   String? get error => _error;
+  
+  /// 로그인 여부
   bool get isLoggedIn => _user != null;
   
-  AuthService() {
-    debugPrint('AuthService 초기화');
+  AuthViewModel({
+    AuthRepository? authRepository,
+    UserRepository? userRepository,
+    ApiKeyService? apiKeyService,
+  }) : _authRepository = authRepository ?? AuthRepository(),
+       _userRepository = userRepository ?? UserRepository(),
+       _apiKeyService = apiKeyService ?? ApiKeyService() {
     _initializeAuthState();
+    
     // Firebase Auth 상태 변경 리스너 추가
-    _auth.authStateChanges().listen((User? firebaseUser) {
+    _authRepository.authStateChanges.listen((firebaseUser) {
       debugPrint('Firebase Auth 상태 변경: ${firebaseUser?.uid}');
       _onAuthStateChanged(firebaseUser);
     });
-    
-    // 현재 로그인 상태 확인
-    final currentUser = _auth.currentUser;
-    if (currentUser != null) {
-      debugPrint('현재 로그인된 사용자: ${currentUser.uid}');
-    } else {
-      debugPrint('현재 로그인된 사용자 없음');
-    }
   }
   
+  /// 인증 상태 초기화
   Future<void> _initializeAuthState() async {
     try {
-      final currentUser = _auth.currentUser;
+      final currentUser = _authRepository.currentUser;
       if (currentUser != null) {
         debugPrint('현재 로그인된 사용자 발견: ${currentUser.uid}');
         await _onAuthStateChanged(currentUser);
@@ -55,7 +61,8 @@ class AuthService extends ChangeNotifier {
     }
   }
   
-  Future<void> _onAuthStateChanged(User? firebaseUser) async {
+  /// 인증 상태 변경 처리
+  Future<void> _onAuthStateChanged(firebaseUser) async {
     debugPrint('인증 상태 변경: ${firebaseUser?.uid}');
     
     if (firebaseUser == null) {
@@ -66,7 +73,7 @@ class AuthService extends ChangeNotifier {
     }
     
     try {
-      final userData = await _databaseHelper.getUser(firebaseUser.uid);
+      final userData = await _userRepository.getUser(firebaseUser.uid);
       debugPrint('사용자 데이터 조회 결과: ${userData?.uid}');
       
       if (userData != null) {
@@ -112,7 +119,7 @@ class AuthService extends ChangeNotifier {
         );
         
         debugPrint('신규 사용자 정보 저장 시도');
-        await _databaseHelper.saveUser(_user!);
+        await _userRepository.saveUser(_user!);
         debugPrint('신규 사용자 정보 저장 완료');
       }
       
@@ -125,147 +132,103 @@ class AuthService extends ChangeNotifier {
     }
   }
   
+  /// Google로 로그인
   Future<void> signInWithGoogle() async {
     try {
       debugPrint('Google 로그인 시도');
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      _setLoading(true);
       
-      if (kIsWeb) {
-        final userData = await WebFirebaseInitializer.signInWithGoogle();
-        debugPrint('웹 Google 로그인 결과: $userData');
-        
-        if (userData != null) {
-          _user = UserModel.fromMap(userData);
-          await _databaseHelper.saveUser(_user!);
-          debugPrint('웹 Google 로그인 성공: ${_user?.uid}');
-        } else {
-          throw Exception('Google 로그인 실패: 사용자 데이터를 받지 못했습니다.');
-        }
-      } else {
-        final googleUser = await _googleSignIn.signIn();
-        if (googleUser == null) throw Exception('Google 로그인이 취소되었습니다.');
-        
-        debugPrint('Google 계정 선택 완료');
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        
-        final userCredential = await _auth.signInWithCredential(credential);
-        debugPrint('Firebase 인증 완료: ${userCredential.user?.uid}');
-      }
+      await _authRepository.signInWithGoogle();
     } catch (e) {
       debugPrint('Google 로그인 오류: $e');
-      _error = 'Google 로그인에 실패했습니다.';
+      _setError('Google 로그인에 실패했습니다.');
       _user = null;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
+  /// 이메일/비밀번호로 로그인
   Future<void> signInWithEmailPassword(String email, String password) async {
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      _setLoading(true);
       
-      if (kIsWeb) {
-        final userData = await WebFirebaseInitializer.signInWithEmailPassword(email, password);
-        if (userData != null) {
-          _user = UserModel.fromMap(userData);
-          await _databaseHelper.saveUser(_user!);
-        }
-      } else {
-        await _auth.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      }
+      await _authRepository.signInWithEmailPassword(email, password);
     } catch (e) {
       debugPrint('이메일/비밀번호 로그인 오류: $e');
-      _error = '이메일 또는 비밀번호가 올바르지 않습니다.';
+      _setError('이메일 또는 비밀번호가 올바르지 않습니다.');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
+  /// 이메일/비밀번호로 회원가입
   Future<void> signUpWithEmailPassword(String email, String password, String displayName) async {
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      _setLoading(true);
       
-      if (kIsWeb) {
-        final userData = await WebFirebaseInitializer.signUpWithEmailPassword(email, password);
-        if (userData != null) {
-          _user = UserModel.fromMap(userData);
-          await _databaseHelper.saveUser(_user!);
-        }
-      } else {
-        final userCredential = await _auth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-        
-        await userCredential.user?.updateDisplayName(displayName);
-      }
+      final userCredential = await _authRepository.signUpWithEmailPassword(email, password);
+      await _authRepository.updateProfile(displayName: displayName);
     } catch (e) {
       debugPrint('회원가입 오류: $e');
-      _error = '회원가입에 실패했습니다.';
+      _setError('회원가입에 실패했습니다.');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
+  /// 로그아웃
   Future<void> signOut() async {
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      _setLoading(true);
       
-      if (!kIsWeb) {
-        await _googleSignIn.signOut();
-      }
-      await _auth.signOut();
+      await _authRepository.signOut();
     } catch (e) {
       debugPrint('로그아웃 오류: $e');
-      _error = '로그아웃에 실패했습니다.';
+      _setError('로그아웃에 실패했습니다.');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
+  /// API 키 업데이트
   Future<void> updateApiKey(String apiKey) async {
     try {
       if (_user == null) throw Exception('로그인이 필요합니다.');
       
-      await _databaseHelper.saveApiKey(_user!.uid, apiKey);
+      await _apiKeyService.saveApiKey(_user!.uid, apiKey);
       _user = _user!.copyWith(apiKey: apiKey);
       notifyListeners();
     } catch (e) {
       debugPrint('API 키 업데이트 오류: $e');
-      _error = 'API 키 업데이트에 실패했습니다.';
-      notifyListeners();
+      _setError('API 키 업데이트에 실패했습니다.');
     }
   }
   
+  /// API 키 가져오기
   Future<String?> getApiKey() async {
     try {
       if (_user == null) return null;
-      return await _databaseHelper.getApiKey(_user!.uid);
+      return await _apiKeyService.getApiKey(_user!.uid);
     } catch (e) {
       debugPrint('API 키 가져오기 오류: $e');
       return null;
     }
   }
   
+  /// 로딩 상태 설정
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+  
+  /// 오류 설정
+  void _setError(String? error) {
+    _error = error;
+    notifyListeners();
+  }
+  
+  /// 오류 초기화
   void clearError() {
     _error = null;
     notifyListeners();
