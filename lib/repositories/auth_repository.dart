@@ -28,7 +28,11 @@ class AuthRepository {
         throw Exception('로그인 후 사용자 정보를 가져올 수 없습니다.');
       }
       
-      return UserCredential._(user, null);
+      // UserCredential 객체를 직접 생성하는 대신 Firebase에서 제공하는 메서드 사용
+      return await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } else {
       return await _auth.signInWithEmailAndPassword(
         email: email,
@@ -51,7 +55,11 @@ class AuthRepository {
         throw Exception('회원가입 후 사용자 정보를 가져올 수 없습니다.');
       }
       
-      return UserCredential._(user, null);
+      // UserCredential 객체를 직접 생성하는 대신 Firebase에서 제공하는 메서드 사용
+      return await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } else {
       return await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -74,14 +82,17 @@ class AuthRepository {
         throw Exception('Google 로그인 후 사용자 정보를 가져올 수 없습니다.');
       }
       
-      return UserCredential._(user, null);
+      // Google 로그인 결과를 반환
+      final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+      return await _auth.signInWithPopup(googleProvider);
     } else {
-      final googleUser = await _googleSignIn.signIn();
+      // 모바일에서의 Google 로그인 로직
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         throw Exception('Google 로그인이 취소되었습니다.');
       }
       
-      final googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,

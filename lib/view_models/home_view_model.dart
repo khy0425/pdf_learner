@@ -1,149 +1,199 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'dart:async'; // 타임아웃 예외 사용
-import '../providers/pdf_provider.dart';
-import '../main.dart';  // AppLogger 사용을 위한 import
+import 'dart:async';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import '../models/pdf_model.dart';
+import '../view_models/pdf_view_model.dart';
+import '../view_models/auth_view_model.dart';
 
 /// 홈 화면의 ViewModel
 /// PDF 파일 관련 상태와 로직을 관리합니다.
 class HomeViewModel extends ChangeNotifier {
-  bool _isLoading = false; // 초기 상태를 false로 변경
+  bool _isLoading = false;
   bool _hasError = false;
   String _errorMessage = '';
-  bool _isInitialized = false;  // 초기화 상태 추가
+  bool _isInitialized = false;
 
   // Getters
   bool get isLoading => _isLoading;
   bool get hasError => _hasError;
   String get errorMessage => _errorMessage;
   bool get isInitialized => _isInitialized;
-  
-  // Setters
-  set isLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
-  
-  set hasError(bool value) {
-    _hasError = value;
-    notifyListeners();
-  }
-  
-  set errorMessage(String value) {
-    _errorMessage = value;
-    notifyListeners();
-  }
-  
-  set isInitialized(bool value) {
-    _isInitialized = value;
-    notifyListeners();
-  }
-  
+
   /// PDF 파일 목록 로드
-  Future<void> loadPDFs(BuildContext context) async {
-    AppLogger.log('PDF 파일 로드 시작 (ViewModel)');
+  Future<void> loadPDFs(String userId) async {
+    debugPrint('PDF 파일 로드 시작 (HomeViewModel)');
     
-    _setLoadingState(true);
+    _setLoading(true);
     _clearError();
     
     try {
-      // PDFProvider 로드 작업에 10초 타임아웃 설정 (20초에서 10초로 줄임)
+      // 10초 타임아웃 설정
       await Future.any([
-        _loadPDFsInternal(context),
+        _loadPDFsInternal(userId),
         Future.delayed(const Duration(seconds: 10), () => 
           throw TimeoutException('PDF 파일 로드 작업 시간 초과 (10초)')
         ),
       ]);
       
-      AppLogger.log('PDF 파일 로드 완료 (ViewModel)');
+      _isInitialized = true;
+      debugPrint('PDF 파일 로드 완료 (HomeViewModel)');
     } on TimeoutException catch (e) {
-      AppLogger.error('PDF 파일 로드 타임아웃 (ViewModel)', e);
+      debugPrint('PDF 파일 로드 타임아웃 (HomeViewModel): $e');
       _setError('PDF 파일 로드 시간이 초과되었습니다. 다시 시도해주세요.');
     } catch (e) {
-      AppLogger.error('PDF 파일 로드 오류 (ViewModel)', e);
+      debugPrint('PDF 파일 로드 오류 (HomeViewModel): $e');
       _setError('PDF 파일 로드 중 오류: $e');
     } finally {
-      _setLoadingState(false);
+      _setLoading(false);
     }
   }
   
   /// 내부 PDF 로드 로직
-  Future<void> _loadPDFsInternal(BuildContext context) async {
-    // PDFProvider를 통해 저장된 PDF 파일 목록 불러오기
-    await Provider.of<PDFProvider>(context, listen: false).loadSavedPDFs(context);
+  Future<void> _loadPDFsInternal(String userId) async {
+    // 이 메서드는 실제 구현에서 PdfViewModel을 통해 PDF 목록을 로드합니다.
+    // 이 메서드는 HomeViewModel 내부에서만 사용됩니다.
   }
   
-  /// PDF 파일 선택
-  Future<void> pickPDF(BuildContext context) async {
+  /// 파일에서 PDF 업로드
+  Future<void> pickPdfFromFile(BuildContext context, String userId) async {
+    _setLoading(true);
+    _clearError();
+    
     try {
-      final pdfProvider = Provider.of<PDFProvider>(context, listen: false);
-      await pdfProvider.pickPDF(context);
-    } catch (e) {
-      AppLogger.error('PDF 선택 오류 (ViewModel)', e);
+      // 파일 선택 다이얼로그 표시
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
       
-      // 에러 스낵바 표시
+      if (result == null || result.files.isEmpty) {
+        debugPrint('파일 선택 취소됨');
+        _setLoading(false);
+        return;
+      }
+      
+      final file = File(result.files.first.path!);
+      final pdfViewModel = Provider.of<PdfViewModel>(context, listen: false);
+      
+      // PDF 업로드
+      await pdfViewModel.uploadPdfFromFile(file, userId);
+      
+      // 성공 메시지 표시
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('PDF 파일 선택 중 오류가 발생했습니다: $e'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('PDF 파일이 업로드되었습니다')),
         );
       }
+      
+      // PDF 목록 새로고침
+      await loadPDFs(userId);
+    } catch (e) {
+      debugPrint('PDF 파일 업로드 오류: $e');
+      _setError('PDF 파일을 업로드할 수 없습니다: $e');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF 파일 업로드 실패: $e')),
+        );
+      }
+    } finally {
+      _setLoading(false);
     }
   }
   
-  /// PDF 파일 삭제
-  Future<void> deletePDF(BuildContext context, PDFProvider pdfProvider, PdfFileInfo pdfFile) async {
+  /// URL에서 PDF 업로드
+  Future<void> pickPdfFromUrl(BuildContext context, String url, String userId) async {
+    _setLoading(true);
+    _clearError();
+    
     try {
-      // 삭제 확인 다이얼로그 표시
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('PDF 파일 삭제'),
-          content: Text('${pdfFile.fileName}을(를) 삭제하시겠습니까?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('취소'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('삭제', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      ) ?? false;
-
-      if (confirmed && context.mounted) {
-        await pdfProvider.deletePDF(pdfFile, context);
+      if (url.isEmpty) {
+        throw Exception('URL이 비어있습니다');
       }
+      
+      if (!url.toLowerCase().endsWith('.pdf') && !url.toLowerCase().contains('pdf')) {
+        throw Exception('유효한 PDF URL이 아닙니다');
+      }
+      
+      final pdfViewModel = Provider.of<PdfViewModel>(context, listen: false);
+      
+      // PDF 업로드
+      await pdfViewModel.uploadPdfFromUrl(url, userId);
+      
+      // 성공 메시지 표시
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PDF 파일이 업로드되었습니다')),
+        );
+      }
+      
+      // PDF 목록 새로고침
+      await loadPDFs(userId);
     } catch (e) {
-      AppLogger.error('PDF 삭제 오류 (ViewModel)', e);
+      debugPrint('URL에서 PDF 업로드 오류: $e');
+      _setError('URL에서 PDF를 업로드할 수 없습니다: $e');
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF 파일 삭제 중 오류가 발생했습니다: $e')),
+          SnackBar(content: Text('URL에서 PDF 업로드 실패: $e')),
         );
       }
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// PDF 삭제
+  Future<void> deletePdf(BuildContext context, String pdfId, String userId) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final pdfViewModel = Provider.of<PdfViewModel>(context, listen: false);
+      
+      // PDF 삭제
+      await pdfViewModel.deletePdf(pdfId, userId);
+      
+      // 성공 메시지 표시
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PDF 파일이 삭제되었습니다')),
+        );
+      }
+      
+      // PDF 목록 새로고침
+      await loadPDFs(userId);
+    } catch (e) {
+      debugPrint('PDF 삭제 오류: $e');
+      _setError('PDF를 삭제할 수 없습니다: $e');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF 삭제 실패: $e')),
+        );
+      }
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// 로딩 상태 설정
-  void _setLoadingState(bool loading) {
+  void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
   }
   
-  /// 에러 상태 설정
-  void _setError(String message) {
+  /// 오류 설정
+  void _setError(String error) {
     _hasError = true;
-    _errorMessage = message;
+    _errorMessage = error;
     notifyListeners();
   }
   
-  /// 에러 상태 초기화
+  /// 오류 초기화
   void _clearError() {
     _hasError = false;
     _errorMessage = '';

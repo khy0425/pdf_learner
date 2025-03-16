@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import '../../providers/pdf_provider.dart';
+import '../../models/pdf_model.dart';
 
 /// PDF 목록 항목 위젯
 /// PDF 파일 정보를 표시하는 카드 형태의 위젯입니다.
 class PdfListItem extends StatelessWidget {
-  final PdfFileInfo pdfFile;
-  final Function(PdfFileInfo) onOpen;
-  final Function(PdfFileInfo) onDelete;
+  final PdfModel pdf;
+  final Function() onTap;
+  final Function() onDelete;
   
   const PdfListItem({
     super.key,
-    required this.pdfFile,
-    required this.onOpen,
+    required this.pdf,
+    required this.onTap,
     required this.onDelete,
   });
   
@@ -20,7 +20,7 @@ class PdfListItem extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     
     // 추가 날짜 포맷팅
-    final date = pdfFile.createdAt;
+    final date = pdf.createdAt;
     final dateStr = '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
     
     return AnimatedContainer(
@@ -44,7 +44,7 @@ class PdfListItem extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(20),
           child: InkWell(
-            onTap: () => onOpen(pdfFile),
+            onTap: onTap,
             borderRadius: BorderRadius.circular(20),
             splashColor: colorScheme.primary.withOpacity(0.1),
             highlightColor: colorScheme.primary.withOpacity(0.05),
@@ -54,7 +54,7 @@ class PdfListItem extends StatelessWidget {
                 children: [
                   // PDF 아이콘
                   Hero(
-                    tag: 'pdf_icon_${pdfFile.id}',
+                    tag: 'pdf_icon_${pdf.id}',
                     child: Container(
                       width: 60,
                       height: 60,
@@ -74,7 +74,7 @@ class PdfListItem extends StatelessWidget {
                         alignment: Alignment.center,
                         children: [
                           const Icon(Icons.picture_as_pdf, color: Colors.red, size: 32),
-                          if (pdfFile.isCloudStored)
+                          if (pdf.isCloudStored)
                             Positioned(
                               right: 0,
                               top: 0,
@@ -107,7 +107,7 @@ class PdfListItem extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          pdfFile.fileName,
+                          pdf.name,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -126,7 +126,7 @@ class PdfListItem extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              '${(pdfFile.size / 1024).toStringAsFixed(1)} KB',
+                              '${(pdf.size / 1024).toStringAsFixed(1)} KB',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: colorScheme.onSurfaceVariant,
@@ -186,9 +186,9 @@ class PdfListItem extends StatelessWidget {
                         position: PopupMenuPosition.under,
                         onSelected: (value) {
                           if (value == 'delete') {
-                            onDelete(pdfFile);
+                            onDelete();
                           } else if (value == 'open') {
-                            onOpen(pdfFile);
+                            onTap();
                           }
                         },
                         itemBuilder: (context) => [

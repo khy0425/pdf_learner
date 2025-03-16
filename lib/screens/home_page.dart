@@ -1142,7 +1142,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             ),
           ),
           const SizedBox(height: 8),
-          Padding(
+              Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
               '오류 내용: $error',
@@ -1248,9 +1248,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   },
                   child: const Text('로그아웃'),
                 ),
-              ],
-            );
-          },
+            ],
+          );
+        },
         );
       },
     );

@@ -16,6 +16,8 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 // MVVM 패턴 적용을 위한 임포트
 import 'view_models/auth_view_model.dart';
 import 'view_models/pdf_view_model.dart';
+import 'view_models/home_view_model.dart';
+import 'view_models/pdf_viewer_view_model.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/pdf_repository.dart';
@@ -113,6 +115,16 @@ class MyApp extends StatelessWidget {
             userRepository: context.read<UserRepository>(),
             apiKeyService: context.read<ApiKeyService>(),
           ),
+        ),
+        ChangeNotifierProvider<HomeViewModel>(
+          create: (context) => HomeViewModel(),
+        ),
+        ChangeNotifierProxyProvider<PdfViewModel, PdfViewerViewModel>(
+          create: (context) => PdfViewerViewModel(
+            pdfViewModel: context.read<PdfViewModel>(),
+          ),
+          update: (context, pdfViewModel, previous) => 
+            previous ?? PdfViewerViewModel(pdfViewModel: pdfViewModel),
         ),
       ],
       child: MaterialApp(

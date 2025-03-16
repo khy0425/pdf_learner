@@ -473,18 +473,40 @@ class JsonEncoder {
 /// JSON 라이브러리 (웹 환경에서는 dart:convert를 사용할 수 없으므로 대체)
 class json {
   static dynamic decode(String source) {
-    if (kIsWeb) {
-      return html.window.JSON.parse(source);
-    } else {
-      return const JsonDecoder().convert(source);
+    try {
+      return jsonDecode(source);
+    } catch (e) {
+      debugPrint('JSON 파싱 오류: $e');
+      return null;
     }
   }
   
   static String encode(dynamic object) {
-    if (kIsWeb) {
-      return html.window.JSON.stringify(object);
-    } else {
-      return const JsonEncoder().convert(object);
+    try {
+      return jsonEncode(object);
+    } catch (e) {
+      debugPrint('JSON 직렬화 오류: $e');
+      return '{}';
     }
+  }
+}
+
+/// JSON 문자열을 객체로 변환
+dynamic parseJson(String source) {
+  try {
+    return jsonDecode(source);
+  } catch (e) {
+    debugPrint('JSON 파싱 오류: $e');
+    return null;
+  }
+}
+
+/// 객체를 JSON 문자열로 변환
+String? stringifyJson(dynamic object) {
+  try {
+    return jsonEncode(object);
+  } catch (e) {
+    debugPrint('JSON 직렬화 오류: $e');
+    return null;
   }
 } 
