@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:typed_data';
-import '../view_models/pdf_view_model.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../view_models/pdf_file_view_model.dart';
+import '../services/pdf_service.dart';
+import '../services/ai_service.dart';
 
 /// PDF 뷰어 화면의 ViewModel
 /// PDF 뷰어 관련 상태와 로직을 관리합니다.
 class PdfViewerViewModel extends ChangeNotifier {
-  final PdfViewModel _pdfViewModel;
+  final PdfFileViewModel _pdfViewModel;
+  final PDFService _pdfService = PDFService();
+  final AIService _aiService = AIService();
   
   bool _isLoading = false;
   bool _hasError = false;
@@ -15,6 +20,8 @@ class PdfViewerViewModel extends ChangeNotifier {
   Uint8List? _pdfData;
   int _currentPage = 1;
   double _zoomLevel = 1.0;
+  bool _isHighlightMode = false;
+  List<String> _bookmarks = [];
   
   // 확대/축소 관련 상수
   static const double _minZoomLevel = 0.05;
@@ -27,10 +34,13 @@ class PdfViewerViewModel extends ChangeNotifier {
   String get errorMessage => _errorMessage;
   bool get isPdfLoaded => _isPdfLoaded;
   Uint8List? get pdfData => _pdfData;
+  Uint8List? get pdfBytes => _pdfData;
   int get currentPage => _currentPage;
   double get zoomLevel => _zoomLevel;
+  bool get isHighlightMode => _isHighlightMode;
+  List<String> get bookmarks => _bookmarks;
   
-  PdfViewerViewModel({required PdfViewModel pdfViewModel}) 
+  PdfViewerViewModel({required PdfFileViewModel pdfViewModel}) 
       : _pdfViewModel = pdfViewModel;
   
   /// PDF 데이터 로드
@@ -39,10 +49,18 @@ class PdfViewerViewModel extends ChangeNotifier {
       _setLoading(true);
       _clearError();
       
+      if (pdfId.isEmpty) {
+        throw Exception('유효하지 않은 PDF ID입니다.');
+      }
+      
       final pdfData = await _pdfViewModel.getPdfData(pdfId);
       
       if (pdfData == null) {
         throw Exception('PDF 데이터를 불러올 수 없습니다.');
+      }
+      
+      if (pdfData.isEmpty) {
+        throw Exception('PDF 데이터가 비어 있습니다.');
       }
       
       _pdfData = pdfData;
@@ -52,6 +70,8 @@ class PdfViewerViewModel extends ChangeNotifier {
     } catch (e) {
       debugPrint('PDF 데이터 로드 오류: $e');
       _setError(e.toString());
+      _isPdfLoaded = false;
+      _pdfData = null;
     } finally {
       _setLoading(false);
     }
@@ -79,6 +99,72 @@ class PdfViewerViewModel extends ChangeNotifier {
   void zoomOut() {
     _zoomLevel = (_zoomLevel - _zoomStep).clamp(_minZoomLevel, _maxZoomLevel);
     notifyListeners();
+  }
+  
+  /// 하이라이트 모드 토글
+  void toggleHighlightMode() {
+    _isHighlightMode = !_isHighlightMode;
+    notifyListeners();
+  }
+  
+  /// 북마크 토글
+  void toggleBookmark() {
+    final pageKey = 'page_$_currentPage';
+    
+    if (_bookmarks.contains(pageKey)) {
+      _bookmarks.remove(pageKey);
+    } else {
+      _bookmarks.add(pageKey);
+    }
+    
+    notifyListeners();
+  }
+  
+  /// 텍스트 검색
+  void searchText(String text) {
+    if (_pdfData == null || text.isEmpty) {
+      return;
+    }
+    
+    // 실제 검색 로직은 SfPdfViewer 위젯에서 처리됨
+    notifyListeners();
+  }
+  
+  /// 검색 결과 초기화
+  void clearSearch() {
+    notifyListeners();
+  }
+  
+  /// AI 요약 생성
+  Future<void> generateSummary(String pdfId) async {
+    try {
+      _setLoading(true);
+      
+      // 실제 구현에서는 AI 서비스를 통해 요약 생성
+      final summary = await _aiService.generateSummary(pdfId);
+      
+      // 요약 결과 처리 로직 추가
+      
+      _setLoading(false);
+    } catch (e) {
+      _setError('요약 생성 중 오류가 발생했습니다: $e');
+    }
+  }
+  
+  /// 퀴즈 생성
+  Future<void> generateQuiz(String pdfId) async {
+    try {
+      _setLoading(true);
+      
+      // 실제 구현에서는 AI 서비스를 통해 퀴즈 생성
+      final quiz = await _aiService.generateQuiz(pdfId);
+      
+      // 퀴즈 결과 처리 로직 추가
+      
+      _setLoading(false);
+    } catch (e) {
+      _setError('퀴즈 생성 중 오류가 발생했습니다: $e');
+    }
   }
   
   /// 로딩 상태 설정

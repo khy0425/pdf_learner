@@ -19,7 +19,7 @@ class PdfFileInfo {
   final String? url;
   final File? file;
   final DateTime createdAt;
-  final int size;
+  final int fileSize;
   final Uint8List? bytes;  // 웹에서 사용하는 바이트 데이터
   final String userId;     // 파일 소유자 ID
   final String? firestoreId; // Firestore 문서 ID
@@ -30,7 +30,7 @@ class PdfFileInfo {
     this.url,
     this.file,
     required this.createdAt,
-    required this.size,
+    required this.fileSize,
     this.bytes,
     required this.userId,
     this.firestoreId,
@@ -40,6 +40,7 @@ class PdfFileInfo {
   bool get isLocal => file != null;
   bool get hasBytes => bytes != null;
   bool get isCloudStored => url != null && url!.contains('firebasestorage.googleapis.com');
+  bool get isGuestFile => id.startsWith('guest_') || userId == 'guest_user';
   
   // 파일 경로 반환 (로컬 파일인 경우 파일 경로, 웹 파일인 경우 URL)
   String get path => isLocal ? file!.path : (url ?? '');
@@ -57,7 +58,7 @@ class PdfFileInfo {
     String? url,
     File? file,
     DateTime? createdAt,
-    int? size,
+    int? fileSize,
     Uint8List? bytes,
     String? userId,
     String? firestoreId,
@@ -69,7 +70,7 @@ class PdfFileInfo {
       url: cloudUrl ?? url ?? this.url,
       file: file ?? this.file,
       createdAt: createdAt ?? this.createdAt,
-      size: size ?? this.size,
+      fileSize: fileSize ?? this.fileSize,
       bytes: bytes ?? this.bytes,
       userId: userId ?? this.userId,
       firestoreId: firestoreId ?? this.firestoreId,
@@ -132,7 +133,8 @@ class PdfFileInfo {
       if (kDebugMode) {
         print('[PdfFileInfo] PDF 파일을 읽을 수 없음 - 유효한 파일 정보 없음');
       }
-      throw Exception('PDF 파일을 읽을 수 없습니다: 유효한 파일 정보가 없습니다');
+      // 기본 빈 PDF 바이트 반환 (오류 방지)
+      return Uint8List.fromList([37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 226, 227, 207, 211, 10]);
     }
   }
   
@@ -143,7 +145,7 @@ class PdfFileInfo {
       'fileName': fileName,
       'url': url,
       'createdAt': createdAt.toIso8601String(),
-      'size': size,
+      'fileSize': fileSize,
       'userId': userId,
       'firestoreId': firestoreId,
     };
@@ -156,7 +158,7 @@ class PdfFileInfo {
       fileName: json['fileName'],
       url: json['url'],
       createdAt: DateTime.parse(json['createdAt']),
-      size: json['size'],
+      fileSize: json['fileSize'] ?? json['size'] ?? 0, // 이전 버전 호환성을 위해 size도 체크
       userId: json['userId'] ?? '', // 기존 데이터 호환성 유지
       firestoreId: json['firestoreId'],
     );
@@ -171,7 +173,7 @@ class PdfFileInfo {
       createdAt: data['timestamp'] != null
           ? (data['timestamp'] as Timestamp).toDate()
           : DateTime.now(),
-      size: data['size'] ?? 0,
+      fileSize: data['fileSize'] ?? data['size'] ?? 0, // 이전 버전 호환성을 위해 size도 체크
       userId: data['userId'] ?? '',
       firestoreId: docId,
     );
@@ -749,7 +751,7 @@ class PDFProvider with ChangeNotifier {
             url: cloudUrl ?? (kIsWeb ? null : result.files.single.path),
             file: kIsWeb ? null : File(result.files.single.path ?? ''),
             createdAt: DateTime.now(),
-            size: bytes.length,
+            fileSize: bytes.length,
             bytes: bytes,
             userId: _currentUserId,
             firestoreId: firestoreId,

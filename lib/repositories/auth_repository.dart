@@ -16,89 +16,133 @@ class AuthRepository {
   
   /// 이메일/비밀번호로 로그인
   Future<UserCredential> signInWithEmailPassword(String email, String password) async {
-    if (kIsWeb) {
-      final userData = await WebFirebaseInitializer.signInWithEmailPassword(email, password);
-      if (userData == null) {
-        throw Exception('이메일/비밀번호 로그인 실패');
+    try {
+      if (kIsWeb) {
+        debugPrint('웹 환경에서 이메일/비밀번호 로그인 시도: $email');
+        
+        // 웹 환경에서는 Firebase Auth 직접 사용
+        final userCredential = await _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        debugPrint('웹 환경에서 이메일/비밀번호 로그인 성공: ${userCredential.user?.uid}');
+        
+        // 로그인 성공 후 WebFirebaseInitializer 상태 업데이트
+        if (userCredential.user != null) {
+          try {
+            await WebFirebaseInitializer().initialize();
+            debugPrint('WebFirebaseInitializer 초기화 완료');
+          } catch (e) {
+            debugPrint('WebFirebaseInitializer 초기화 오류: $e');
+          }
+        }
+        
+        return userCredential;
+      } else {
+        // 모바일 환경에서는 Firebase Auth 직접 사용
+        debugPrint('모바일 환경에서 이메일/비밀번호 로그인 시도: $email');
+        return await _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
       }
-      
-      // 웹에서는 Firebase Auth가 자동으로 상태를 업데이트하므로 현재 사용자 반환
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('로그인 후 사용자 정보를 가져올 수 없습니다.');
-      }
-      
-      // UserCredential 객체를 직접 생성하는 대신 Firebase에서 제공하는 메서드 사용
-      return await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-    } else {
-      return await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+    } catch (e) {
+      debugPrint('로그인 오류: $e');
+      rethrow; // 오류를 상위 레이어로 전파
     }
   }
   
   /// 이메일/비밀번호로 회원가입
   Future<UserCredential> signUpWithEmailPassword(String email, String password) async {
-    if (kIsWeb) {
-      final userData = await WebFirebaseInitializer.signUpWithEmailPassword(email, password);
-      if (userData == null) {
-        throw Exception('이메일/비밀번호 회원가입 실패');
+    try {
+      if (kIsWeb) {
+        debugPrint('웹 환경에서 이메일/비밀번호 회원가입 시도: $email');
+        
+        // 웹 환경에서는 Firebase Auth 직접 사용
+        final userCredential = await _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        
+        debugPrint('웹 환경에서 이메일/비밀번호 회원가입 성공: ${userCredential.user?.uid}');
+        
+        // 회원가입 성공 후 WebFirebaseInitializer 상태 업데이트
+        if (userCredential.user != null) {
+          try {
+            await WebFirebaseInitializer().initialize();
+            debugPrint('WebFirebaseInitializer 초기화 완료');
+          } catch (e) {
+            debugPrint('WebFirebaseInitializer 초기화 오류: $e');
+          }
+        }
+        
+        return userCredential;
+      } else {
+        // 모바일 환경에서는 Firebase Auth 직접 사용
+        debugPrint('모바일 환경에서 이메일/비밀번호 회원가입 시도: $email');
+        return await _auth.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
       }
-      
-      // 웹에서는 Firebase Auth가 자동으로 상태를 업데이트하므로 현재 사용자 반환
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('회원가입 후 사용자 정보를 가져올 수 없습니다.');
-      }
-      
-      // UserCredential 객체를 직접 생성하는 대신 Firebase에서 제공하는 메서드 사용
-      return await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-    } else {
-      return await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+    } catch (e) {
+      debugPrint('회원가입 오류: $e');
+      rethrow; // 오류를 상위 레이어로 전파
     }
   }
   
   /// Google로 로그인
   Future<UserCredential> signInWithGoogle() async {
-    if (kIsWeb) {
-      final userData = await WebFirebaseInitializer.signInWithGoogle();
-      if (userData == null) {
-        throw Exception('Google 로그인 실패');
+    try {
+      if (kIsWeb) {
+        debugPrint('웹 환경에서 Google 로그인 시도');
+        
+        // 웹 환경에서는 Firebase Auth의 팝업 방식 사용
+        final googleProvider = GoogleAuthProvider();
+        final userCredential = await _auth.signInWithPopup(googleProvider);
+        
+        debugPrint('웹 환경에서 Google 로그인 성공: ${userCredential.user?.uid}');
+        
+        // 로그인 성공 후 WebFirebaseInitializer 상태 업데이트
+        if (userCredential.user != null) {
+          try {
+            await WebFirebaseInitializer().initialize();
+            debugPrint('WebFirebaseInitializer 초기화 완료');
+          } catch (e) {
+            debugPrint('WebFirebaseInitializer 초기화 오류: $e');
+          }
+        }
+        
+        return userCredential;
+      } else {
+        // 모바일 환경에서는 GoogleSignIn 사용
+        debugPrint('모바일 환경에서 Google 로그인 시도');
+        
+        // Google 로그인 다이얼로그 표시
+        final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+        if (googleUser == null) {
+          throw FirebaseAuthException(
+            code: 'cancelled-popup-request',
+            message: 'Google 로그인이 취소되었습니다.',
+          );
+        }
+        
+        // Google 인증 정보 가져오기
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        
+        // Firebase 인증 정보 생성
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        
+        // Firebase에 로그인
+        return await _auth.signInWithCredential(credential);
       }
-      
-      // 웹에서는 Firebase Auth가 자동으로 상태를 업데이트하므로 현재 사용자 반환
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('Google 로그인 후 사용자 정보를 가져올 수 없습니다.');
-      }
-      
-      // Google 로그인 결과를 반환
-      final GoogleAuthProvider googleProvider = GoogleAuthProvider();
-      return await _auth.signInWithPopup(googleProvider);
-    } else {
-      // 모바일에서의 Google 로그인 로직
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        throw Exception('Google 로그인이 취소되었습니다.');
-      }
-      
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      
-      return await _auth.signInWithCredential(credential);
+    } catch (e) {
+      debugPrint('Google 로그인 오류: $e');
+      rethrow; // 오류를 상위 레이어로 전파
     }
   }
   

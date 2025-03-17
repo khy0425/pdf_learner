@@ -4,16 +4,24 @@ import './feature_item.dart';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import '../../providers/pdf_provider.dart';
+import '../../view_models/pdf_file_view_model.dart';
 
 /// 빈 상태 화면 위젯
 /// PDF 파일이 없을 때 표시되는 화면입니다.
 class EmptyStateView extends StatefulWidget {
-  final VoidCallback onAddPdf;
+  final IconData icon;
+  final String title;
+  final String message;
+  final VoidCallback? onAction;
+  final String? actionLabel;
   
   const EmptyStateView({
     Key? key,
-    required this.onAddPdf,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.onAction,
+    this.actionLabel,
   }) : super(key: key);
   
   @override
@@ -44,11 +52,6 @@ class _EmptyStateViewState extends State<EmptyStateView> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final pdfProvider = Provider.of<PDFProvider>(context, listen: false);
-    
-    // 익명 ID인지 확인
-    final bool isAnonymousUser = pdfProvider.currentUserId.isEmpty || 
-                                pdfProvider.currentUserId.startsWith('anonymous_');
     
     return Container(
       padding: const EdgeInsets.all(20),
@@ -77,7 +80,7 @@ class _EmptyStateViewState extends State<EmptyStateView> with SingleTickerProvid
               ),
               child: Center(
                 child: Icon(
-                  Icons.picture_as_pdf,
+                  widget.icon,
                   size: 80,
                   color: colorScheme.primary,
                 ),
@@ -89,7 +92,7 @@ class _EmptyStateViewState extends State<EmptyStateView> with SingleTickerProvid
           
           // 제목
           Text(
-            '아직 PDF 파일이 없어요',
+            widget.title,
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -100,11 +103,11 @@ class _EmptyStateViewState extends State<EmptyStateView> with SingleTickerProvid
           
           const SizedBox(height: 16),
           
-          // 설명 텍스트 - 항상 PDF 추가 안내 메시지만 표시
+          // 설명 텍스트
           Container(
             constraints: const BoxConstraints(maxWidth: 320),
             child: Text(
-              'PDF 파일을 추가하여 학습을 시작해보세요!',
+              widget.message,
               style: TextStyle(
                 fontSize: 16,
                 color: colorScheme.onSurfaceVariant,
@@ -115,76 +118,23 @@ class _EmptyStateViewState extends State<EmptyStateView> with SingleTickerProvid
           
           const SizedBox(height: 32),
           
-          // PDF 추가 버튼
-          ElevatedButton.icon(
-            onPressed: widget.onAddPdf,
-            icon: const Icon(Icons.add),
-            label: const Text('PDF 파일 추가하기'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
-              elevation: 2,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 16,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // 익명 사용자에게만 보이는 로그인 권유 메시지
-          if (isAnonymousUser)
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: colorScheme.outline.withOpacity(0.2),
+          // 액션 버튼
+          if (widget.onAction != null && widget.actionLabel != null)
+            ElevatedButton.icon(
+              onPressed: widget.onAction,
+              icon: const Icon(Icons.add),
+              label: Text(widget.actionLabel!),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
                 ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    '로그인하면 더 많은 기능 사용 가능',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '로그인하여 여러 기기에서 PDF 파일을 동기화하고 학습 진행 상황을 저장해보세요.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      // 상위 스크린에서 로그인 다이얼로그 표시 로직 호출
-                      Navigator.pushNamed(context, '/login'); // 로그인 화면으로 이동하는 대안
-                    },
-                    icon: const Icon(Icons.login, size: 16),
-                    label: const Text('로그인하기'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colorScheme.primary,
-                      side: BorderSide(color: colorScheme.primary),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                    ),
-                  ),
-                ],
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
         ],

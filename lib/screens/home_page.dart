@@ -142,7 +142,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             url: pdfFile.url,
             file: pdfFile.file,
             createdAt: pdfFile.createdAt,
-            size: pdfFile.size,
+            fileSize: pdfFile.fileSize,
             bytes: bytes, // 로드한 bytes 데이터 설정
             userId: pdfFile.userId,
             firestoreId: pdfFile.firestoreId,

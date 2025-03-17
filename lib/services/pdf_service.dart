@@ -187,9 +187,9 @@ class PDFService {
       debugPrint('PDF 파일 크기 확인 시작: ${pdfFile.fileName}');
       
       // 이미 크기 정보가 있으면 사용
-      if (pdfFile.size > 0) {
-        debugPrint('기존 크기 정보 사용: ${pdfFile.size} 바이트');
-        return pdfFile.size;
+      if (pdfFile.fileSize > 0) {
+        debugPrint('기존 크기 정보 사용: ${pdfFile.fileSize} 바이트');
+        return pdfFile.fileSize;
       }
       
       // 크기 정보가 없으면 바이트 데이터 가져와서 계산
@@ -210,25 +210,17 @@ class PDFService {
       final document = PdfDocument(inputBytes: bytes);
       final pageCount = document.pages.count;
       
-      // 샘플링할 페이지 수 (최대 3페이지)
-      final pagesToSample = math.min(3, pageCount);
-      int sampleLength = 0;
+      // 모든 페이지의 텍스트 추출
+      int totalLength = 0;
+      final extractor = PdfTextExtractor(document);
       
-      // 첫 페이지, 중간 페이지, 마지막 페이지 샘플링
-      for (int i = 0; i < pagesToSample; i++) {
-        int pageIndex = 0;
-        if (i == 0) pageIndex = 0;
-        else if (i == 1) pageIndex = (pageCount / 2).floor();
-        else pageIndex = pageCount - 1;
-        
-        final extractor = PdfTextExtractor(document);
+      for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
         final pageText = extractor.extractText(startPageIndex: pageIndex);
-        sampleLength += pageText.length;
+        totalLength += pageText.length;
       }
       
-      // 전체 텍스트 길이 예측
-      double estimatedLengthDouble = (sampleLength / pagesToSample) * pageCount;
-      int estimatedLength = estimatedLengthDouble.toInt();
+      // 실제 텍스트 길이 반환
+      int estimatedLength = totalLength;
       
       document.dispose();
       return estimatedLength;

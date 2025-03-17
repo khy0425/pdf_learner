@@ -5,10 +5,12 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/pdf_model.dart';
+import '../models/pdf_file_info.dart';
 import '../models/user_model.dart';
 import '../repositories/pdf_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/api_key_service.dart';
+import 'package:path/path.dart' as path;
 
 /// PDF 관련 비즈니스 로직을 담당하는 ViewModel 클래스
 class PdfViewModel extends ChangeNotifier {
@@ -46,13 +48,31 @@ class PdfViewModel extends ChangeNotifier {
     try {
       _setLoading(true);
       
-      final pdfs = await _pdfRepository.getPdfs(userId);
-      _pdfs = pdfs;
+      final pdfFiles = await _pdfRepository.getPdfFiles(userId);
+      // PdfFileInfo를 PdfModel로 변환
+      _pdfs = pdfFiles.map((pdfFile) => _convertToPdfModel(pdfFile)).toList();
       
       _setLoading(false);
     } catch (e) {
       _setError('PDF 목록을 불러오는 중 오류가 발생했습니다: $e');
     }
+  }
+  
+  /// PdfFileInfo를 PdfModel로 변환
+  PdfModel _convertToPdfModel(PdfFileInfo pdfFile) {
+    return PdfModel(
+      id: pdfFile.id,
+      userId: pdfFile.userId,
+      name: pdfFile.fileName,
+      size: pdfFile.fileSize,
+      pageCount: 1, // 기본값
+      textLength: 0, // 기본값
+      createdAt: pdfFile.createdAt,
+      lastAccessedAt: DateTime.now(),
+      accessCount: 0,
+      url: pdfFile.url,
+      localPath: pdfFile.file?.path,
+    );
   }
   
   /// PDF 선택
@@ -92,8 +112,12 @@ class PdfViewModel extends ChangeNotifier {
     try {
       _setLoading(true);
       
-      final pdfModel = await _pdfRepository.uploadPdfFromFile(file, userId);
-      _pdfs.add(pdfModel);
+      final fileName = path.basename(file.path);
+      final fileSize = await file.length();
+      final pdfFile = await _pdfRepository.uploadPdfFile(file, fileName, fileSize, userId);
+      
+      // PdfFileInfo를 PdfModel로 변환하여 추가
+      _pdfs.add(_convertToPdfModel(pdfFile));
       
       _setLoading(false);
     } catch (e) {
@@ -106,8 +130,10 @@ class PdfViewModel extends ChangeNotifier {
     try {
       _setLoading(true);
       
-      final pdfModel = await _pdfRepository.uploadPdfFromUrl(url, userId);
-      _pdfs.add(pdfModel);
+      final pdfFile = await _pdfRepository.uploadPdfFromUrl(url, userId);
+      
+      // PdfFileInfo를 PdfModel로 변환하여 추가
+      _pdfs.add(_convertToPdfModel(pdfFile));
       
       _setLoading(false);
     } catch (e) {
