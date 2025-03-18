@@ -9,10 +9,25 @@ class AuthRepository {
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   
   /// 현재 로그인된 사용자 가져오기
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser {
+    try {
+      return _auth.currentUser;
+    } catch (e) {
+      debugPrint('AuthRepository.currentUser 접근 오류: $e');
+      return null;
+    }
+  }
   
   /// 인증 상태 변경 스트림
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  Stream<User?> get authStateChanges {
+    try {
+      return _auth.authStateChanges();
+    } catch (e) {
+      debugPrint('AuthRepository.authStateChanges 접근 오류: $e');
+      // 오류 발생 시 빈 사용자로 스트림 생성
+      return Stream<User?>.value(null);
+    }
+  }
   
   /// 이메일/비밀번호로 로그인
   Future<UserCredential> signInWithEmailPassword(String email, String password) async {

@@ -14,9 +14,10 @@ class AuthViewModel extends ChangeNotifier {
   UserModel? _user;
   bool _isLoading = false;
   String? _error;
+  bool _isInitialized = false;
   
   /// 현재 로그인된 사용자
-  UserModel? get user => _user;
+  UserModel get user => _user ?? UserModel.createDefaultUser();
   
   /// 로딩 상태
   bool get isLoading => _isLoading;
@@ -24,8 +25,11 @@ class AuthViewModel extends ChangeNotifier {
   /// 오류 메시지
   String? get error => _error;
   
+  /// 초기화 완료 여부
+  bool get isInitialized => _isInitialized;
+  
   /// 로그인 여부
-  bool get isLoggedIn => _user != null;
+  bool get isLoggedIn => _user != null && _user!.uid.isNotEmpty;
   
   /// 현재 로그인된 사용자
   User? get currentUser {
@@ -47,132 +51,165 @@ class AuthViewModel extends ChangeNotifier {
     _initializeAuthState();
     
     // Firebase Auth 상태 변경 리스너 추가
-    _authRepository.authStateChanges.listen((firebaseUser) {
-      debugPrint('Firebase Auth 상태 변경: ${firebaseUser?.uid}');
-      _onAuthStateChanged(firebaseUser);
-    });
+    try {
+      _authRepository.authStateChanges.listen((firebaseUser) {
+        debugPrint('Firebase Auth 상태 변경: ${firebaseUser?.uid}');
+        _onAuthStateChanged(firebaseUser);
+      });
+    } catch (e) {
+      debugPrint('Auth 상태 변경 리스너 등록 오류: $e');
+      // 리스너 등록 실패 시에도 기본 상태 설정
+      _user = UserModel.createDefaultUser();
+      _isInitialized = true;
+      notifyListeners();
+    }
   }
   
   /// 인증 상태 초기화
   Future<void> _initializeAuthState() async {
+    _isLoading = true;
+    notifyListeners();
+    
     try {
-      final currentUser = _authRepository.currentUser;
-      if (currentUser != null) {
-        debugPrint('현재 로그인된 사용자 발견: ${currentUser.uid}');
-        await _onAuthStateChanged(currentUser);
+      // 현재 인증된 사용자 확인
+      final firebaseUser = _authRepository.currentUser;
+      
+      if (firebaseUser != null) {
+        debugPrint('인증 상태 초기화: 사용자 발견 - ${firebaseUser.uid}');
+        await _onAuthStateChanged(firebaseUser);
       } else {
-        debugPrint('로그인된 사용자 없음');
-        _user = null;
+        debugPrint('인증 상태 초기화: 사용자 없음');
+        // 기본 사용자 모델 생성 (게스트 모드)
+        _user = UserModel.createDefaultUser();
         notifyListeners();
       }
     } catch (e) {
       debugPrint('인증 상태 초기화 오류: $e');
-      _error = '인증 상태를 확인하는 중 오류가 발생했습니다.';
+      _error = '인증 상태를 초기화하는 중 오류가 발생했습니다.';
+      // 오류 발생 시에도 기본 사용자 모델 생성
+      _user = UserModel.createDefaultUser();
+    } finally {
+      _isLoading = false;
+      _isInitialized = true;
       notifyListeners();
     }
+    
+    // 인증 상태 변경 리스너 등록
+    _authRepository.authStateChanges.listen(_onAuthStateChanged);
   }
   
   /// 인증 상태 변경 처리
   Future<void> _onAuthStateChanged(User? firebaseUser) async {
-    debugPrint('인증 상태 변경: ${firebaseUser?.uid}');
+    debugPrint('인증 상태 변경: ${firebaseUser?.uid ?? 'null'}');
     
-    if (firebaseUser == null) {
-      debugPrint('사용자가 로그아웃됨');
-      _user = null;
-      notifyListeners();
-      return;
-    }
+    _isLoading = true;
+    notifyListeners();
     
     try {
-      // 로딩 상태 설정
-      _setLoading(true);
+      if (firebaseUser == null) {
+        debugPrint('사용자가 로그아웃됨');
+        _user = UserModel.createDefaultUser();
+        _error = null;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
       
-      // 사용자 데이터 조회 시도
-      UserModel? userData;
+      final uid = firebaseUser.uid;
+      
+      // 사용자 데이터 가져오기
+      UserModel? userModel;
       try {
-        userData = await _userRepository.getUser(firebaseUser.uid);
-        debugPrint('사용자 데이터 조회 결과: ${userData?.uid}');
+        userModel = await _userRepository.getUser(uid);
+        debugPrint('사용자 데이터 조회 결과: ${userModel != null ? "성공" : "실패"}');
       } catch (e) {
-        debugPrint('사용자 데이터 조회 실패: $e');
-        // 조회 실패 시 기본 사용자 모델 생성
-        userData = _createDefaultUserModel(firebaseUser);
+        debugPrint('사용자 데이터 가져오기 실패: $e');
+        userModel = null;
       }
       
-      if (userData != null) {
-        debugPrint('기존 사용자 정보 로드');
-        _user = userData;
-      } else {
-        debugPrint('신규 사용자 정보 생성');
+      // 사용자 데이터가 없으면 새로 생성
+      if (userModel == null) {
+        debugPrint('새 사용자 생성: $uid');
         
-        // 기본값 설정
-        String displayName = firebaseUser.displayName ?? '';
-        if (displayName.isEmpty && firebaseUser.email != null) {
-          displayName = firebaseUser.email!.split('@')[0];
-        }
-        if (displayName.isEmpty) {
-          displayName = '사용자';
-        }
+        userModel = UserModel(
+          uid: uid,
+          email: firebaseUser.email ?? '',
+          displayName: firebaseUser.displayName ?? '사용자',
+          photoURL: firebaseUser.photoURL,
+          emailVerified: firebaseUser.emailVerified,
+          createdAt: DateTime.now(),
+          subscriptionTier: 'free',
+          maxPdfTextLength: 50000,
+          maxPdfTextLengthPerPage: 1000,
+          maxPdfTextLengthPerDay: 100000,
+          maxPdfTextLengthPerMonth: 1000000,
+          maxPdfTextLengthPerYear: 10000000,
+          maxPdfTextLengthPerLifetime: 100000000,
+          maxPdfsPerDay: 5,
+          maxPdfsPerMonth: 100,
+          maxPdfsPerYear: 1000,
+          maxPdfsPerLifetime: 10000,
+          maxPdfsTotal: 20,
+          maxPdfSize: 5 * 1024 * 1024,
+          maxPdfPages: 50,
+          maxUsagePerDay: 10,
+          maxTextLength: 10000,
+          usageCount: 0,
+          lastUsageAt: DateTime.now(),
+        );
         
+        // 새 사용자 저장
         try {
-          // 새 사용자 모델 생성
-          final newUser = UserModel(
-            uid: firebaseUser.uid,
-            email: firebaseUser.email ?? '',
-            displayName: displayName,
-            photoURL: firebaseUser.photoURL,
-            emailVerified: firebaseUser.emailVerified,
-            createdAt: DateTime.now(),
-            subscriptionTier: 'free',
-            maxPdfTextLength: 50000,
-            maxPdfTextLengthPerPage: 1000,
-            maxPdfTextLengthPerDay: 100000,
-            maxPdfTextLengthPerMonth: 1000000,
-            maxPdfTextLengthPerYear: 10000000,
-            maxPdfTextLengthPerLifetime: 100000000,
-            maxPdfsPerDay: 5,
-            maxPdfsPerMonth: 100,
-            maxPdfsPerYear: 1000,
-            maxPdfsPerLifetime: 10000,
-            maxPdfsTotal: 20,
-            maxPdfSize: 5 * 1024 * 1024, // 5MB
-            maxPdfPages: 50,
-            maxUsagePerDay: 10,
-            maxTextLength: 10000,
-            usageCount: 0,
-            lastUsageAt: DateTime.now(),
-          );
-          
-          // Firestore에 새 사용자 정보 저장 시도
-          try {
-            await _userRepository.saveUser(newUser);
-            debugPrint('신규 사용자 정보 저장 완료: ${newUser.uid}');
-            _user = newUser;
-          } catch (e) {
-            debugPrint('신규 사용자 정보 저장 실패: $e');
-            // 저장 실패 시에도 메모리에는 유지
-            _user = newUser;
-          }
+          await _userRepository.saveUser(userModel);
+          debugPrint('새 사용자 저장 완료');
         } catch (e) {
-          debugPrint('사용자 모델 생성 오류: $e');
-          // 기본 사용자 모델 생성
-          _user = _createDefaultUserModel(firebaseUser);
+          debugPrint('새 사용자 저장 실패: $e');
+          // 저장 실패 시에도 계속 진행
         }
+      } else {
+        debugPrint('기존 사용자 데이터 로드: ${userModel.uid}');
       }
       
-      // 오류 초기화
+      _user = userModel;
       _error = null;
-      
     } catch (e) {
-      debugPrint('사용자 정보 로드 오류: $e');
-      _error = '사용자 정보를 로드하는 중 오류가 발생했습니다.';
+      debugPrint('사용자 데이터 가져오기 오류: $e');
+      _error = '사용자 데이터를 가져오는 중 오류가 발생했습니다.';
       
       // 오류 발생 시 기본 사용자 모델 생성
       if (firebaseUser != null) {
-        _user = _createDefaultUserModel(firebaseUser);
+        final safeUid = firebaseUser.uid;
+        _user = UserModel(
+          uid: safeUid,
+          email: firebaseUser.email ?? '',
+          displayName: firebaseUser.displayName ?? '사용자',
+          photoURL: firebaseUser.photoURL,
+          emailVerified: firebaseUser.emailVerified,
+          createdAt: DateTime.now(),
+          subscriptionTier: 'free',
+          maxPdfTextLength: 50000,
+          maxPdfTextLengthPerPage: 1000,
+          maxPdfTextLengthPerDay: 100000,
+          maxPdfTextLengthPerMonth: 1000000,
+          maxPdfTextLengthPerYear: 10000000,
+          maxPdfTextLengthPerLifetime: 100000000,
+          maxPdfsPerDay: 5,
+          maxPdfsPerMonth: 100,
+          maxPdfsPerYear: 1000,
+          maxPdfsPerLifetime: 10000,
+          maxPdfsTotal: 20,
+          maxPdfSize: 5 * 1024 * 1024,
+          maxPdfPages: 50,
+          maxUsagePerDay: 10,
+          maxTextLength: 10000,
+          usageCount: 0,
+          lastUsageAt: DateTime.now(),
+        );
+      } else {
+        _user = UserModel.createDefaultUser();
       }
     } finally {
-      // 로딩 상태 해제
-      _setLoading(false);
+      _isLoading = false;
       notifyListeners();
     }
   }
@@ -189,12 +226,10 @@ class AuthViewModel extends ChangeNotifier {
       debugPrint('Google 로그인 오류: ${e.code}');
       _error = _getAuthErrorMessage(e.code);
       notifyListeners();
-      throw _error!;
     } catch (e) {
       debugPrint('Google 로그인 오류: $e');
       _error = '구글 로그인 중 오류가 발생했습니다: $e';
       notifyListeners();
-      throw _error!;
     } finally {
       _setLoading(false);
     }
@@ -212,19 +247,17 @@ class AuthViewModel extends ChangeNotifier {
       debugPrint('이메일 로그인 오류: ${e.code}');
       _error = _getAuthErrorMessage(e.code);
       notifyListeners();
-      throw _error!;
     } catch (e) {
       debugPrint('이메일 로그인 오류: $e');
       _error = '로그인 중 오류가 발생했습니다: $e';
       notifyListeners();
-      throw _error!;
     } finally {
       _setLoading(false);
     }
   }
   
   /// 이메일/비밀번호로 회원가입
-  Future<void> signUpWithEmailPassword(String email, String password) async {
+  Future<void> signUpWithEmailPassword(String email, String password, {String? geminiApiKey}) async {
     try {
       _setLoading(true);
       _error = null;
@@ -260,11 +293,22 @@ class AuthViewModel extends ChangeNotifier {
           maxTextLength: 10000,
           usageCount: 0,
           lastUsageAt: DateTime.now(),
+          apiKey: geminiApiKey,
         );
         
         try {
           await _userRepository.saveUser(newUser);
           debugPrint('회원가입 후 사용자 정보 저장 완료: ${newUser.uid}');
+          
+          // Gemini API 키가 제공된 경우 저장
+          if (geminiApiKey != null && geminiApiKey.isNotEmpty) {
+            await _apiKeyService.saveApiKey(newUser.uid, geminiApiKey);
+            debugPrint('Gemini API 키 저장 완료');
+          }
+          
+          // 사용자 모델 업데이트
+          _user = newUser;
+          notifyListeners();
         } catch (e) {
           debugPrint('회원가입 후 사용자 정보 저장 실패: $e');
           // 저장 실패 시에도 계속 진행 (Firebase Auth 리스너에서 다시 시도)
@@ -275,12 +319,10 @@ class AuthViewModel extends ChangeNotifier {
       debugPrint('회원가입 오류: ${e.code}');
       _error = _getAuthErrorMessage(e.code);
       notifyListeners();
-      throw _error!;
     } catch (e) {
       debugPrint('회원가입 오류: $e');
       _error = '회원가입 중 오류가 발생했습니다: $e';
       notifyListeners();
-      throw _error!;
     } finally {
       _setLoading(false);
     }
@@ -292,6 +334,8 @@ class AuthViewModel extends ChangeNotifier {
       _setLoading(true);
       
       await _authRepository.signOut();
+      _user = UserModel.createDefaultUser();
+      notifyListeners();
     } catch (e) {
       debugPrint('로그아웃 오류: $e');
       _setError('로그아웃에 실패했습니다.');
@@ -303,9 +347,12 @@ class AuthViewModel extends ChangeNotifier {
   /// API 키 업데이트
   Future<void> updateApiKey(String apiKey) async {
     try {
-      if (_user == null) throw Exception('로그인이 필요합니다.');
+      if (_user == null || _user!.uid.isEmpty) {
+        throw Exception('로그인이 필요합니다.');
+      }
       
-      await _apiKeyService.saveApiKey(_user!.uid, apiKey);
+      final uid = _user!.uid;
+      await _apiKeyService.saveApiKey(uid, apiKey);
       _user = _user!.copyWith(apiKey: apiKey);
       notifyListeners();
     } catch (e) {
@@ -317,8 +364,9 @@ class AuthViewModel extends ChangeNotifier {
   /// API 키 가져오기
   Future<String?> getApiKey() async {
     try {
-      if (_user == null) return null;
-      return await _apiKeyService.getApiKey(_user!.uid);
+      if (_user == null || _user!.uid.isEmpty) return null;
+      final uid = _user!.uid;
+      return await _apiKeyService.getApiKey(uid);
     } catch (e) {
       debugPrint('API 키 가져오기 오류: $e');
       return null;
@@ -371,35 +419,5 @@ class AuthViewModel extends ChangeNotifier {
       default:
         return '인증 오류가 발생했습니다: $errorCode';
     }
-  }
-  
-  /// 기본 사용자 모델 생성
-  UserModel _createDefaultUserModel(User? firebaseUser) {
-    return UserModel(
-      uid: firebaseUser!.uid,
-      email: firebaseUser.email ?? '',
-      displayName: firebaseUser.displayName ?? '사용자',
-      photoURL: null,
-      emailVerified: false,
-      createdAt: DateTime.now(),
-      subscriptionTier: 'free',
-      maxPdfTextLength: 50000,
-      maxPdfTextLengthPerPage: 1000,
-      maxPdfTextLengthPerDay: 100000,
-      maxPdfTextLengthPerMonth: 1000000,
-      maxPdfTextLengthPerYear: 10000000,
-      maxPdfTextLengthPerLifetime: 100000000,
-      maxPdfsPerDay: 5,
-      maxPdfsPerMonth: 100,
-      maxPdfsPerYear: 1000,
-      maxPdfsPerLifetime: 10000,
-      maxPdfsTotal: 20,
-      maxPdfSize: 5 * 1024 * 1024,
-      maxPdfPages: 50,
-      maxUsagePerDay: 10,
-      maxTextLength: 10000,
-      usageCount: 0,
-      lastUsageAt: DateTime.now(),
-    );
   }
 } 

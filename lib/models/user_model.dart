@@ -67,88 +67,85 @@ class UserModel {
   });
 
   /// Firestore 문서에서 UserModel 생성
-  static UserModel fromFirestore(DocumentSnapshot doc) {
+  static UserModel fromFirestore(DocumentSnapshot? doc) {
     try {
-      final data = doc.data() as Map<String, dynamic>?;
+      // null check 강화
+      if (doc == null) {
+        debugPrint('UserModel.fromFirestore: 문서가 null입니다');
+        return createDefaultUser();
+      }
       
+      if (!doc.exists) {
+        debugPrint('UserModel.fromFirestore: 문서가 존재하지 않습니다');
+        return createDefaultUser();
+      }
+      
+      final data = doc.data();
+      
+      // data가 Map<String, dynamic>이 아닌 경우 체크
       if (data == null) {
-        debugPrint('UserModel.fromFirestore: 데이터가 null입니다.');
-        return _createDefaultUser(doc.id);
+        debugPrint('UserModel.fromFirestore: 문서 데이터가 null입니다');
+        return createDefaultUser();
       }
       
-      // 안전한 타입 변환 함수
-      String safeString(dynamic value) {
-        if (value == null) return '';
-        try {
-          return value.toString();
-        } catch (e) {
-          debugPrint('safeString 변환 오류: $e');
-          return '';
-        }
-      }
-      
-      bool safeBool(dynamic value) {
-        if (value == null) return false;
-        if (value is bool) return value;
-        return value.toString().toLowerCase() == 'true';
-      }
-      
-      int safeInt(dynamic value, {int defaultValue = 0}) {
-        if (value == null) return defaultValue;
-        if (value is int) return value;
-        try {
-          return int.parse(value.toString());
-        } catch (e) {
-          return defaultValue;
-        }
-      }
-      
+      // data를 Map<String, dynamic>으로 타입 캐스팅 시도
+      Map<String, dynamic> userData;
       try {
-        return UserModel(
-          uid: doc.id,
-          email: safeString(data['email']),
-          displayName: safeString(data['displayName']),
-          photoURL: data['photoURL'] != null ? safeString(data['photoURL']) : null,
-          emailVerified: safeBool(data['emailVerified']),
-          apiKey: data['apiKey'] != null ? safeString(data['apiKey']) : null,
-          createdAt: _parseDateTime(data['createdAt']),
-          lastLoginAt: data['lastLoginAt'] != null ? _parseDateTime(data['lastLoginAt']) : null,
-          subscriptionTier: safeString(data['subscriptionTier'] ?? 'free'),
-          subscriptionExpiresAt: data['subscriptionExpiresAt'] != null ? _parseDateTime(data['subscriptionExpiresAt']) : null,
-          usageCount: safeInt(data['usageCount']),
-          lastUsageAt: data['lastUsageAt'] != null ? _parseDateTime(data['lastUsageAt']) : null,
-          maxUsagePerDay: safeInt(data['maxUsagePerDay'], defaultValue: 10),
-          maxPdfSize: safeInt(data['maxPdfSize'], defaultValue: 5 * 1024 * 1024),
-          maxTextLength: safeInt(data['maxTextLength'], defaultValue: 10000),
-          maxPdfsPerDay: safeInt(data['maxPdfsPerDay'], defaultValue: 5),
-          maxPdfsTotal: safeInt(data['maxPdfsTotal'], defaultValue: 20),
-          maxPdfPages: safeInt(data['maxPdfPages'], defaultValue: 50),
-          maxPdfsPerMonth: safeInt(data['maxPdfsPerMonth'], defaultValue: 100),
-          maxPdfsPerYear: safeInt(data['maxPdfsPerYear'], defaultValue: 1000),
-          maxPdfsPerLifetime: safeInt(data['maxPdfsPerLifetime'], defaultValue: 10000),
-          maxPdfTextLength: safeInt(data['maxPdfTextLength'], defaultValue: 50000),
-          maxPdfTextLengthPerPage: safeInt(data['maxPdfTextLengthPerPage'], defaultValue: 1000),
-          maxPdfTextLengthPerDay: safeInt(data['maxPdfTextLengthPerDay'], defaultValue: 100000),
-          maxPdfTextLengthPerMonth: safeInt(data['maxPdfTextLengthPerMonth'], defaultValue: 1000000),
-          maxPdfTextLengthPerYear: safeInt(data['maxPdfTextLengthPerYear'], defaultValue: 10000000),
-          maxPdfTextLengthPerLifetime: safeInt(data['maxPdfTextLengthPerLifetime'], defaultValue: 100000000),
-        );
+        userData = data as Map<String, dynamic>;
       } catch (e) {
-        debugPrint('UserModel.fromFirestore 내부 오류: $e');
-        return _createDefaultUser(doc.id);
+        debugPrint('UserModel.fromFirestore: 데이터 형식 변환 오류: $e');
+        return createDefaultUser();
       }
+      
+      // 필수 필드 확인
+      final uid = _safeString(userData['uid'], '');
+      if (uid.isEmpty) {
+        debugPrint('UserModel.fromFirestore: uid가 비어있습니다');
+        // uid가 없는 경우에도 기본 사용자 모델 반환
+        return createDefaultUser();
+      }
+      
+      return UserModel(
+        uid: uid,
+        email: _safeString(userData['email'], ''),
+        displayName: _safeString(userData['displayName'], '사용자'),
+        photoURL: _safeStringNullable(userData['photoURL'], null),
+        emailVerified: _safeBool(userData['emailVerified'], false),
+        createdAt: _safeTimestamp(userData['createdAt']),
+        lastLoginAt: userData['lastLoginAt'] != null ? _safeTimestamp(userData['lastLoginAt']) : null,
+        subscriptionTier: _safeString(userData['subscriptionTier'], 'free'),
+        subscriptionExpiresAt: userData['subscriptionExpiresAt'] != null ? _safeTimestamp(userData['subscriptionExpiresAt']) : null,
+        maxPdfTextLength: _safeInt(userData['maxPdfTextLength'], 50000),
+        maxPdfTextLengthPerPage: _safeInt(userData['maxPdfTextLengthPerPage'], 1000),
+        maxPdfTextLengthPerDay: _safeInt(userData['maxPdfTextLengthPerDay'], 100000),
+        maxPdfTextLengthPerMonth: _safeInt(userData['maxPdfTextLengthPerMonth'], 1000000),
+        maxPdfTextLengthPerYear: _safeInt(userData['maxPdfTextLengthPerYear'], 10000000),
+        maxPdfTextLengthPerLifetime: _safeInt(userData['maxPdfTextLengthPerLifetime'], 100000000),
+        maxPdfsPerDay: _safeInt(userData['maxPdfsPerDay'], 5),
+        maxPdfsPerMonth: _safeInt(userData['maxPdfsPerMonth'], 100),
+        maxPdfsPerYear: _safeInt(userData['maxPdfsPerYear'], 1000),
+        maxPdfsPerLifetime: _safeInt(userData['maxPdfsPerLifetime'], 10000),
+        maxPdfsTotal: _safeInt(userData['maxPdfsTotal'], 20),
+        maxPdfSize: _safeInt(userData['maxPdfSize'], 5 * 1024 * 1024),
+        maxPdfPages: _safeInt(userData['maxPdfPages'], 50),
+        maxUsagePerDay: _safeInt(userData['maxUsagePerDay'], 10),
+        maxTextLength: _safeInt(userData['maxTextLength'], 10000),
+        usageCount: _safeInt(userData['usageCount'], 0),
+        lastUsageAt: userData['lastUsageAt'] != null ? _safeTimestamp(userData['lastUsageAt']) : null,
+        apiKey: _safeStringNullable(userData['apiKey'], null),
+      );
     } catch (e) {
-      debugPrint('UserModel.fromFirestore 오류: $e');
-      return _createDefaultUser(doc.id);
+      debugPrint('UserModel.fromFirestore 예외 발생: $e');
+      return createDefaultUser();
     }
   }
   
   /// 기본 사용자 모델 생성
-  static UserModel _createDefaultUser(String uid) {
+  static UserModel createDefaultUser() {
     return UserModel(
-      uid: uid,
+      uid: '',
       email: '',
-      displayName: '사용자',
+      displayName: '게스트',
       photoURL: null,
       emailVerified: false,
       createdAt: DateTime.now(),
@@ -169,115 +166,93 @@ class UserModel {
       maxUsagePerDay: 10,
       maxTextLength: 10000,
       usageCount: 0,
+      lastUsageAt: DateTime.now(),
     );
   }
 
   /// Map에서 UserModel 생성
-  factory UserModel.fromMap(Map<String, dynamic> map) {
+  factory UserModel.fromMap(Map<String, dynamic>? map) {
     try {
+      if (map == null) {
+        debugPrint('UserModel.fromMap: map이 null입니다');
+        return createDefaultUser();
+      }
+      
       return UserModel(
-        uid: map['uid'] as String,
-        email: map['email'] as String,
-        displayName: map['displayName'] as String,
-        photoURL: map['photoURL'] as String?,
-        emailVerified: map['emailVerified'] as bool? ?? false,
-        apiKey: map['apiKey'] as String?,
-        createdAt: _parseDateTime(map['createdAt']),
-        lastLoginAt: map['lastLoginAt'] != null ? _parseDateTime(map['lastLoginAt']) : null,
-        subscriptionTier: map['subscriptionTier'] as String? ?? 'free',
-        subscriptionExpiresAt: map['subscriptionExpiresAt'] != null ? _parseDateTime(map['subscriptionExpiresAt']) : null,
-        usageCount: map['usageCount'] as int? ?? 0,
-        lastUsageAt: map['lastUsageAt'] != null ? _parseDateTime(map['lastUsageAt']) : null,
-        maxUsagePerDay: map['maxUsagePerDay'] as int? ?? 10,
-        maxPdfSize: map['maxPdfSize'] as int? ?? 5 * 1024 * 1024,
-        maxTextLength: map['maxTextLength'] as int? ?? 10000,
-        maxPdfsPerDay: map['maxPdfsPerDay'] as int? ?? 5,
-        maxPdfsTotal: map['maxPdfsTotal'] as int? ?? 20,
-        maxPdfPages: map['maxPdfPages'] as int? ?? 50,
-        maxPdfsPerMonth: map['maxPdfsPerMonth'] as int? ?? 100,
-        maxPdfsPerYear: map['maxPdfsPerYear'] as int? ?? 1000,
-        maxPdfsPerLifetime: map['maxPdfsPerLifetime'] as int? ?? 10000,
-        maxPdfTextLength: map['maxPdfTextLength'] as int? ?? 50000,
-        maxPdfTextLengthPerPage: map['maxPdfTextLengthPerPage'] as int? ?? 1000,
-        maxPdfTextLengthPerDay: map['maxPdfTextLengthPerDay'] as int? ?? 100000,
-        maxPdfTextLengthPerMonth: map['maxPdfTextLengthPerMonth'] as int? ?? 1000000,
-        maxPdfTextLengthPerYear: map['maxPdfTextLengthPerYear'] as int? ?? 10000000,
-        maxPdfTextLengthPerLifetime: map['maxPdfTextLengthPerLifetime'] as int? ?? 100000000,
+        uid: _safeString(map['uid'], ''),
+        email: _safeString(map['email'], ''),
+        displayName: _safeString(map['displayName'], '사용자'),
+        photoURL: _safeStringNullable(map['photoURL'], null),
+        emailVerified: _safeBool(map['emailVerified'], false),
+        apiKey: _safeStringNullable(map['apiKey'], null),
+        createdAt: _safeDateTime(map['createdAt']),
+        lastLoginAt: map['lastLoginAt'] != null ? _safeDateTime(map['lastLoginAt']) : null,
+        subscriptionTier: _safeString(map['subscriptionTier'], 'free'),
+        subscriptionExpiresAt: map['subscriptionExpiresAt'] != null ? _safeDateTime(map['subscriptionExpiresAt']) : null,
+        usageCount: _safeInt(map['usageCount'], 0),
+        lastUsageAt: map['lastUsageAt'] != null ? _safeDateTime(map['lastUsageAt']) : null,
+        maxUsagePerDay: _safeInt(map['maxUsagePerDay'], 10),
+        maxPdfSize: _safeInt(map['maxPdfSize'], 5 * 1024 * 1024),
+        maxTextLength: _safeInt(map['maxTextLength'], 10000),
+        maxPdfsPerDay: _safeInt(map['maxPdfsPerDay'], 5),
+        maxPdfsTotal: _safeInt(map['maxPdfsTotal'], 20),
+        maxPdfPages: _safeInt(map['maxPdfPages'], 50),
+        maxPdfsPerMonth: _safeInt(map['maxPdfsPerMonth'], 100),
+        maxPdfsPerYear: _safeInt(map['maxPdfsPerYear'], 1000),
+        maxPdfsPerLifetime: _safeInt(map['maxPdfsPerLifetime'], 10000),
+        maxPdfTextLength: _safeInt(map['maxPdfTextLength'], 50000),
+        maxPdfTextLengthPerPage: _safeInt(map['maxPdfTextLengthPerPage'], 1000),
+        maxPdfTextLengthPerDay: _safeInt(map['maxPdfTextLengthPerDay'], 100000),
+        maxPdfTextLengthPerMonth: _safeInt(map['maxPdfTextLengthPerMonth'], 1000000),
+        maxPdfTextLengthPerYear: _safeInt(map['maxPdfTextLengthPerYear'], 10000000),
+        maxPdfTextLengthPerLifetime: _safeInt(map['maxPdfTextLengthPerLifetime'], 100000000),
       );
     } catch (e) {
       debugPrint('UserModel.fromMap 오류: $e');
-      rethrow;
+      return createDefaultUser();
     }
   }
 
   /// JSON에서 UserModel 생성
-  factory UserModel.fromJson(Map<String, dynamic> json) {
+  factory UserModel.fromJson(Map<String, dynamic>? json) {
     try {
+      if (json == null) {
+        debugPrint('UserModel.fromJson: json이 null입니다');
+        return createDefaultUser();
+      }
+      
       return UserModel(
-        uid: json['uid'] ?? '',
-        email: json['email'] ?? '',
-        displayName: json['displayName'] ?? '',
-        photoURL: json['photoURL'],
-        emailVerified: json['emailVerified'] ?? false,
-        apiKey: json['apiKey'],
-        createdAt: json['createdAt'] != null 
-            ? DateTime.parse(json['createdAt']) 
-            : DateTime.now(),
-        lastLoginAt: json['lastLoginAt'] != null 
-            ? DateTime.parse(json['lastLoginAt']) 
-            : null,
-        subscriptionTier: json['subscriptionTier'] ?? 'free',
-        subscriptionExpiresAt: json['subscriptionExpiresAt'] != null 
-            ? DateTime.parse(json['subscriptionExpiresAt']) 
-            : null,
-        usageCount: json['usageCount'] is int ? json['usageCount'] : 0,
-        lastUsageAt: json['lastUsageAt'] != null 
-            ? DateTime.parse(json['lastUsageAt']) 
-            : null,
-        maxUsagePerDay: json['maxUsagePerDay'] is int ? json['maxUsagePerDay'] : 10,
-        maxPdfSize: json['maxPdfSize'] is int ? json['maxPdfSize'] : 5 * 1024 * 1024,
-        maxTextLength: json['maxTextLength'] is int ? json['maxTextLength'] : 10000,
-        maxPdfsPerDay: json['maxPdfsPerDay'] is int ? json['maxPdfsPerDay'] : 5,
-        maxPdfsTotal: json['maxPdfsTotal'] is int ? json['maxPdfsTotal'] : 20,
-        maxPdfPages: json['maxPdfPages'] is int ? json['maxPdfPages'] : 50,
-        maxPdfsPerMonth: json['maxPdfsPerMonth'] is int ? json['maxPdfsPerMonth'] : 100,
-        maxPdfsPerYear: json['maxPdfsPerYear'] is int ? json['maxPdfsPerYear'] : 1000,
-        maxPdfsPerLifetime: json['maxPdfsPerLifetime'] is int ? json['maxPdfsPerLifetime'] : 10000,
-        maxPdfTextLength: json['maxPdfTextLength'] is int ? json['maxPdfTextLength'] : 50000,
-        maxPdfTextLengthPerPage: json['maxPdfTextLengthPerPage'] is int ? json['maxPdfTextLengthPerPage'] : 1000,
-        maxPdfTextLengthPerDay: json['maxPdfTextLengthPerDay'] is int ? json['maxPdfTextLengthPerDay'] : 100000,
-        maxPdfTextLengthPerMonth: json['maxPdfTextLengthPerMonth'] is int ? json['maxPdfTextLengthPerMonth'] : 1000000,
-        maxPdfTextLengthPerYear: json['maxPdfTextLengthPerYear'] is int ? json['maxPdfTextLengthPerYear'] : 10000000,
-        maxPdfTextLengthPerLifetime: json['maxPdfTextLengthPerLifetime'] is int ? json['maxPdfTextLengthPerLifetime'] : 100000000,
+        uid: _safeString(json['uid'], ''),
+        email: _safeString(json['email'], ''),
+        displayName: _safeString(json['displayName'], '사용자'),
+        photoURL: _safeStringNullable(json['photoURL'], null),
+        emailVerified: _safeBool(json['emailVerified'], false),
+        apiKey: _safeStringNullable(json['apiKey'], null),
+        createdAt: _safeDateTime(json['createdAt']),
+        lastLoginAt: json['lastLoginAt'] != null ? _safeDateTime(json['lastLoginAt']) : null,
+        subscriptionTier: _safeString(json['subscriptionTier'], 'free'),
+        subscriptionExpiresAt: json['subscriptionExpiresAt'] != null ? _safeDateTime(json['subscriptionExpiresAt']) : null,
+        maxPdfTextLength: _safeInt(json['maxPdfTextLength'], 50000),
+        maxPdfTextLengthPerPage: _safeInt(json['maxPdfTextLengthPerPage'], 1000),
+        maxPdfTextLengthPerDay: _safeInt(json['maxPdfTextLengthPerDay'], 100000),
+        maxPdfTextLengthPerMonth: _safeInt(json['maxPdfTextLengthPerMonth'], 1000000),
+        maxPdfTextLengthPerYear: _safeInt(json['maxPdfTextLengthPerYear'], 10000000),
+        maxPdfTextLengthPerLifetime: _safeInt(json['maxPdfTextLengthPerLifetime'], 100000000),
+        maxPdfsPerDay: _safeInt(json['maxPdfsPerDay'], 5),
+        maxPdfsPerMonth: _safeInt(json['maxPdfsPerMonth'], 100),
+        maxPdfsPerYear: _safeInt(json['maxPdfsPerYear'], 1000),
+        maxPdfsPerLifetime: _safeInt(json['maxPdfsPerLifetime'], 10000),
+        maxPdfsTotal: _safeInt(json['maxPdfsTotal'], 20),
+        maxPdfSize: _safeInt(json['maxPdfSize'], 5 * 1024 * 1024),
+        maxPdfPages: _safeInt(json['maxPdfPages'], 50),
+        maxUsagePerDay: _safeInt(json['maxUsagePerDay'], 10),
+        maxTextLength: _safeInt(json['maxTextLength'], 10000),
+        usageCount: _safeInt(json['usageCount'], 0),
+        lastUsageAt: json['lastUsageAt'] != null ? _safeDateTime(json['lastUsageAt']) : null,
       );
     } catch (e) {
       debugPrint('UserModel.fromJson 오류: $e');
-      // 기본 사용자 모델 반환
-      return UserModel(
-        uid: json['uid'] ?? '',
-        email: json['email'] ?? '',
-        displayName: json['displayName'] ?? '',
-        photoURL: null,
-        emailVerified: false,
-        createdAt: DateTime.now(),
-        subscriptionTier: 'free',
-        maxPdfTextLength: 50000,
-        maxPdfTextLengthPerPage: 1000,
-        maxPdfTextLengthPerDay: 100000,
-        maxPdfTextLengthPerMonth: 1000000,
-        maxPdfTextLengthPerYear: 10000000,
-        maxPdfTextLengthPerLifetime: 100000000,
-        maxPdfsPerDay: 5,
-        maxPdfsPerMonth: 100,
-        maxPdfsPerYear: 1000,
-        maxPdfsPerLifetime: 10000,
-        maxPdfsTotal: 20,
-        maxPdfSize: 5 * 1024 * 1024,
-        maxPdfPages: 50,
-        maxUsagePerDay: 10,
-        maxTextLength: 10000,
-        usageCount: 0,
-      );
+      return createDefaultUser();
     }
   }
 
@@ -354,7 +329,6 @@ class UserModel {
     String? displayName,
     String? photoURL,
     bool? emailVerified,
-    String? apiKey,
     DateTime? createdAt,
     DateTime? lastLoginAt,
     String? subscriptionTier,
@@ -376,6 +350,7 @@ class UserModel {
     int? maxPdfTextLengthPerMonth,
     int? maxPdfTextLengthPerYear,
     int? maxPdfTextLengthPerLifetime,
+    String? apiKey,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -434,5 +409,83 @@ class UserModel {
       debugPrint('_parseDateTime 오류: $e');
       return DateTime.now();
     }
+  }
+
+  /// 안전한 문자열 변환 (null 허용)
+  static String? _safeStringNullable(dynamic value, String? defaultValue) {
+    if (value == null) return defaultValue;
+    if (value is String) return value;
+    try {
+      return value.toString();
+    } catch (e) {
+      debugPrint('_safeStringNullable 변환 오류: $e');
+      return defaultValue;
+    }
+  }
+  
+  /// 안전한 문자열 변환 (항상 문자열 반환)
+  static String _safeString(dynamic value, String defaultValue) {
+    if (value == null) return defaultValue;
+    if (value is String) return value;
+    try {
+      return value.toString();
+    } catch (e) {
+      debugPrint('_safeString 변환 오류: $e');
+      return defaultValue;
+    }
+  }
+  
+  /// 안전한 불리언 변환
+  static bool _safeBool(dynamic value, bool defaultValue) {
+    if (value == null) return defaultValue;
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    if (value is num) return value != 0;
+    return defaultValue;
+  }
+  
+  /// 안전한 정수 변환
+  static int _safeInt(dynamic value, int defaultValue) {
+    if (value == null) return defaultValue;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      try {
+        return int.parse(value);
+      } catch (_) {
+        return defaultValue;
+      }
+    }
+    return defaultValue;
+  }
+  
+  /// 안전한 DateTime 변환
+  static DateTime _safeDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+    return DateTime.now();
+  }
+  
+  /// 안전한 Timestamp 변환
+  static DateTime _safeTimestamp(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+    return DateTime.now();
   }
 } 

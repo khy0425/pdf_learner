@@ -358,30 +358,31 @@ class PDFService {
   /// AI를 사용하여 텍스트 분석
   Future<String> analyzeTextWithAI(String text, String apiKey) async {
     try {
-      // API 요청 URL
-      final url = Uri.parse('https://api.openai.com/v1/chat/completions');
+      // API 요청 URL (Gemini API 엔드포인트로 변경)
+      final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent');
       
-      // 요청 헤더
+      // 요청 헤더 (Gemini API 형식으로 변경)
       final headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
+        'x-goog-api-key': apiKey,
       };
       
-      // 요청 본문
+      // 요청 본문 (Gemini API 형식으로 변경)
       final body = {
-        'model': 'gpt-3.5-turbo',
-        'messages': [
-          {
-            'role': 'system',
-            'content': '당신은 PDF 문서를 분석하고 요약하는 AI 비서입니다. 주어진 텍스트를 분석하여 핵심 내용을 요약하고, 중요한 정보를 추출하세요.'
-          },
+        'contents': [
           {
             'role': 'user',
-            'content': '다음 PDF 내용을 분석하고 요약해주세요:\n\n$text'
+            'parts': [
+              {
+                'text': '다음 PDF 내용을 분석하고 요약해주세요:\n\n$text'
+              }
+            ]
           }
         ],
-        'temperature': 0.7,
-        'max_tokens': 1000,
+        'generationConfig': {
+          'temperature': 0.7,
+          'maxOutputTokens': 1000,
+        },
       };
       
       // API 요청
@@ -391,10 +392,10 @@ class PDFService {
         body: jsonEncode(body),
       );
       
-      // 응답 처리
+      // 응답 처리 (Gemini API 응답 구조에 맞게 수정)
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        return jsonResponse['choices'][0]['message']['content'];
+        return jsonResponse['candidates'][0]['content']['parts'][0]['text'];
       } else {
         throw Exception('AI 분석 실패: ${response.statusCode} - ${response.body}');
       }

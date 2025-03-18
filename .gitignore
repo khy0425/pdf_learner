@@ -69,3 +69,6 @@ web/firebase-config.js
 
 # Firebase config
 web/firebase-config.js
+
+# Firebase storage
+js/firebase-config.js

@@ -64,31 +64,35 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   // 홈 화면 초기화
   Future<void> _initializeHome() async {
-    // 인증 상태 확인
-    final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-    final isLoggedIn = authViewModel.isLoggedIn;
-    
-    if (isLoggedIn) {
-      // 사용자가 로그인한 경우 PDF 목록 로드
-      await _loadPdfFiles();
+    try {
+      // 인증 상태 확인
+      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+      if (!mounted) return;
+      
+      final isLoggedIn = authViewModel.isLoggedIn;
+      
+      if (isLoggedIn) {
+        // 사용자가 로그인한 경우 PDF 목록 로드
+        await _loadPdfFiles();
+      }
+    } catch (e) {
+      debugPrint('홈 화면 초기화 중 오류 발생: $e');
     }
   }
 
   // PDF 파일 목록 로드
   Future<void> _loadPdfFiles() async {
     try {
+      if (!mounted) return;
+      
       final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
       final pdfViewModel = Provider.of<PdfFileViewModel>(context, listen: false);
       
       final currentUser = authViewModel.currentUser;
-      if (currentUser != null) {
-        debugPrint('PDF 파일 목록 로드 시작: ${currentUser.uid}');
-        await pdfViewModel.loadPdfFiles(currentUser.uid);
-      } else {
-        debugPrint('로그인된 사용자 없음: 게스트 모드로 진행');
-        // 로그인 화면으로 이동하지 않고 게스트 모드로 진행
-        // 게스트 모드에서는 PDF 목록이 비어있는 상태로 표시됨
-      }
+      final userId = currentUser?.uid ?? 'guest_user';
+      
+      debugPrint('PDF 파일 목록 로드 시작: $userId');
+      await pdfViewModel.loadPdfFiles(userId);
     } catch (e) {
       debugPrint('PDF 파일 목록 로드 오류: $e');
       if (mounted) {

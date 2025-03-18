@@ -58,13 +58,34 @@ class SubscriptionService {
 
   // 구독 상태 확인
   Future<SubscriptionTier> getCurrentTier([String? userId]) async {
-    final uid = userId ?? this.userId;
-    final doc = await _db.collection('subscriptions')
-        .doc(uid)
-        .get();
-    
-    if (!doc.exists) return SubscriptionTier.free;
-    return SubscriptionTier.values.byName(doc.data()!['tier']);
+    try {
+      final uid = userId ?? this.userId;
+      if (uid.isEmpty) {
+        return SubscriptionTier.free;
+      }
+      
+      final doc = await _db.collection('subscriptions')
+          .doc(uid)
+          .get();
+      
+      if (!doc.exists) return SubscriptionTier.free;
+      
+      final data = doc.data();
+      if (data == null) return SubscriptionTier.free;
+      
+      final tierName = data['tier'] as String?;
+      if (tierName == null) return SubscriptionTier.free;
+      
+      try {
+        return SubscriptionTier.values.byName(tierName);
+      } catch (e) {
+        print('구독 티어 파싱 오류: $e');
+        return SubscriptionTier.free;
+      }
+    } catch (e) {
+      print('getCurrentTier 오류: $e');
+      return SubscriptionTier.free;
+    }
   }
   
   // 구독 상태 변경 감지
@@ -73,12 +94,24 @@ class SubscriptionService {
       return Stream.value(SubscriptionTier.free);
     }
     
+    final uid = _auth.currentUser?.uid ?? 'anonymous';
     return _db.collection('subscriptions')
-        .doc(_auth.currentUser!.uid)
+        .doc(uid)
         .snapshots()
         .map((snapshot) {
           if (!snapshot.exists) return SubscriptionTier.free;
-          return SubscriptionTier.values.byName(snapshot.data()!['tier']);
+          final data = snapshot.data();
+          if (data == null) return SubscriptionTier.free;
+          
+          final tierName = data['tier'] as String?;
+          if (tierName == null) return SubscriptionTier.free;
+          
+          try {
+            return SubscriptionTier.values.byName(tierName);
+          } catch (e) {
+            print('구독 티어 파싱 오류: $e');
+            return SubscriptionTier.free;
+          }
         });
   }
   
@@ -88,17 +121,48 @@ class SubscriptionService {
     required String feature,
     required int amount,
   }) async {
-    final usage = await _db.collection('usage')
-        .doc(userId)
-        .collection('daily')
-        .doc(DateTime.now().toIso8601String().split('T')[0])
-        .get();
+    try {
+      if (userId.isEmpty) {
+        return true; // 익명 사용자는 제한을 체크하지 않음
+      }
+      
+      final usage = await _db.collection('usage')
+          .doc(userId)
+          .collection('daily')
+          .doc(DateTime.now().toIso8601String().split('T')[0])
+          .get();
 
-    final currentUsage = usage.data()?[feature] ?? 0;
-    final tier = await getCurrentTier(userId);
-    final limit = SubscriptionFeatures.features[tier]![feature];
-    
-    return currentUsage + amount <= limit;
+      final currentUsage = usage.data()?[feature] ?? 0;
+      final tier = await getCurrentTier(userId);
+      
+      // 구독 티어와 기능이 있는지 확인
+      final featureMap = SubscriptionFeatures.features[tier];
+      if (featureMap == null) {
+        print('알 수 없는 구독 티어: $tier');
+        return true; // 기본적으로 허용
+      }
+      
+      final limit = featureMap[feature];
+      if (limit == null) {
+        print('$tier 티어에 $feature 기능이 정의되지 않음');
+        return true; // 기본적으로 허용
+      }
+      
+      // 숫자가 아닌 'unlimited' 등의 값이 있을 수 있음
+      if (limit is String && limit == 'unlimited') {
+        return true;
+      }
+      
+      if (limit is! int) {
+        print('$feature의 제한이 숫자가 아님: $limit');
+        return true; // 제한 형식이 잘못된 경우 기본적으로 허용
+      }
+      
+      return currentUsage + amount <= limit;
+    } catch (e) {
+      print('사용량 확인 오류: $e');
+      return true; // 오류 발생 시 기본적으로 허용
+    }
   }
   
   // 결제 처리
@@ -111,9 +175,15 @@ class SubscriptionService {
         return false;
       }
       
+      final uid = _auth.currentUser?.uid;
+      if (uid == null || uid.isEmpty) {
+        print('사용자 ID가 없어 결제를 처리할 수 없습니다.');
+        return false;
+      }
+      
       // 구독 정보 업데이트
       await _db.collection('subscriptions')
-          .doc(_auth.currentUser!.uid)
+          .doc(uid)
           .set({
             'tier': tier.name,
             'startDate': FieldValue.serverTimestamp(),
@@ -124,7 +194,7 @@ class SubscriptionService {
       // 결제 내역 기록
       await _db.collection('payments')
           .add({
-            'userId': _auth.currentUser!.uid,
+            'userId': uid,
             'tier': tier.name,
             'amount': _getTierPrice(tier),
             'paymentMethod': paymentMethod,

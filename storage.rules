@@ -5,18 +5,79 @@ rules_version = '2';
 //    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if false;
+    // 인증 헬퍼 함수
+    function isAuthenticated() {
+      return request.auth != null;
     }
     
-    // PDF 파일에 대한 접근 허용
+    // 소유자 확인 헬퍼 함수
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // 파일 크기 확인 헬퍼 함수
+    function isValidFileSize() {
+      return request.resource.size <= 10 * 1024 * 1024; // 10MB 제한
+    }
+    
+    // 파일 유형 확인 헬퍼 함수
+    function isValidContentType() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('image/.*');
+    }
+    
+    // PDF 파일 접근 규칙
     match /pdfs/{userId}/{fileName} {
-      // 인증된 사용자가 자신의 파일에 접근할 수 있도록 허용
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // 본인 파일만 읽기 가능
+      allow read: if isOwner(userId);
       
-      // 웹 애플리케이션에서의 접근을 위한 CORS 설정
-      allow read: if request.origin.matches('https://pdf-learner.web.app') || 
-                    request.origin.matches('https://pdf-learner.firebaseapp.com');
+      // 본인만 업로드 가능하며 파일 크기와 타입 제한
+      allow create, update: if isOwner(userId) && 
+                              isValidFileSize() && 
+                              isValidContentType();
+      
+      // 본인만 삭제 가능
+      allow delete: if isOwner(userId);
+    }
+    
+    // 공유 PDF 파일 접근 규칙
+    match /shared_pdfs/{fileId} {
+      // Firestore 데이터베이스에서 공유 정보 확인
+      allow read: if isAuthenticated() && 
+                    exists(/databases/$(database)/documents/pdf_files/$(fileId)) &&
+                    (
+                      get(/databases/$(database)/documents/pdf_files/$(fileId)).data.userId == request.auth.uid ||
+                      get(/databases/$(database)/documents/pdf_files/$(fileId)).data.sharedWith[request.auth.uid] == true
+                    );
+      
+      // 업로드는 소유자만 가능
+      allow create, update: if isAuthenticated() && 
+                              exists(/databases/$(database)/documents/pdf_files/$(fileId)) &&
+                              get(/databases/$(database)/documents/pdf_files/$(fileId)).data.userId == request.auth.uid &&
+                              isValidFileSize() && 
+                              isValidContentType();
+      
+      // 삭제는 소유자만 가능
+      allow delete: if isAuthenticated() && 
+                      exists(/databases/$(database)/documents/pdf_files/$(fileId)) &&
+                      get(/databases/$(database)/documents/pdf_files/$(fileId)).data.userId == request.auth.uid;
+    }
+    
+    // 사용자 프로필 이미지 규칙
+    match /profile_images/{userId} {
+      // 모든 인증된 사용자가 프로필 이미지 읽기 가능
+      allow read: if isAuthenticated();
+      
+      // 본인만 프로필 이미지 업로드/삭제 가능
+      allow create, update: if isOwner(userId) && 
+                              request.resource.size <= 5 * 1024 * 1024 && // 5MB 제한
+                              request.resource.contentType.matches('image/.*');
+      allow delete: if isOwner(userId);
+    }
+    
+    // 기본 차단 규칙
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -20,6 +20,7 @@ import './pdf_viewer_screen.dart'; // PDFViewerScreen 클래스 import 추가
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/foundation.dart' show kDebugMode;
+import '../views/auth/gemini_api_tutorial_view.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -1224,14 +1225,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   ListTile(
                     leading: const Icon(Icons.key),
                     title: const Text('API 키'),
-                    subtitle: Text(user.apiKey != null ? '설정됨' : '설정되지 않음'),
+                    subtitle: Text(user.apiKey != null ? '설정됨' : '회원님은 API 키를 입력하지 않았습니다.'),
                     trailing: TextButton(
                       onPressed: () {
                         Navigator.pop(context);
                         // API 키 설정 페이지로 이동
-                        // TODO: API 키 설정 페이지 구현
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const GeminiApiTutorialView(
+                              onClose: null,
+                            ),
+                          ),
+                        );
                       },
-                      child: const Text('관리'),
+                      child: const Text('API 키 설정'),
                     ),
                   ),
                 ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../view_models/auth_view_model.dart';
 import '../../services/api_key_service.dart';
+import 'gemini_api_tutorial_view.dart';
 
 class ApiKeyManagementView extends StatefulWidget {
   const ApiKeyManagementView({Key? key}) : super(key: key);
@@ -125,27 +126,44 @@ class _ApiKeyManagementViewState extends State<ApiKeyManagementView> {
     }
   }
 
+  /// API 키 튜토리얼 페이지로 이동
+  void _navigateToApiKeyTutorial() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const GeminiApiTutorialView(
+          onClose: null,
+        ),
+      ),
+    );
+  }
+
   void _showApiKeyDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('API 키 관리'),
+        title: const Text('Gemini API 키 관리'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _apiKeyController,
               decoration: const InputDecoration(
-                labelText: 'OpenAI API 키',
-                hintText: 'sk-...',
+                labelText: 'Gemini API 키',
+                hintText: 'AI...로 시작하는 키를 입력하세요',
                 border: OutlineInputBorder(),
               ),
               obscureText: true,
             ),
             const SizedBox(height: 16),
             const Text(
-              'API 키는 PDF 분석에 사용됩니다. OpenAI API 키를 입력하세요.',
+              'Gemini API 키는 PDF 분석에 사용됩니다. Google AI Studio에서 발급받을 수 있습니다.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            TextButton.icon(
+              onPressed: _navigateToApiKeyTutorial,
+              icon: const Icon(Icons.help_outline, size: 14),
+              label: const Text('API 키 발급 방법 보기', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -177,8 +195,8 @@ class _ApiKeyManagementViewState extends State<ApiKeyManagementView> {
             Expanded(
               child: TextFormField(
                 decoration: const InputDecoration(
-                  labelText: 'API 키',
-                  hintText: 'OpenAI API 키를 입력하세요',
+                  labelText: 'Gemini API 키',
+                  hintText: 'Gemini API 키를 입력하세요',
                   border: OutlineInputBorder(),
                 ),
                 obscureText: true,
@@ -216,10 +234,20 @@ class _ApiKeyManagementViewState extends State<ApiKeyManagementView> {
         // 설명 텍스트
         const SizedBox(height: 8),
         const Text(
-          'API 키는 PDF 분석에 사용됩니다. OpenAI API 키를 입력하세요.',
+          'Gemini API 키는 PDF 분석과 AI 기능에 사용됩니다. Google AI Studio에서 무료로 발급받을 수 있습니다.',
           style: TextStyle(
             fontSize: 12,
             color: Colors.grey,
+          ),
+        ),
+        TextButton.icon(
+          onPressed: _navigateToApiKeyTutorial,
+          icon: const Icon(Icons.help_outline, size: 14),
+          label: const Text('API 키 발급 방법 보기', style: TextStyle(fontSize: 12)),
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
         

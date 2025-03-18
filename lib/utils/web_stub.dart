@@ -352,23 +352,23 @@ class WebUtils {
           log('Flutter 요소에 자식 없음 - 엔진 초기화 문제 가능성');
           
           try {
-            // 엔진 상태 확인 및 강제 재설정 시도
-            js.context.callMethod('_flutter.loader.loadEntrypoint', [
-              js.JsObject.jsify({
-                'onEntrypointLoaded': js.allowInterop((entrypoint) {
-                  entrypoint.callMethod('initializeEngine', [
-                    js.JsObject.jsify({
-                      'hostElement': flutterElement
-                    })
-                  ]).callMethod('then', [
-                    js.allowInterop((appRunner) {
-                      appRunner.callMethod('runApp');
-                    })
-                  ]);
-                })
-              })
+            // 엔진 상태 확인 및 강제 재설정 시도 - 직접 main.dart.js 로드 방식으로 변경
+            log('Flutter 엔진 재시작 시도 - 직접 main.dart.js 로드');
+            
+            // JavaScript를 통해 스크립트 요소 생성 및 추가
+            js.context.callMethod('eval', [
+              """
+              (function() {
+                var script = document.createElement('script');
+                script.src = 'main.dart.js';
+                script.type = 'application/javascript';
+                document.body.appendChild(script);
+                console.log('main.dart.js 스크립트 직접 추가 완료');
+              })();
+              """
             ]);
-            log('Flutter 엔진 재시작 시도');
+            
+            log('main.dart.js 스크립트 직접 추가 완료');
           } catch (e) {
             log('Flutter 엔진 재시작 시도 실패: $e');
           }

@@ -1,4 +1,4 @@
-import 'dart:js' as js;
+import '../utils/non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -69,6 +69,19 @@ class WebFirebaseInitializer {
     if (!kIsWeb) return false;
     
     try {
+      // JavaScript 환경 확인
+      if (js.context == null) {
+        debugPrint('JavaScript 컨텍스트가 존재하지 않습니다.');
+        return false;
+      }
+      
+      // JavaScript 함수 존재 확인
+      final hasFunction = js.context.hasProperty('checkFirebaseStatus');
+      if (!hasFunction) {
+        debugPrint('checkFirebaseStatus 함수가 JavaScript에 존재하지 않습니다.');
+        return false;
+      }
+      
       // JavaScript 함수 호출
       final result = js.context.callMethod('checkFirebaseStatus', []);
       
@@ -83,9 +96,7 @@ class WebFirebaseInitializer {
         return initialized;
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('WebFirebaseInitializer: JavaScript 함수 호출 오류 - $e');
-      }
+      debugPrint('WebFirebaseInitializer: JavaScript 함수 호출 오류 - $e');
     }
     
     return false;
@@ -118,26 +129,26 @@ class WebFirebaseInitializer {
     if (!kIsWeb) return;
     
     try {
+      // JavaScript 환경 확인
+      if (js.context == null) {
+        debugPrint('JavaScript 콜백 등록: JavaScript 컨텍스트가 존재하지 않습니다.');
+        return;
+      }
+      
       // JavaScript에서 호출할 함수 등록
       js.context['flutterFirebaseAuthChanged'] = (isLoggedIn, userId) {
         // Convert JS boolean to Dart boolean
         final bool loggedIn = isLoggedIn == true;
         
-        if (kDebugMode) {
-          print('WebFirebaseInitializer: JS 콜백 - 로그인=$loggedIn, 사용자ID=$userId');
-        }
+        debugPrint('WebFirebaseInitializer: JS 콜백 - 로그인=$loggedIn, 사용자ID=$userId');
         
         // 상태 업데이트
         _updateState(true, loggedIn, userId?.toString());
       };
       
-      if (kDebugMode) {
-        print('WebFirebaseInitializer: JavaScript 콜백 등록 완료');
-      }
+      debugPrint('WebFirebaseInitializer: JavaScript 콜백 등록 완료');
     } catch (e) {
-      if (kDebugMode) {
-        print('WebFirebaseInitializer: JavaScript 콜백 등록 오류 - $e');
-      }
+      debugPrint('WebFirebaseInitializer: JavaScript 콜백 등록 오류 - $e');
     }
   }
 

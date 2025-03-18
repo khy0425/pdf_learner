@@ -43,11 +43,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       final apiKeyService = ApiKeyService();
-      final isValid = await apiKeyService.validateAPIKey(_apiKeyController.text.trim());
+      // Gemini API 키 형식 검사 (일반적으로 'AI'로 시작하는 형식)
+      final isValid = apiKeyService.isValidApiKey(_apiKeyController.text.trim());
       
       setState(() {
         _isApiKeyValid = isValid;
-        _apiKeyErrorMessage = isValid ? '' : '유효하지 않은 API 키입니다.';
+        _apiKeyErrorMessage = isValid ? '' : '유효하지 않은 API 키입니다. AI로 시작하는 키를 입력해주세요.';
       });
     } catch (e) {
       setState(() {

@@ -100,8 +100,8 @@ flutter pub get
 - `.env` 파일을 프로젝트 루트에 생성하고 다음 내용을 추가:
 
 ```bash
-AI_API_KEY=your_openai_api_key
-AI_API_ENDPOINT=your_api_endpoint
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_API_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent
 ```
 
 4. 앱 실행
@@ -160,4 +160,4 @@ lib/
 ## 기여하기
 
 1. Fork the Project
-2. Create your Feature Branch (`
+2. Create your Feature Branch

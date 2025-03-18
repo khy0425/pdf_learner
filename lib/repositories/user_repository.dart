@@ -14,6 +14,12 @@ class UserRepository {
     try {
       debugPrint('사용자 정보 조회 시작: $uid');
       
+      // UID 유효성 검사
+      if (uid.isEmpty) {
+        debugPrint('getUser: 빈 uid가 전달됨');
+        return null;
+      }
+      
       // 로컬 스토리지에서 먼저 확인
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('user_$uid');
@@ -21,7 +27,13 @@ class UserRepository {
       if (userJson != null) {
         try {
           debugPrint('로컬 스토리지에서 사용자 정보 발견');
-          return UserModel.fromJson(json.decode(userJson));
+          final userMap = json.decode(userJson) as Map<String, dynamic>?;
+          if (userMap != null) {
+            return UserModel.fromJson(userMap);
+          } else {
+            debugPrint('로컬 스토리지의 JSON 데이터가 null입니다');
+            await prefs.remove('user_$uid');
+          }
         } catch (e) {
           debugPrint('로컬 스토리지의 사용자 정보 파싱 오류: $e');
           // 로컬 데이터가 손상된 경우 삭제

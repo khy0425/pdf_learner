@@ -8,8 +8,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:html' as html;
-import 'dart:js' as js;
+// 웹 환경에서만 임포트되도록 수정
+import 'package:pdf_learner/utils/non_web_stub.dart' if (dart.library.html) 'dart:html' as html;
+import 'package:pdf_learner/utils/non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
@@ -68,15 +69,81 @@ void main() async {
   // 로그 활성화 (디버그 모드에서만)
   AppLogger.enableLogs(kDebugMode);
   
+  // 오류 위젯 커스터마이징 - 앱 시작 즉시 적용
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.white,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.amber,
+                size: 56,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '문제가 발생했습니다',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                kDebugMode 
+                    ? details.exception.toString()
+                    : '앱에 문제가 발생했습니다. 화면을 다시 로드해 주세요.',
+                style: const TextStyle(fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              if (kDebugMode)
+                Text(
+                  details.stack.toString(),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ElevatedButton(
+                onPressed: () {
+                  if (kIsWeb) {
+                    try {
+                      // 안전한 방식으로 페이지 새로고침
+                      html.window.location.reload();
+                    } catch (e) {
+                      // 새로고침 실패 시 로그만 출력
+                      AppLogger.error('페이지 새로고침 실패', e);
+                    }
+                  }
+                },
+                child: const Text('앱 다시 로드'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+  
   // 전역 오류 처리
   FlutterError.onError = (FlutterErrorDetails details) {
     AppLogger.error('앱 실행 중 예외 발생', details.exception, details.stack);
-    FlutterError.presentError(details);
+    
+    // 오류를 표시하기만 하고 앱은 계속 실행
+    if (kDebugMode) {
+      FlutterError.dumpErrorToConsole(details);
+    } else {
+      // 릴리즈 모드에서는 단순히 로깅만 수행
+    }
   };
   
   // 비동기 오류 처리
   PlatformDispatcher.instance.onError = (error, stack) {
     AppLogger.error('플랫폼 비동기 오류', error, stack);
+    // true를 반환하여 Flutter가 자체적으로 오류를 처리하지 않게 함
     return true;
   };
   
@@ -140,6 +207,7 @@ class MyApp extends StatelessWidget {
             userRepository: context.read<UserRepository>(),
             apiKeyService: context.read<ApiKeyService>(),
           ),
+          lazy: false, // 앱 시작 시 바로 초기화
         ),
         ChangeNotifierProvider<PdfViewModel>(
           create: (context) => PdfViewModel(
@@ -180,35 +248,24 @@ class MyApp extends StatelessWidget {
         ],
         // 앱 전체 오류 처리
         builder: (context, child) {
-          // 오류 화면 처리
-          ErrorWidget.builder = (FlutterErrorDetails details) {
-            return Material(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                      const SizedBox(height: 16),
-                      const Text('오류가 발생했습니다', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text(details.exception.toString(), textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-                        },
-                        child: const Text('홈으로 돌아가기'),
-                      ),
-                    ],
-                  ),
-                ),
+          // 앱 리빌드 시 child가 null인 경우 빈 컨테이너 반환
+          if (child == null) {
+            return Container(
+              color: Colors.white,
+              child: const Center(
+                child: Text('앱 초기화 중 오류가 발생했습니다.'),
               ),
             );
-          };
-          
-          return child!;
+          }
+
+          // 각 페이지를 SafeArea 내에 배치하여 시스템 UI와 겹치지 않도록 함
+          return MediaQuery(
+            // 시스템 폰트 크기 설정 무시
+            data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+            child: SafeArea(
+              child: child,
+            ),
+          );
         },
       ),
     );
