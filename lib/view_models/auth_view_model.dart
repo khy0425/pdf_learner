@@ -15,6 +15,7 @@ class AuthViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isInitialized = false;
+  bool _mounted = true; // ViewModel이 유효한지 여부
   
   /// 현재 로그인된 사용자
   UserModel get user => _user ?? UserModel.createDefaultUser();
@@ -27,6 +28,9 @@ class AuthViewModel extends ChangeNotifier {
   
   /// 초기화 완료 여부
   bool get isInitialized => _isInitialized;
+  
+  /// ViewModel이 여전히 유효한지 여부
+  bool get mounted => _mounted;
   
   /// 로그인 여부
   bool get isLoggedIn => _user != null && _user!.uid.isNotEmpty;
@@ -102,10 +106,16 @@ class AuthViewModel extends ChangeNotifier {
   Future<void> _onAuthStateChanged(User? firebaseUser) async {
     debugPrint('인증 상태 변경: ${firebaseUser?.uid ?? 'null'}');
     
-    _isLoading = true;
-    notifyListeners();
-    
     try {
+      // 로딩 상태 설정 전에 현재 객체가 유효한지 확인
+      if (!mounted) {
+        debugPrint('인증 상태 변경 처리 중 ViewModel이 disposed 상태');
+        return;
+      }
+      
+      _isLoading = true;
+      notifyListeners();
+      
       if (firebaseUser == null) {
         debugPrint('사용자가 로그아웃됨');
         _user = UserModel.createDefaultUser();
@@ -127,39 +137,51 @@ class AuthViewModel extends ChangeNotifier {
         userModel = null;
       }
       
+      // 객체가 여전히 유효한지 다시 확인
+      if (!mounted) {
+        debugPrint('사용자 데이터 로드 후 ViewModel이 disposed 상태');
+        return;
+      }
+      
       // 사용자 데이터가 없으면 새로 생성
       if (userModel == null) {
         debugPrint('새 사용자 생성: $uid');
         
-        userModel = UserModel(
-          uid: uid,
-          email: firebaseUser.email ?? '',
-          displayName: firebaseUser.displayName ?? '사용자',
-          photoURL: firebaseUser.photoURL,
-          emailVerified: firebaseUser.emailVerified,
-          createdAt: DateTime.now(),
-          subscriptionTier: 'free',
-          maxPdfTextLength: 50000,
-          maxPdfTextLengthPerPage: 1000,
-          maxPdfTextLengthPerDay: 100000,
-          maxPdfTextLengthPerMonth: 1000000,
-          maxPdfTextLengthPerYear: 10000000,
-          maxPdfTextLengthPerLifetime: 100000000,
-          maxPdfsPerDay: 5,
-          maxPdfsPerMonth: 100,
-          maxPdfsPerYear: 1000,
-          maxPdfsPerLifetime: 10000,
-          maxPdfsTotal: 20,
-          maxPdfSize: 5 * 1024 * 1024,
-          maxPdfPages: 50,
-          maxUsagePerDay: 10,
-          maxTextLength: 10000,
-          usageCount: 0,
-          lastUsageAt: DateTime.now(),
-        );
+        try {
+          userModel = UserModel(
+            uid: uid,
+            email: firebaseUser.email ?? '',
+            displayName: firebaseUser.displayName ?? '사용자',
+            photoURL: firebaseUser.photoURL,
+            emailVerified: firebaseUser.emailVerified,
+            createdAt: DateTime.now(),
+            subscriptionTier: 'free',
+            maxPdfTextLength: 50000,
+            maxPdfTextLengthPerPage: 1000,
+            maxPdfTextLengthPerDay: 100000,
+            maxPdfTextLengthPerMonth: 1000000,
+            maxPdfTextLengthPerYear: 10000000,
+            maxPdfTextLengthPerLifetime: 100000000,
+            maxPdfsPerDay: 5,
+            maxPdfsPerMonth: 100,
+            maxPdfsPerYear: 1000,
+            maxPdfsPerLifetime: 10000,
+            maxPdfsTotal: 20,
+            maxPdfSize: 5 * 1024 * 1024,
+            maxPdfPages: 50,
+            maxUsagePerDay: 10,
+            maxTextLength: 10000,
+            usageCount: 0,
+            lastUsageAt: DateTime.now(),
+          );
+        } catch (e) {
+          debugPrint('UserModel 생성 중 오류 발생: $e');
+          userModel = UserModel.createDefaultUser();
+        }
         
         // 새 사용자 저장
         try {
+          if (!mounted) return;
           await _userRepository.saveUser(userModel);
           debugPrint('새 사용자 저장 완료');
         } catch (e) {
@@ -170,47 +192,59 @@ class AuthViewModel extends ChangeNotifier {
         debugPrint('기존 사용자 데이터 로드: ${userModel.uid}');
       }
       
+      if (!mounted) return;
       _user = userModel;
       _error = null;
     } catch (e) {
       debugPrint('사용자 데이터 가져오기 오류: $e');
+      
+      if (!mounted) return;
       _error = '사용자 데이터를 가져오는 중 오류가 발생했습니다.';
       
       // 오류 발생 시 기본 사용자 모델 생성
       if (firebaseUser != null) {
         final safeUid = firebaseUser.uid;
-        _user = UserModel(
-          uid: safeUid,
-          email: firebaseUser.email ?? '',
-          displayName: firebaseUser.displayName ?? '사용자',
-          photoURL: firebaseUser.photoURL,
-          emailVerified: firebaseUser.emailVerified,
-          createdAt: DateTime.now(),
-          subscriptionTier: 'free',
-          maxPdfTextLength: 50000,
-          maxPdfTextLengthPerPage: 1000,
-          maxPdfTextLengthPerDay: 100000,
-          maxPdfTextLengthPerMonth: 1000000,
-          maxPdfTextLengthPerYear: 10000000,
-          maxPdfTextLengthPerLifetime: 100000000,
-          maxPdfsPerDay: 5,
-          maxPdfsPerMonth: 100,
-          maxPdfsPerYear: 1000,
-          maxPdfsPerLifetime: 10000,
-          maxPdfsTotal: 20,
-          maxPdfSize: 5 * 1024 * 1024,
-          maxPdfPages: 50,
-          maxUsagePerDay: 10,
-          maxTextLength: 10000,
-          usageCount: 0,
-          lastUsageAt: DateTime.now(),
-        );
+        
+        try {
+          _user = UserModel(
+            uid: safeUid,
+            email: firebaseUser.email ?? '',
+            displayName: firebaseUser.displayName ?? '사용자',
+            photoURL: firebaseUser.photoURL,
+            emailVerified: firebaseUser.emailVerified,
+            createdAt: DateTime.now(),
+            subscriptionTier: 'free',
+            maxPdfTextLength: 50000,
+            maxPdfTextLengthPerPage: 1000,
+            maxPdfTextLengthPerDay: 100000,
+            maxPdfTextLengthPerMonth: 1000000,
+            maxPdfTextLengthPerYear: 10000000,
+            maxPdfTextLengthPerLifetime: 100000000,
+            maxPdfsPerDay: 5,
+            maxPdfsPerMonth: 100,
+            maxPdfsPerYear: 1000,
+            maxPdfsPerLifetime: 10000,
+            maxPdfsTotal: 20,
+            maxPdfSize: 5 * 1024 * 1024,
+            maxPdfPages: 50,
+            maxUsagePerDay: 10,
+            maxTextLength: 10000,
+            usageCount: 0,
+            lastUsageAt: DateTime.now(),
+          );
+        } catch (e) {
+          debugPrint('오류 처리 중 UserModel 생성 실패: $e');
+          _user = UserModel.createDefaultUser();
+        }
       } else {
         _user = UserModel.createDefaultUser();
       }
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (mounted) {
+        _isLoading = false;
+        _isInitialized = true;
+        notifyListeners();
+      }
     }
   }
   
@@ -346,27 +380,77 @@ class AuthViewModel extends ChangeNotifier {
   
   /// API 키 업데이트
   Future<void> updateApiKey(String apiKey) async {
+    if (!mounted) return;
+    
     try {
-      if (_user == null || _user!.uid.isEmpty) {
-        throw Exception('로그인이 필요합니다.');
+      _setLoading(true);
+      
+      // 사용자 객체가 null인 경우 안전하게 처리
+      if (_user == null) {
+        _setError('로그인이 필요합니다.');
+        return;
       }
       
-      final uid = _user!.uid;
-      await _apiKeyService.saveApiKey(uid, apiKey);
-      _user = _user!.copyWith(apiKey: apiKey);
-      notifyListeners();
+      final userId = _user!.uid;
+      if (userId.isEmpty) {
+        _setError('유효하지 않은 사용자입니다.');
+        return;
+      }
+      
+      // API 키 저장
+      await _apiKeyService.saveApiKey(userId, apiKey);
+      
+      // 사용자 객체 업데이트 전 다시 확인
+      if (_user == null || !mounted) return;
+      
+      try {
+        _user = _user!.copyWith(apiKey: apiKey);
+      } catch (e) {
+        debugPrint('사용자 모델 업데이트 중 오류: $e');
+        // 모델 업데이트 실패 시에도 API 키는 저장됨
+      }
+      
+      if (mounted) notifyListeners();
     } catch (e) {
+      if (!mounted) return;
       debugPrint('API 키 업데이트 오류: $e');
       _setError('API 키 업데이트에 실패했습니다.');
+    } finally {
+      if (mounted) _setLoading(false);
     }
   }
   
   /// API 키 가져오기
   Future<String?> getApiKey() async {
+    if (!mounted) return null;
+    
     try {
-      if (_user == null || _user!.uid.isEmpty) return null;
-      final uid = _user!.uid;
-      return await _apiKeyService.getApiKey(uid);
+      // 사용자 객체가 null인 경우
+      if (_user == null) return null;
+      
+      final userId = _user!.uid;
+      if (userId.isEmpty) return null;
+      
+      // 이미 모델에 API 키가 있으면 바로 반환
+      if (_user!.apiKey != null && _user!.apiKey!.isNotEmpty) {
+        return _user!.apiKey;
+      }
+      
+      // API 키 서비스에서 가져오기
+      final apiKey = await _apiKeyService.getApiKey(userId);
+      
+      // 모델 업데이트 (필요한 경우)
+      if (apiKey != null && apiKey.isNotEmpty && _user != null && mounted) {
+        try {
+          _user = _user!.copyWith(apiKey: apiKey);
+          notifyListeners();
+        } catch (e) {
+          debugPrint('API 키로 사용자 모델 업데이트 중 오류: $e');
+          // 모델 업데이트 실패 시에도 API 키는 반환
+        }
+      }
+      
+      return apiKey;
     } catch (e) {
       debugPrint('API 키 가져오기 오류: $e');
       return null;
@@ -419,5 +503,11 @@ class AuthViewModel extends ChangeNotifier {
       default:
         return '인증 오류가 발생했습니다: $errorCode';
     }
+  }
+  
+  @override
+  void dispose() {
+    _mounted = false;
+    super.dispose();
   }
 } 

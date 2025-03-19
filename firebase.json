@@ -33,28 +33,28 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(pdf|PDF)",
+        "source": "/**",
         "headers": [
           {
-            "key": "Access-Control-Allow-Origin",
-            "value": "*"
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
           },
           {
-            "key": "Access-Control-Allow-Methods",
-            "value": "GET, HEAD, OPTIONS"
+            "key": "Pragma",
+            "value": "no-cache"
           },
           {
-            "key": "Access-Control-Allow-Headers",
-            "value": "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization"
+            "key": "Expires",
+            "value": "0"
           }
         ]
       },
       {
-        "source": "**",
+        "source": "**/*.@(js|html)",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "max-age=3600"
+            "value": "max-age=0, no-cache"
           }
         ]
       }

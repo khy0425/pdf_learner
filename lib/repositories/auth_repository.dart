@@ -6,7 +6,21 @@ import '../services/web_firebase_initializer.dart';
 /// 인증 관련 데이터 액세스를 담당하는 Repository 클래스
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  late final GoogleSignIn _googleSignIn;
+  
+  // 생성자에서 GoogleSignIn 초기화
+  AuthRepository() {
+    if (kIsWeb) {
+      // 웹 환경에서는 클라이언트 ID를 명시적으로 사용하지 않음 
+      // (HTML의 meta 태그에서 자동으로 가져옴)
+      _googleSignIn = GoogleSignIn();
+      debugPrint('웹 환경에서 GoogleSignIn 초기화 완료');
+    } else {
+      // 모바일 환경에서는 일반적인 방법으로 초기화
+      _googleSignIn = GoogleSignIn();
+      debugPrint('모바일 환경에서 GoogleSignIn 초기화 완료');
+    }
+  }
   
   /// 현재 로그인된 사용자 가져오기
   User? get currentUser {
@@ -115,6 +129,10 @@ class AuthRepository {
         
         // 웹 환경에서는 Firebase Auth의 팝업 방식 사용
         final googleProvider = GoogleAuthProvider();
+        // 사용자 프로필, 이메일 권한 요청
+        googleProvider.addScope('profile');
+        googleProvider.addScope('email');
+        
         final userCredential = await _auth.signInWithPopup(googleProvider);
         
         debugPrint('웹 환경에서 Google 로그인 성공: ${userCredential.user?.uid}');
@@ -163,12 +181,18 @@ class AuthRepository {
   
   /// 로그아웃
   Future<void> signOut() async {
-    if (kIsWeb) {
-      await WebFirebaseInitializer.signOut();
-    } else {
-      await _googleSignIn.signOut();
+    try {
+      if (kIsWeb) {
+        await WebFirebaseInitializer.signOut();
+      } else {
+        await _googleSignIn.signOut();
+      }
+      await _auth.signOut();
+    } catch (e) {
+      debugPrint('로그아웃 오류: $e');
+      // 오류가 발생해도 로그아웃 시도
+      await _auth.signOut();
     }
-    await _auth.signOut();
   }
   
   /// 사용자 프로필 업데이트

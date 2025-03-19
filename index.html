@@ -6,6 +6,7 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="AI PDF Study Assistant - PDF 학습을 위한 스마트 도우미">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- 모바일 웹앱 설정 - 두 태그 모두 포함 -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -23,7 +24,7 @@
   <!-- CSP(Content Security Policy) 설정 -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com/ https://apis.google.com/ 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://pdf-learner.firebaseapp.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com;">
 
-  <!-- 로그 제어 스크립트 (Firebase 로그 및 기타 디버그 출력 제어) -->
+  <!-- 로그 제어 스크립트 -->
   <script src="js/logger.js"></script>
 
   <!-- 전역 변수 정의 -->
@@ -34,6 +35,10 @@
     
     // Flutter 웹 렌더러 설정 - HTML로 변경
     window.flutterWebRenderer = "html";
+    
+    // 성능 향상을 위한 설정
+    window.isFlutterInAppWebView = false;
+    window.flutterCanvasKit = false;
   </script>
 
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
@@ -41,7 +46,6 @@
   
   <!-- 리소스 사전 로드 -->
   <link rel="preload" href="main.dart.js" as="script">
-  <link rel="preload" href="js/firebase-config.js" as="script">
   
   <title>PDF Learner</title>
   <link rel="manifest" href="manifest.json">
@@ -153,14 +157,7 @@
     }
   </style>
 
-  <!-- Firebase SDK - CDN 버전 -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
-  
-  <!-- Firebase 설정 파일 (별도 파일로 분리) -->
+  <!-- Firebase 설정 파일 (별도 파일로 분리) - 먼저 로드 -->
   <script src="js/firebase-config.js"></script>
   
   <script>
@@ -250,244 +247,259 @@
                 isAnonymous: false
               };
             }
-          } catch (e) {
-            log('세션 토큰 디코딩 오류: ' + e);
-            Cookies.delete('user_session');
+          } catch (error) {
+            log('세션 쿠키 디코딩 오류: ' + error);
           }
         }
         
-        log('사용자 정보를 찾을 수 없음');
+        // 3. 로그인된 사용자 없음
+        log('로그인된 사용자 없음');
+        return null;
+      } catch (error) {
+        log('사용자 정보 가져오기 오류: ' + error);
+        return null;
+      }
+    };
+    
+    // Firebase 초기화 상태 확인 함수
+    window.checkFirebaseStatus = function() {
+      try {
+        const initialized = typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0;
+        let userLoggedIn = false;
+        let userId = null;
+        
+        if (initialized && firebase.auth) {
+          const user = firebase.auth().currentUser;
+          userLoggedIn = user !== null;
+          userId = user ? user.uid : null;
+        }
+        
         return {
-          uid: '',
-          email: '',
-          displayName: '',
-          isAnonymous: true
+          initialized: initialized,
+          userLoggedIn: userLoggedIn,
+          userId: userId
         };
-      } catch (e) {
-        console.error('사용자 정보 가져오기 오류: ' + e);
-        return {
-          uid: '',
-          email: '',
-          displayName: '',
-          isAnonymous: true
-        };
+      } catch (error) {
+        log('Firebase 상태 확인 오류: ' + error);
+        return { initialized: false, userLoggedIn: false, userId: null };
       }
     };
-    
-    // 사용자 로그아웃 함수
-    window.logoutUser = function() {
-      try {
-        // Firebase 로그아웃
-        if (typeof firebase !== 'undefined' && firebase.auth) {
-          firebase.auth().signOut().then(() => {
-            log('Firebase 로그아웃 성공');
-          }).catch((error) => {
-            console.error('Firebase 로그아웃 오류: ' + error);
-          });
-        }
-        
-        // 세션 쿠키 삭제
-        Cookies.delete('user_session');
-        log('사용자 세션이 삭제되었습니다');
-        
-        return true;
-      } catch (e) {
-        console.error('로그아웃 오류: ' + e);
-        return false;
-      }
-    };
+  </script>
+</head>
+<body>
+  <!-- 로딩 UI -->
+  <div id="loading">
+    <div style="text-align: center;">
+      <div class="loader"></div>
+      <p class="loading-text">PDF Learner 로딩 중...</p>
+    </div>
+  </div>
+  
+  <!-- 오류 UI -->
+  <div id="error-ui">
+    <div class="error-title">문제가 발생했습니다</div>
+    <div class="error-message">앱 로딩 중 오류가 발생했습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.</div>
+    <button class="error-button" onclick="window.location.reload()">새로고침</button>
+  </div>
 
-    window.pdfl.getCurrentFirebaseUser = function() {
-      return window.getUserDetails();
-    };
+  <!-- Flutter 컨테이너 -->
+  <div id="flutter_target" class="flutter-container"></div>
 
-    window.pdfl.getStoredUserInfo = function() {
-      return window.getUserDetails();
-    };
+  <!-- Flutter.js 로딩 - 최적화된 방식 -->
+  <script>
+    // Flutter.js 로딩 시간 모니터링
+    const flutterJsLoadStart = performance.now();
     
-    window.pdfl.hideLoading = function() {
-      var loading = document.getElementById('loading');
-      if (loading) {
-        loading.style.opacity = '0';
-        setTimeout(function() {
-          loading.style.display = 'none';
-        }, 500);
-        if (DEBUG) log('로딩 화면을 숨겼습니다.');
+    // 타임아웃 설정
+    const FLUTTER_LOAD_TIMEOUT = 15000; // 15초 (이전 30초에서 단축)
+    
+    // Flutter.js 로드에 실패할 경우 대체 방법
+    let flutterLoadTimeout = setTimeout(() => {
+      console.warn(FLUTTER_LOAD_TIMEOUT + '밀리초 타임아웃 후 대체 방법 시도 중...');
+      
+      // 1. 로딩 중인 스크립트 중단
+      const oldScript = document.querySelector('script[src="flutter.js"]');
+      if (oldScript) {
+        oldScript.remove();
       }
-    };
+      
+      // 2. 캐싱 방지를 위해 버전 파라미터 추가하여 다시 로드
+      loadFlutterWithFallback();
+    }, FLUTTER_LOAD_TIMEOUT);
     
-    // Flutter 엔진 초기화 함수
-    window.pdfl.initializeFlutter = function() {
-      if (DEBUG) log('Flutter 엔진 초기화 시작');
-      try {
-        var flutterTarget = document.getElementById('flutter_target');
-        if (!flutterTarget) {
-          if (DEBUG) log('오류: flutter_target 요소를 찾을 수 없습니다');
-          return;
-        }
+    // Flutter 로드 함수
+    function loadFlutter() {
+      // 스크립트 동적 생성
+      const script = document.createElement('script');
+      script.src = "flutter.js";
+      script.defer = true;
+      
+      // 로드 이벤트 핸들러 (성공)
+      script.onload = function() {
+        clearTimeout(flutterLoadTimeout);
+        const flutterJsLoadTime = performance.now() - flutterJsLoadStart;
+        console.log(`Flutter.js 로드 완료 (${flutterJsLoadTime.toFixed(2)}ms)`);
         
-        // 화면 표시 확인
-        flutterTarget.style.display = 'block';
-        flutterTarget.style.visibility = 'visible';
-        flutterTarget.style.opacity = '1';
-        flutterTarget.style.position = 'absolute';
-        flutterTarget.style.top = '0';
-        flutterTarget.style.left = '0';
-        flutterTarget.style.width = '100%';
-        flutterTarget.style.height = '100%';
-        flutterTarget.style.zIndex = '2';
-        
-        if (DEBUG) log('Flutter 타겟 스타일 설정 완료');
-      } catch (e) {
-        if (DEBUG) log('Flutter 엔진 초기화 오류: ' + e);
-      }
-    };
-    
-    // 페이지 로드 시 초기화
-    window.addEventListener('load', function(ev) {
-      if (DEBUG) log('페이지 로드됨');
-      
-      // Firebase 설정 로드 및 초기화
-      try {
-        // firebase-config.js에서 로드된 설정 사용
-        if (typeof firebaseConfig !== 'undefined') {
-          firebase.initializeApp(firebaseConfig);
-          
-          // 로깅 최소화 설정
-          if (typeof firebase.analytics === 'function') {
-            // Analytics 로깅 설정
-            firebase.analytics().setAnalyticsCollectionEnabled(true);
-            firebase.analytics().logEvent('app_initialized', { 
-              type: 'web',
-              timestamp: new Date().toISOString()
-            });
-            
-            // 개발자 콘솔에 로그 최소화
-            if (typeof firebase.database !== 'undefined' && firebase.database().enableLogging) {
-              firebase.database().enableLogging(false);
-            }
-          }
-          
-          if (DEBUG) log('Firebase 초기화 완료');
-        } else {
-          console.error('Firebase 설정을 찾을 수 없습니다.');
-        }
-      } catch (e) {
-        if (DEBUG) log('Firebase 초기화 오류: ' + e);
-      }
-      
-      // 페이지 배경 설정
-      document.body.style.backgroundColor = '#FFFFFF';
-      
-      // Flutter 초기화
-      window.pdfl.initializeFlutter();
-      
-      // Flutter 초기화 완료 이벤트 리스너
-      window.addEventListener('flutter-first-frame', function() {
-        if (DEBUG) log('Flutter 렌더링 시작 - 첫 프레임 도착');
-        window.pdfl.hideLoading();
-      });
-      
-      // 1초 후 Flutter 엔진 상태 확인
-      setTimeout(function() {
-        var flutterTarget = document.getElementById('flutter_target');
-        if (flutterTarget && flutterTarget.children.length === 0) {
-          if (DEBUG) log('경고: Flutter 엔진이 요소를 생성하지 않았습니다. 다시 시도합니다.');
-          window.pdfl.initializeFlutter();
-        }
-      }, 1000);
-      
-      // 2초 후 리사이즈 이벤트만 발생시키고 로그는 출력하지 않음
-      setTimeout(function() {
-        window.dispatchEvent(new Event('resize'));
-      }, 2000);
-      
-      // 보안 타임아웃 - 30초 후에도 Flutter가 로드되지 않으면 강제로 로딩화면 숨김
-      setTimeout(function() {
-        window.pdfl.hideLoading();
-      }, 30000);
-
-      // 렌더링 최적화 옵션 설정
-      // 1. WebAssembly 및 메모리 설정
-      const FLUTTER_WEB_CANVASKIT_URL = "https://www.gstatic.com/flutter-canvaskit/9ae33882c6053effe6a0576118a54d41a19655b1/";
-      const FLUTTER_MEMORY_ALLOCATIONS = {
-        'initial': 50 * 1024 * 1024, // 초기 메모리 할당 (50MB)
-        'maximum': 256 * 1024 * 1024, // 최대 메모리 할당 (256MB)
+        // Flutter 앱 초기화
+        initFlutterApp();
       };
       
-      // JavaScript 메모리 설정
-      try {
-        console.log("메모리 설정 적용");
-        // 이벤트 핸들러에서 메모리 오류 발생 시 처리
-        window.addEventListener('error', function(e) {
-          if (e && e.message && e.message.includes('memory') || e.message.includes('null')) {
-            console.error('메모리 또는 null 오류 발생:', e.message);
-            // 사용자에게 오류 표시 (필요시)
-            document.body.innerHTML += '<div style="position:fixed;top:20px;right:20px;background:white;padding:10px;border:1px solid red;z-index:9999;">로딩 오류가 발생했습니다. 페이지를 새로고침 해주세요.</div>';
-          }
-        });
-      } catch (e) {
-        console.warn('메모리 설정 적용 실패', e);
-      }
+      // 오류 이벤트 핸들러 (실패)
+      script.onerror = function() {
+        console.error('Flutter.js 로드 오류, 대체 방법 시도 중...');
+        clearTimeout(flutterLoadTimeout);
+        loadFlutterWithFallback();
+      };
       
-      // Download main.dart.js
+      document.body.appendChild(script);
+    }
+    
+    // 대체 방법 사용하여 Flutter 로드
+    function loadFlutterWithFallback() {
+      // 파라미터를 추가하여 캐싱 방지
+      const timestamp = new Date().getTime();
+      const script = document.createElement('script');
+      script.src = `flutter.js?v=${timestamp}`;
+      script.defer = true;
+      
+      script.onload = function() {
+        console.log('대체 방법으로 Flutter.js 로드 성공');
+        initFlutterApp();
+      };
+      
+      script.onerror = function() {
+        console.error('Flutter.js 로드 지속 실패');
+        // 오류 UI 표시
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-ui').style.display = 'flex';
+      };
+      
+      document.body.appendChild(script);
+    }
+    
+    // Flutter 앱 초기화
+    function initFlutterApp() {
       _flutter.loader.loadEntrypoint({
         serviceWorker: {
-          serviceWorkerVersion: "null",
+          serviceWorkerVersion: serviceWorkerVersion,
         },
-        onEntrypointLoaded: function(engineInitializer) {
-          engineInitializer.initializeEngine({
-            // 메모리 설정 적용
-            canvasKitBaseUrl: FLUTTER_WEB_CANVASKIT_URL,
-            // 기타 옵션 추가
-          }).then(function(appRunner) {
+        onEntrypointLoaded: async function(engineInitializer) {
+          const appRunner = await engineInitializer.initializeEngine({
+            renderer: 'html',
+            useColorEmoji: true
+          });
+          
+          // Firebase SDK 지연 로드
+          loadFirebaseSDKs().then(() => {
+            console.log('Firebase SDK 로드 완료');
+            appRunner.runApp();
+          }).catch((error) => {
+            console.error('Firebase SDK 로드 오류:', error);
+            // Firebase 없이도 앱 실행 시도
             appRunner.runApp();
           });
         }
       });
-    });
-  </script>
-</head>
-<body>
-  <!-- 로딩 화면 -->
-  <div id="loading">
-    <div style="text-align: center;">
-      <div class="loader"></div>
-      <div class="loading-text">PDF Learner 로딩 중...</div>
-    </div>
-  </div>
-
-  <!-- 오류 UI -->
-  <div id="error-ui">
-    <div class="error-title">앱 로드 중 오류 발생</div>
-    <div class="error-message">앱을 로드하는 데 문제가 발생했습니다.</div>
-    <button class="error-button" onclick="location.reload()">다시 시도</button>
-  </div>
-
-  <!-- Flutter 앱 컨테이너 -->
-  <div id="flutter_target"></div>
-  
-  <!-- Flutter 웹 앱 -->
-  <script src="flutter.js" defer></script>
-  <script>
-    // Flutter 초기화 코드
-    window._flutter = {
-      loader: {
-        didCreateEngineInitializer: function(engineInitializer) {
-          if (DEBUG) log('Flutter 엔진 초기화 객체 생성됨');
-          engineInitializer.initializeEngine({
-            // 명시적으로 hostElement 설정
-            hostElement: document.getElementById('flutter_target')
-          }).then(function(engineInstance) {
-            if (DEBUG) log('Flutter 엔진 인스턴스 생성됨');
-            engineInstance.runApp();
+    }
+    
+    // Firebase SDK 지연 로드 함수
+    function loadFirebaseSDKs() {
+      return new Promise((resolve, reject) => {
+        try {
+          // 이미 로드되었는지 확인
+          if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
+            console.log('Firebase SDK 이미 로드됨');
+            return resolve();
+          }
+          
+          // 필수 SDK만 먼저 로드 (auth와 core)
+          const requiredScripts = [
+            { src: 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js' },
+            { src: 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js' }
+          ];
+          
+          // 나머지 SDK는 지연 로드
+          const secondaryScripts = [
+            { src: 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js', id: 'firebase-firestore' },
+            { src: 'https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js', id: 'firebase-storage' },
+            { src: 'https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js', id: 'firebase-analytics' }
+          ];
+          
+          // 필수 SDK 로드 (동기식)
+          let loaded = 0;
+          
+          // 각 필수 스크립트 로드
+          requiredScripts.forEach((scriptInfo) => {
+            const script = document.createElement('script');
+            script.src = scriptInfo.src;
+            
+            script.onload = () => {
+              loaded++;
+              if (loaded === requiredScripts.length) {
+                // 필수 스크립트 로드 완료, Firebase 초기화
+                try {
+                  // 아직 초기화되지 않았다면 초기화
+                  if (firebase.apps.length === 0) {
+                    firebase.initializeApp(firebaseConfig);
+                  }
+                  
+                  // 나머지 SDK 비동기 로드 시작 (백그라운드)
+                  loadSecondaryScripts();
+                  
+                  // 초기화 완료
+                  resolve();
+                } catch (error) {
+                  console.error('Firebase 초기화 오류:', error);
+                  reject(error);
+                }
+              }
+            };
+            
+            script.onerror = (error) => {
+              console.error('Firebase SDK 로드 오류:', error);
+              reject(error);
+            };
+            
+            document.head.appendChild(script);
           });
+          
+          // 나머지 SDK 비동기 로드 함수
+          function loadSecondaryScripts() {
+            secondaryScripts.forEach((scriptInfo) => {
+              const script = document.createElement('script');
+              script.src = scriptInfo.src;
+              script.id = scriptInfo.id;
+              script.async = true;
+              
+              // 개별 SDK 로드 완료 시 트리거 함수 등록
+              script.onload = () => {
+                if (scriptInfo.id === 'firebase-firestore') {
+                  if (window.ff_trigger_firebase_firestore) {
+                    window.ff_trigger_firebase_firestore();
+                  }
+                } else if (scriptInfo.id === 'firebase-storage') {
+                  if (window.ff_trigger_firebase_storage) {
+                    window.ff_trigger_firebase_storage();
+                  }
+                } else if (scriptInfo.id === 'firebase-analytics') {
+                  if (window.ff_trigger_firebase_analytics) {
+                    window.ff_trigger_firebase_analytics();
+                  }
+                }
+              };
+              
+              document.head.appendChild(script);
+            });
+          }
+        } catch (error) {
+          console.error('Firebase SDK 로드 준비 오류:', error);
+          reject(error);
         }
-      }
-    };
+      });
+    }
+    
+    // Flutter 로딩 시작
+    loadFlutter();
   </script>
-  
-  <!-- main.dart.js 로드 -->
-  <script src="main.dart.js" type="application/javascript"></script>
 </body>
 </html> 
