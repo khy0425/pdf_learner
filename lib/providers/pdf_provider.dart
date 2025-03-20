@@ -166,13 +166,29 @@ class PdfFileInfo {
   
   // Firestore 데이터로부터 객체 생성
   factory PdfFileInfo.fromFirestore(Map<String, dynamic> data, String docId) {
+    DateTime createdAt;
+    try {
+      if (data['timestamp'] is Timestamp) {
+        createdAt = (data['timestamp'] as Timestamp).toDate();
+      } else if (data['createdAt'] is Timestamp) {
+        createdAt = (data['createdAt'] as Timestamp).toDate();
+      } else if (data['timestamp'] != null) {
+        createdAt = DateTime.parse(data['timestamp'].toString());
+      } else if (data['createdAt'] != null) {
+        createdAt = DateTime.parse(data['createdAt'].toString());
+      } else {
+        createdAt = DateTime.now();
+      }
+    } catch (e) {
+      debugPrint('Firestore 날짜 파싱 오류: $e');
+      createdAt = DateTime.now();
+    }
+
     return PdfFileInfo(
       id: data['createdAt']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
       fileName: data['fileName'] ?? '알 수 없는 PDF',
       url: data['url'],
-      createdAt: data['timestamp'] != null
-          ? (data['timestamp'] as Timestamp).toDate()
-          : DateTime.now(),
+      createdAt: createdAt,
       fileSize: data['fileSize'] ?? data['size'] ?? 0, // 이전 버전 호환성을 위해 size도 체크
       userId: data['userId'] ?? '',
       firestoreId: docId,

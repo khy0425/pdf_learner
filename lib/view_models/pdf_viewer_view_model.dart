@@ -50,16 +50,19 @@ class PdfViewerViewModel extends ChangeNotifier {
       _clearError();
       
       if (pdfId.isEmpty) {
+        debugPrint('PDF ID가 비어 있습니다.');
         throw Exception('유효하지 않은 PDF ID입니다.');
       }
       
       final pdfData = await _pdfViewModel.getPdfData(pdfId);
       
       if (pdfData == null) {
+        debugPrint('가져온 PDF 데이터가 null입니다.');
         throw Exception('PDF 데이터를 불러올 수 없습니다.');
       }
       
       if (pdfData.isEmpty) {
+        debugPrint('가져온 PDF 데이터가 비어 있습니다.');
         throw Exception('PDF 데이터가 비어 있습니다.');
       }
       

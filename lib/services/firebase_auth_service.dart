@@ -168,7 +168,7 @@ class FirebaseAuthService with ChangeNotifier {
         final credential = await _auth.signInWithPopup(googleProvider);
         _user = credential.user;
       } else {
-        // 네이티브 환경에서 구글 로그인
+        // 네이티브 환경에서 구글 로그인 (기존 코드 유지)
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         
         if (googleUser == null) {

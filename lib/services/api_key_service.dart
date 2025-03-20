@@ -78,6 +78,19 @@ class ApiKeyService {
   Future<String?> getApiKey(String userId) async {
     try {
       debugPrint('API 키 조회 시작: $userId');
+      
+      // 유료 회원인지 확인
+      final isPremiumUser = await _checkPremiumStatus(userId);
+      if (isPremiumUser) {
+        debugPrint('유료 회원이므로 내부 API 키 사용');
+        // 환경 변수에서 내부 API 키 가져오기 시도
+        final internalApiKey = dotenv.env['GEMINI_API_KEY'];
+        if (internalApiKey != null && internalApiKey.isNotEmpty) {
+          debugPrint('내부 API 키 사용');
+          return internalApiKey;
+        }
+      }
+      
       String? encryptedApiKey;
       
       // 보안 스토리지에서 조회 (웹이 아닌 경우만)
@@ -242,5 +255,29 @@ class ApiKeyService {
       debugPrint('API 키 복호화 오류: $e');
       return encryptedApiKey; // 오류 발생 시 원본 반환
     }
+  }
+  
+  /// 사용자 구독 상태 확인
+  Future<bool> _checkPremiumStatus(String userId) async {
+    try {
+      // Firestore에서 사용자 정보 확인
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (doc.exists && doc.data() != null) {
+        final userData = doc.data()!;
+        
+        // subscription 필드 확인
+        final subscription = userData['subscription'] as String?;
+        return subscription == 'premium' || subscription == 'pro';
+      }
+      return false;
+    } catch (e) {
+      debugPrint('구독 상태 확인 오류: $e');
+      return false;
+    }
+  }
+  
+  /// 유료 회원 여부 확인
+  Future<bool> isPremiumUser(String userId) async {
+    return _checkPremiumStatus(userId);
   }
 } 

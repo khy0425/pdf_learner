@@ -51,12 +51,48 @@ class PdfRepository {
   /// 로컬 파일에서 PDF 업로드
   Future<PdfFileInfo> uploadPdfFile(File file, String fileName, int fileSize, String userId) async {
     try {
+      if (userId.isEmpty) {
+        throw Exception('유효하지 않은 사용자 ID입니다.');
+      }
+      
+      if (!await file.exists()) {
+        throw Exception('파일이 존재하지 않습니다.');
+      }
+      
       // 스토리지에 파일 업로드
       final fileId = _uuid.v4();
       final storagePath = 'pdfs/$userId/$fileId.pdf';
       final storageRef = _storage.ref().child(storagePath);
       
-      final uploadTask = storageRef.putFile(file);
+      // 파일 데이터 읽기
+      Uint8List fileBytes;
+      try {
+        fileBytes = await file.readAsBytes();
+      } catch (e) {
+        debugPrint('파일 읽기 오류: $e');
+        throw Exception('파일을 읽을 수 없습니다: $e');
+      }
+      
+      if (fileBytes.isEmpty) {
+        throw Exception('파일 데이터가 비어 있습니다');
+      }
+      
+      // 웹에서는 putData, 네이티브에서는 putFile 사용
+      UploadTask uploadTask;
+      try {
+        if (kIsWeb) {
+          uploadTask = storageRef.putData(
+            fileBytes, 
+            SettableMetadata(contentType: 'application/pdf')
+          );
+        } else {
+          uploadTask = storageRef.putFile(file);
+        }
+      } catch (e) {
+        debugPrint('업로드 작업 생성 오류: $e');
+        throw Exception('파일 업로드를 위한 작업을 생성할 수 없습니다: $e');
+      }
+      
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
       

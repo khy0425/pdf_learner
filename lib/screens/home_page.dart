@@ -21,6 +21,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../views/auth/gemini_api_tutorial_view.dart';
+import '../services/api_key_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -361,66 +362,93 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       builder: (context, authService, _) {
         final user = authService.user;
         
-        // 로그인된 경우 프로필 표시
+        // 로그인된 경우 환영 메시지와 프로필 표시
         if (user != null) {
           debugPrint('로그인된 사용자 UI 표시: ${user.uid}');
-          return Container(
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: colorScheme.primary.withOpacity(0.5),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 5,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 2),
+          return Row(
+            children: [
+              // 환영 메시지
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              ],
-            ),
-            child: InkWell(
-              onTap: () => _showUserProfile(context),
-              borderRadius: BorderRadius.circular(30),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    if (user.photoURL != null)
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundImage: NetworkImage(user.photoURL!),
-                      )
-                    else
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundColor: colorScheme.primary.withOpacity(0.2),
-                        child: Text(
-                          user.displayName.isNotEmpty 
-                            ? user.displayName[0].toUpperCase()
-                            : user.email[0].toUpperCase(),
-                          style: TextStyle(
-                            color: colorScheme.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                child: Text(
+                  '환영합니다!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black26,
+                        offset: Offset(0, 1),
+                        blurRadius: 2,
                       ),
-                    const SizedBox(width: 8),
-                    Text(
-                      user.displayName.isNotEmpty ? user.displayName : user.email.split('@')[0],
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 사용자 프로필 버튼
+              Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: colorScheme.primary.withOpacity(0.5),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 5,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
+                child: InkWell(
+                  onTap: () => _showUserProfile(context),
+                  borderRadius: BorderRadius.circular(30),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        if (user.photoURL != null)
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundImage: NetworkImage(user.photoURL!),
+                          )
+                        else
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: colorScheme.primary.withOpacity(0.2),
+                            child: Text(
+                              _getUserInitial(user),
+                              style: TextStyle(
+                                color: colorScheme.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _getUserDisplayName(user),
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           );
         }
         
@@ -464,6 +492,27 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         );
       },
     );
+  }
+  
+  // 사용자 이니셜 가져오기
+  String _getUserInitial(User user) {
+    if (user.displayName != null && user.displayName!.isNotEmpty) {
+      return user.displayName![0].toUpperCase();
+    } else if (user.email != null && user.email!.isNotEmpty) {
+      return user.email![0].toUpperCase();
+    }
+    return '?';
+  }
+  
+  // 사용자 표시 이름 가져오기
+  String _getUserDisplayName(User user) {
+    if (user.displayName != null && user.displayName!.isNotEmpty) {
+      return user.displayName!;
+    } else if (user.email != null && user.email!.isNotEmpty) {
+      final emailParts = user.email!.split('@');
+      return emailParts[0];
+    }
+    return '사용자';
   }
   
   // 정보 버튼
@@ -971,7 +1020,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           // 상단 통계 카드
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: StatsCard(pdfProvider: pdfProvider),
+            child: Column(
+              children: [
+                StatsCard(pdfProvider: pdfProvider),
+                const SizedBox(height: 16),
+                // API 키 상태 카드 추가
+                _buildApiKeyStatusCard(colorScheme),
+              ],
+            ),
           ),
           
           const SizedBox(height: 24),
@@ -1262,5 +1318,204 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         );
       },
     );
+  }
+
+  // API 키 상태 카드
+  Widget _buildApiKeyStatusCard(ColorScheme colorScheme) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getApiKeyStatusData(),
+      builder: (context, snapshot) {
+        final bool hasApiKey = snapshot.hasData && snapshot.data != null && snapshot.data!['apiKey'] != null;
+        final bool isPremium = snapshot.hasData && snapshot.data != null && snapshot.data!['isPremium'] == true;
+        
+        String apiKeyStatus;
+        if (isPremium) {
+          apiKeyStatus = '유료 회원은 자동으로 API 키가 제공됩니다';
+        } else if (hasApiKey) {
+          apiKeyStatus = '설정됨: ${snapshot.data!['apiKey']}';
+        } else {
+          apiKeyStatus = '아직 API 키가 설정되지 않았습니다';
+        }
+        
+        // 배경색과 아이콘 설정
+        Color bgColorStart, bgColorEnd, iconColor;
+        IconData statusIcon;
+        
+        if (isPremium) {
+          bgColorStart = Colors.purple.withOpacity(0.2);
+          bgColorEnd = Colors.indigo.withOpacity(0.1);
+          iconColor = Colors.purple;
+          statusIcon = Icons.workspace_premium;
+        } else if (hasApiKey) {
+          bgColorStart = Colors.green.withOpacity(0.2);
+          bgColorEnd = Colors.teal.withOpacity(0.1);
+          iconColor = Colors.green;
+          statusIcon = Icons.verified;
+        } else {
+          bgColorStart = Colors.orange.withOpacity(0.2);
+          bgColorEnd = Colors.amber.withOpacity(0.1);
+          iconColor = Colors.orange;
+          statusIcon = Icons.info_outline;
+        }
+        
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [bgColorStart, bgColorEnd],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 5,
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    statusIcon,
+                    color: iconColor,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isPremium ? '프리미엄 API 액세스' : 'API 키 상태',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    SizedBox(
+                      width: 16, 
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                apiKeyStatus,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isPremium 
+                    ? Colors.purple.shade800
+                    : (hasApiKey ? Colors.green.shade800 : Colors.orange.shade800),
+                  fontWeight: hasApiKey || isPremium ? FontWeight.normal : FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (!isPremium) // 유료 회원이 아닌 경우에만 버튼 표시
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const GeminiApiTutorialView(
+                                onClose: null,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.key, size: 18),
+                        label: Text(
+                          hasApiKey ? 'API 키 관리' : 'API 키 발급받기',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: hasApiKey ? Colors.teal : Colors.orange,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              if (isPremium) // 유료 회원인 경우 정보 메시지 표시
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        color: Colors.purple,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          '프리미엄 회원은 자체 API 키가 필요하지 않습니다',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.purple.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  // API 키 상태 및 회원 등급 정보 가져오기
+  Future<Map<String, dynamic>> _getApiKeyStatusData() async {
+    try {
+      final result = <String, dynamic>{
+        'apiKey': null,
+        'isPremium': false,
+      };
+      
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return result;
+      
+      final apiKeyService = Provider.of<ApiKeyService>(context, listen: false);
+      
+      // 유료 회원 여부 확인
+      result['isPremium'] = await apiKeyService.isPremiumUser(currentUser.uid);
+      
+      // API 키 확인 (유료 회원이 아닌 경우에도 확인)
+      final apiKey = await apiKeyService.getApiKey(currentUser.uid);
+      if (apiKey != null && apiKey.isNotEmpty) {
+        result['apiKey'] = apiKeyService.maskApiKey(apiKey);
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('API 키 상태 확인 오류: $e');
+      return {
+        'apiKey': null,
+        'isPremium': false,
+      };
+    }
   }
 } 

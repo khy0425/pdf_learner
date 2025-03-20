@@ -254,7 +254,10 @@ class AuthViewModel extends ChangeNotifier {
       _setLoading(true);
       _error = null;
       
-      await _authRepository.signInWithGoogle();
+      // 웹 환경에서는 리디렉트 처리로 인해 UserCredential 대신 void를 반환할 수 있음
+      final userCredential = await _authRepository.signInWithGoogle();
+      // 사용자가 성공적으로 로그인한 경우, 상태 업데이트는 authStateChanges에서 처리됨
+      debugPrint('구글 로그인 성공: ${userCredential.user?.uid}');
       
     } on FirebaseAuthException catch (e) {
       debugPrint('Google 로그인 오류: ${e.code}');

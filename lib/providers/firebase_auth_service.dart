@@ -312,7 +312,7 @@ class FirebaseAuthService with ChangeNotifier {
           await _loadUserFromFirestore(userCredential.user!.uid);
         }
       } else {
-        // 네이티브 환경에서는 GoogleSignIn 사용
+        // 네이티브 환경에서는 GoogleSignIn 사용 (기존 코드 유지)
         final googleSignIn = GoogleSignIn();
         final googleUser = await googleSignIn.signIn();
         

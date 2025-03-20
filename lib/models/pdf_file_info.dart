@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// PDF 파일 정보를 담는 모델 클래스
 class PdfFileInfo {
@@ -107,14 +108,26 @@ class PdfFileInfo {
   
   /// Map에서 생성
   factory PdfFileInfo.fromMap(Map<String, dynamic> map) {
+    DateTime createdAtDate;
+    try {
+      if (map['createdAt'] is Timestamp) {
+        createdAtDate = (map['createdAt'] as Timestamp).toDate();
+      } else if (map['createdAt'] != null) {
+        createdAtDate = DateTime.parse(map['createdAt']);
+      } else {
+        createdAtDate = DateTime.now();
+      }
+    } catch (e) {
+      debugPrint('날짜 파싱 오류: $e');
+      createdAtDate = DateTime.now();
+    }
+
     return PdfFileInfo(
       id: map['id'] ?? '',
       fileName: map['fileName'] ?? '',
       url: map['url'],
       file: null,
-      createdAt: map['createdAt'] != null 
-          ? DateTime.parse(map['createdAt']) 
-          : DateTime.now(),
+      createdAt: createdAtDate,
       fileSize: map['fileSize'] ?? 0,
       bytes: null,
       userId: map['userId'] ?? '',
