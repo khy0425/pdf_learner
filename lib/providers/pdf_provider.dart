@@ -1,200 +1,20 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:async'; // 타임아웃 예외 사용
-import 'package:file_picker/file_picker.dart';
-import 'dart:typed_data';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:js' as js;
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/storage_service.dart';
-import './subscription_service.dart';  // 같은 디렉토리 내 subscription_service.dart 참조
-
-/// PDF 파일 정보를 담는 모델 클래스
-class PdfFileInfo {
-  final String id;
-  final String fileName;
-  final String? url;
-  final File? file;
-  final DateTime createdAt;
-  final int fileSize;
-  final Uint8List? bytes;  // 웹에서 사용하는 바이트 데이터
-  final String userId;     // 파일 소유자 ID
-  final String? firestoreId; // Firestore 문서 ID
-  
-  PdfFileInfo({
-    required this.id,
-    required this.fileName,
-    this.url,
-    this.file,
-    required this.createdAt,
-    required this.fileSize,
-    this.bytes,
-    required this.userId,
-    this.firestoreId,
-  });
-  
-  bool get isWeb => url != null;
-  bool get isLocal => file != null;
-  bool get hasBytes => bytes != null;
-  bool get isCloudStored => url != null && url!.contains('firebasestorage.googleapis.com');
-  bool get isGuestFile => id.startsWith('guest_') || userId == 'guest_user';
-  
-  // 파일 경로 반환 (로컬 파일인 경우 파일 경로, 웹 파일인 경우 URL)
-  String get path => isLocal ? file!.path : (url ?? '');
-  
-  // 로컬 파일 경로 (웹에서는 null)
-  String? get localPath => isLocal ? file?.path : null;
-  
-  // 클라우드 URL (로컬 파일만 있는 경우 null)
-  String? get cloudUrl => url;
-  
-  // 복사본 생성 메서드 (속성 변경 가능)
-  PdfFileInfo copyWith({
-    String? id,
-    String? fileName,
-    String? url,
-    File? file,
-    DateTime? createdAt,
-    int? fileSize,
-    Uint8List? bytes,
-    String? userId,
-    String? firestoreId,
-    String? cloudUrl,
-  }) {
-    return PdfFileInfo(
-      id: id ?? this.id,
-      fileName: fileName ?? this.fileName,
-      url: cloudUrl ?? url ?? this.url,
-      file: file ?? this.file,
-      createdAt: createdAt ?? this.createdAt,
-      fileSize: fileSize ?? this.fileSize,
-      bytes: bytes ?? this.bytes,
-      userId: userId ?? this.userId,
-      firestoreId: firestoreId ?? this.firestoreId,
-    );
-  }
-  
-  // Bytes 데이터 읽기 메서드
-  Future<Uint8List> readAsBytes() async {
-    if (kDebugMode) {
-      print('[PdfFileInfo] PDF 바이트 읽기 시작 - 파일명: $fileName');
-      print('[PdfFileInfo] 읽기 유형 - hasBytes: $hasBytes, isLocal: $isLocal, isWeb: $isWeb');
-    }
-    
-    if (hasBytes) {
-      if (kDebugMode) {
-        print('[PdfFileInfo] 이미 메모리에 바이트 데이터가 있음: ${bytes!.length} 바이트');
-      }
-      return bytes!;
-    } else if (isLocal && file != null) {
-      try {
-        if (kDebugMode) {
-          print('[PdfFileInfo] 로컬 파일에서 바이트 읽기 시작: ${file!.path}');
-        }
-        final fileBytes = await file!.readAsBytes();
-        if (kDebugMode) {
-          print('[PdfFileInfo] 로컬 파일에서 바이트 읽기 성공: ${fileBytes.length} 바이트');
-        }
-        return fileBytes;
-      } catch (e) {
-        if (kDebugMode) {
-          print('[PdfFileInfo] 로컬 파일에서 바이트 읽기 실패: $e');
-        }
-        throw Exception('로컬 PDF 파일을 읽을 수 없습니다: $e');
-      }
-    } else if (isWeb && url != null) {
-      // URL에서 파일 다운로드
-      try {
-        if (kDebugMode) {
-          print('[PdfFileInfo] URL에서 바이트 다운로드 시작: $url');
-        }
-        final response = await http.get(Uri.parse(url!));
-        if (response.statusCode == 200) {
-          if (kDebugMode) {
-            print('[PdfFileInfo] URL에서 바이트 다운로드 성공: ${response.bodyBytes.length} 바이트');
-          }
-          return response.bodyBytes;
-        } else {
-          if (kDebugMode) {
-            print('[PdfFileInfo] URL에서 바이트 다운로드 실패: 상태 코드 ${response.statusCode}');
-          }
-          throw Exception('PDF 파일을 가져올 수 없습니다 (상태 코드: ${response.statusCode})');
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('[PdfFileInfo] PDF 파일 다운로드 오류: $e');
-        }
-        throw Exception('PDF 파일 다운로드 오류: $e');
-      }
-    } else {
-      if (kDebugMode) {
-        print('[PdfFileInfo] PDF 파일을 읽을 수 없음 - 유효한 파일 정보 없음');
-      }
-      // 기본 빈 PDF 바이트 반환 (오류 방지)
-      return Uint8List.fromList([37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 226, 227, 207, 211, 10]);
-    }
-  }
-  
-  // JSON 변환 메서드
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'fileName': fileName,
-      'url': url,
-      'createdAt': createdAt.toIso8601String(),
-      'fileSize': fileSize,
-      'userId': userId,
-      'firestoreId': firestoreId,
-    };
-  }
-  
-  // JSON에서 객체 생성 메서드
-  factory PdfFileInfo.fromJson(Map<String, dynamic> json) {
-    return PdfFileInfo(
-      id: json['id'],
-      fileName: json['fileName'],
-      url: json['url'],
-      createdAt: DateTime.parse(json['createdAt']),
-      fileSize: json['fileSize'] ?? json['size'] ?? 0, // 이전 버전 호환성을 위해 size도 체크
-      userId: json['userId'] ?? '', // 기존 데이터 호환성 유지
-      firestoreId: json['firestoreId'],
-    );
-  }
-  
-  // Firestore 데이터로부터 객체 생성
-  factory PdfFileInfo.fromFirestore(Map<String, dynamic> data, String docId) {
-    DateTime createdAt;
-    try {
-      if (data['timestamp'] is Timestamp) {
-        createdAt = (data['timestamp'] as Timestamp).toDate();
-      } else if (data['createdAt'] is Timestamp) {
-        createdAt = (data['createdAt'] as Timestamp).toDate();
-      } else if (data['timestamp'] != null) {
-        createdAt = DateTime.parse(data['timestamp'].toString());
-      } else if (data['createdAt'] != null) {
-        createdAt = DateTime.parse(data['createdAt'].toString());
-      } else {
-        createdAt = DateTime.now();
-      }
-    } catch (e) {
-      debugPrint('Firestore 날짜 파싱 오류: $e');
-      createdAt = DateTime.now();
-    }
-
-    return PdfFileInfo(
-      id: data['createdAt']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      fileName: data['fileName'] ?? '알 수 없는 PDF',
-      url: data['url'],
-      createdAt: createdAt,
-      fileSize: data['fileSize'] ?? data['size'] ?? 0, // 이전 버전 호환성을 위해 size도 체크
-      userId: data['userId'] ?? '',
-      firestoreId: docId,
-    );
-  }
-}
+import 'dart:typed_data';
+import '../utils/non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
+import 'package:pdf_learner/services/storage_service.dart';
+import 'package:pdf_learner/services/auth_service.dart';
+import 'package:pdf_learner/services/subscription_service.dart';
+import 'package:pdf_learner/models/pdf_file_info.dart';
 
 class PDFProvider with ChangeNotifier {
   List<PdfFileInfo> _pdfFiles = [];
@@ -205,6 +25,10 @@ class PDFProvider with ChangeNotifier {
   // 서비스 클래스 - Firebase 초기화 이후에 지연 초기화
   StorageService? _storageService;
   SubscriptionService? _subscriptionService;
+  
+  // 사용자 속성
+  bool get isPaidUser => !_currentUserId.startsWith('anonymous_') && _currentUserId.isNotEmpty;
+  bool get isAnonymous => _currentUserId.startsWith('anonymous_') || _currentUserId.isEmpty;
   
   // 생성자
   PDFProvider() {
@@ -400,43 +224,6 @@ class PDFProvider with ChangeNotifier {
   PdfFileInfo? get currentPdf => _currentPdf;
   bool get isLoading => _isLoading;
   String get currentUserId => _currentUserId; // 현재 사용자 ID getter 추가
-  
-  // 유료 사용자인지 확인 (클라우드 동기화 기능 가능 여부)
-  bool get isPaidUser {
-    // 일단 모든 사용자에게 클라우드 동기화 기능 제공 (비로그인 사용자 제외)
-    if (_currentUserId.isEmpty || _currentUserId.startsWith('anonymous_')) {
-      return false;
-    }
-    return true;
-    
-    // 아래는 기존 유료 회원 체크 로직 (현재는 주석 처리)
-    /*
-    if (_subscriptionService == null) {
-      if (kDebugMode) {
-        print('🔴 [PDFProvider] isPaidUser 확인 실패: SubscriptionService가 null입니다');
-      }
-      return false;
-    }
-    
-    bool result = false;
-    try {
-      if (kDebugMode) {
-        print('🟢 [PDFProvider] isPaidUser 확인 시도, SubscriptionService 타입: ${_subscriptionService.runtimeType}');
-      }
-      
-      result = _subscriptionService!.isPaidUser;
-      
-      if (kDebugMode) {
-        print('🟢 [PDFProvider] isPaidUser 확인 결과: $result');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('🔴 [PDFProvider] isPaidUser 오류: $e');
-      }
-    }
-    return result;
-    */
-  }
   
   // 현재 사용자 ID 설정
   void setCurrentUser(String userId) {
@@ -670,128 +457,105 @@ class PDFProvider with ChangeNotifier {
     }
   }
 
-  // PDF 파일 선택
-  Future<void> pickPDF(BuildContext context) async {
+  // 파일 선택 후 PDF 추가 (URL 또는 파일 경로를 통해 추가 가능)
+  Future<void> pickAndAddPdf(BuildContext context, {String? url, String? filePath}) async {
     try {
       _isLoading = true;
       notifyListeners();
       
-      // 익명 사용자 ID 설정 (로그인하지 않은 경우)
-      if (_currentUserId.isEmpty) {
-        // 디바이스 ID나 세션 ID를 활용한 익명 사용자 식별
-        _currentUserId = 'anonymous_${DateTime.now().millisecondsSinceEpoch}';
-        
-        if (kDebugMode) {
-          print('🟠 [PDFProvider] 익명 사용자 ID 생성: $_currentUserId');
-        }
+      if (url != null && url.isNotEmpty) {
+        // URL에서 PDF 추가
+        await _addPdfFromUrl(url, context);
+      } else if (filePath != null && filePath.isNotEmpty) {
+        // 파일 경로에서 PDF 추가
+        await _addPdfFromFile(File(filePath), context);
+      } else {
+        // 파일 선택기를 통해 PDF 추가
+        await _pickAndAddPdf(context);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('PDF 파일 추가 오류: $e');
       }
       
-      // 비로그인 사용자 PDF 추가 횟수 확인
-      if (_currentUserId.startsWith('anonymous_')) {
-        final int anonymousCount = _pdfFiles.where((pdf) => 
-          pdf.userId.startsWith('anonymous_')).length;
-          
-        // 익명 사용자 최대 3개 제한
-        if (anonymousCount >= 3) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('비로그인 사용자는 최대 3개까지 PDF를 추가할 수 있습니다. 더 많은 PDF를 관리하려면 로그인하세요.'),
-              duration: const Duration(seconds: 5),
-              backgroundColor: Colors.orange,
-              action: SnackBarAction(
-                label: '로그인',
-                textColor: Colors.white,
-                onPressed: () {
-                  // TODO: 로그인 화면으로 이동하는 로직 구현
-                  if (kDebugMode) {
-                    print('로그인 기능은 아직 구현되지 않았습니다.');
-                  }
-                },
-              ),
-            ),
-          );
-          _isLoading = false;
-          notifyListeners();
-          return;
-        }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF 파일 추가 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-      
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  // 내부용 파일 선택 메서드
+  Future<void> _pickAndAddPdf(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // 항상 데이터를 가져옴 (웹과 네이티브 모두)
       );
       
-      if (result != null) {
-        final fileName = result.files.single.name;
-        final bytes = result.files.single.bytes;
-        
-        if (bytes != null) {
-          // PDF 파일 크기 제한 (비로그인: 5MB 이하)
-          final bool isAnonymous = _currentUserId.startsWith('anonymous_');
-          final int maxSize = isAnonymous ? 5 * 1024 * 1024 : 50 * 1024 * 1024; // 5MB or 50MB
-          
-          if (isAnonymous && bytes.length > maxSize) {
+      if (result != null && result.files.isNotEmpty) {
+        if (kIsWeb) {
+          // Web에서 파일 처리
+          if (result.files.single.bytes != null) {
+            final bytes = result.files.single.bytes!;
+            final fileName = result.files.single.name;
+            
+            // PDF 객체 생성
+            final id = DateTime.now().millisecondsSinceEpoch.toString();
+            
+            // 클라우드 URL 얻기 시도
+            String? cloudUrl;
+            String? firestoreId;
+            
+            // 유료 사용자인 경우 클라우드에도 저장
+            if (isPaidUser && !isAnonymous) {
+              // Firebase Storage에 업로드
+              cloudUrl = await _storageService?.uploadPdf(fileName, bytes, userId: _currentUserId);
+              firestoreId = await _getFirestoreId(cloudUrl);
+            }
+            
+            // PDF 객체 생성
+            final newPdf = PdfFileInfo(
+              id: id,
+              fileName: fileName,
+              url: cloudUrl,
+              createdAt: DateTime.now(),
+              fileSize: bytes.length,
+              bytes: bytes,
+              userId: _currentUserId,
+              firestoreId: firestoreId,
+            );
+            
+            _pdfFiles.add(newPdf);
+            _currentPdf = newPdf;
+            
+            // 로컬에 PDF 정보 저장
+            await _savePdfs();
+            
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('비로그인 사용자는 5MB 이하의 PDF만 추가할 수 있습니다. 더 큰 파일을 관리하려면 로그인하세요.'),
-                duration: const Duration(seconds: 5),
-                backgroundColor: Colors.orange,
+                content: Text('PDF 파일 "$fileName"이(가) 추가되었습니다${isPaidUser && !isAnonymous ? ' (클라우드 동기화됨)' : ''}'),
+                backgroundColor: Colors.green,
               ),
             );
-            _isLoading = false;
-            notifyListeners();
-            return;
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PDF 파일 데이터를 읽을 수 없습니다.'),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
-          
-          // ID 및 기본 파일 정보 생성
-          final id = DateTime.now().millisecondsSinceEpoch.toString();
-          String? cloudUrl;
-          String? firestoreId;
-          
-          // 유료 사용자인 경우 클라우드에도 저장
-          if (isPaidUser && !isAnonymous) {
-            // Firebase Storage에 업로드
-            cloudUrl = await _storageService?.uploadPdf(fileName, bytes, userId: _currentUserId);
-            firestoreId = await _getFirestoreId(cloudUrl);
-            
-            if (kDebugMode) {
-              print('[PDFProvider] 클라우드 업로드 성공: $cloudUrl');
-            }
-          }
-          
-          // PDF 객체 생성
-          final newPdf = PdfFileInfo(
-            id: id,
-            fileName: fileName,
-            url: cloudUrl ?? (kIsWeb ? null : result.files.single.path),
-            file: kIsWeb ? null : File(result.files.single.path ?? ''),
-            createdAt: DateTime.now(),
-            fileSize: bytes.length,
-            bytes: bytes,
-            userId: _currentUserId,
-            firestoreId: firestoreId,
-          );
-          
-          _pdfFiles.add(newPdf);
-          _currentPdf = newPdf;
-          
-          // 로컬에 PDF 정보 저장
-          await _savePdfs();
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('PDF 파일 "$fileName"이(가) 추가되었습니다${isPaidUser && !isAnonymous ? ' (클라우드 동기화됨)' : ''}'),
-              backgroundColor: Colors.green,
-            ),
-          );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('PDF 파일 데이터를 읽을 수 없습니다.'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          // 모바일에서 파일 처리
+          await _addPdfFromFile(File(result.files.single.path!), context);
         }
       }
     } catch (e) {
@@ -805,9 +569,163 @@ class PDFProvider with ChangeNotifier {
           backgroundColor: Colors.red,
         ),
       );
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    }
+  }
+  
+  // 파일에서 PDF 추가
+  Future<void> _addPdfFromFile(File file, BuildContext context) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final fileName = file.path.split('/').last;
+      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      
+      // 클라우드 URL 얻기 시도
+      String? cloudUrl;
+      String? firestoreId;
+      
+      // 유료 사용자인 경우 클라우드에도 저장
+      if (isPaidUser && !isAnonymous) {
+        // Firebase Storage에 업로드
+        cloudUrl = await _storageService?.uploadPdf(fileName, bytes, userId: _currentUserId);
+        firestoreId = await _getFirestoreId(cloudUrl);
+      }
+      
+      // PDF 객체 생성
+      final newPdf = PdfFileInfo(
+        id: id,
+        fileName: fileName,
+        url: cloudUrl,
+        file: file,
+        createdAt: DateTime.now(),
+        fileSize: bytes.length,
+        bytes: bytes,
+        userId: _currentUserId,
+        firestoreId: firestoreId,
+      );
+      
+      _pdfFiles.add(newPdf);
+      _currentPdf = newPdf;
+      
+      // 로컬에 PDF 정보 저장
+      await _savePdfs();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF 파일 "$fileName"이(가) 추가되었습니다${isPaidUser && !isAnonymous ? ' (클라우드 동기화됨)' : ''}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('PDF 파일 추가 오류: $e');
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF 파일 추가 중 오류가 발생했습니다: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
+  // URL에서 PDF 추가
+  Future<void> _addPdfFromUrl(String url, BuildContext context) async {
+    try {
+      // URL 검증
+      if (!url.toLowerCase().startsWith('http')) {
+        url = 'https://$url';
+      }
+      
+      if (!url.toLowerCase().endsWith('.pdf')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('유효한 PDF URL이 아닙니다. URL은 .pdf로 끝나야 합니다.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // PDF 다운로드
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+        final fileName = url.split('/').last;
+        final id = DateTime.now().millisecondsSinceEpoch.toString();
+        
+        // 클라우드 URL 및 Firestore ID
+        String? cloudUrl = url;
+        String? firestoreId;
+        
+        // 유료 사용자인 경우 Firestore에 저장
+        if (isPaidUser && !isAnonymous) {
+          firestoreId = await _getFirestoreId(url);
+          
+          // Firestore에 메타데이터만 저장 (URL은 이미 있으므로 업로드하지 않음)
+          if (firestoreId == null && _storageService != null) {
+            // Firestore에 메타데이터 직접 저장
+            try {
+              final docRef = await FirebaseFirestore.instance.collection('pdf_files').add({
+                'userId': _currentUserId,
+                'fileName': fileName,
+                'url': url,
+                'fileSize': bytes.length,
+                'createdAt': DateTime.now().millisecondsSinceEpoch,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+              
+              firestoreId = docRef.id;
+            } catch (e) {
+              debugPrint('Firestore에 PDF 메타데이터 저장 오류: $e');
+            }
+          }
+        }
+        
+        // PDF 객체 생성
+        final newPdf = PdfFileInfo(
+          id: id,
+          fileName: fileName,
+          url: cloudUrl,
+          createdAt: DateTime.now(),
+          fileSize: bytes.length,
+          bytes: bytes,
+          userId: _currentUserId,
+          firestoreId: firestoreId,
+        );
+        
+        _pdfFiles.add(newPdf);
+        _currentPdf = newPdf;
+        
+        // 로컬에 PDF 정보 저장
+        await _savePdfs();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF 파일 "$fileName"이(가) 추가되었습니다'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF를 다운로드할 수 없습니다 (상태 코드: ${response.statusCode})'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('URL에서 PDF 추가 오류: $e');
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('URL에서 PDF 추가 중 오류가 발생했습니다: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

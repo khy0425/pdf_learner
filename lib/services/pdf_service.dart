@@ -11,6 +11,7 @@ import '../services/subscription_service.dart';
 import '../services/web_pdf_service.dart';
 import 'dart:convert';
 import 'package:universal_html/html.dart' as html;
+import '../models/pdf_file_info.dart';
 
 class PDFService {
   // 무료 사용자 PDF 크기 제한 (5MB)

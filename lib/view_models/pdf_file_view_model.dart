@@ -298,4 +298,25 @@ class PdfFileViewModel extends ChangeNotifier {
   void _clearError() {
     _errorMessage = null;
   }
+  
+  /// PDF 파일의 페이지 수 반환
+  int getPageCount() {
+    if (_selectedPdf != null && _selectedPdf!.pageCount != null) {
+      return _selectedPdf!.pageCount!;
+    }
+    
+    // 선택된 PDF가 없는 경우 기본값 반환
+    return 15;
+  }
+  
+  /// 파일 ID로 페이지 수 반환
+  int getPageCountById(String pdfId) {
+    try {
+      final pdf = _pdfFiles.firstWhere((pdf) => pdf.id == pdfId);
+      return pdf.pageCount ?? 15;
+    } catch (e) {
+      debugPrint('ID가 $pdfId인 PDF 파일을 찾을 수 없습니다: $e');
+      return 15;
+    }
+  }
 } 

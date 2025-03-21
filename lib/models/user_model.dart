@@ -290,7 +290,7 @@ class UserModel {
     };
   }
 
-  /// JSON으로 변환
+  /// UserModel을 JSON 형식으로 변환
   Map<String, dynamic> toJson() {
     return {
       'uid': uid,

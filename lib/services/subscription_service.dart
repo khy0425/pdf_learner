@@ -56,6 +56,9 @@ class SubscriptionService {
   // 현재 사용자 ID 가져오기
   String get userId => _auth.currentUser?.uid ?? 'anonymous';
 
+  // 유료 사용자 여부
+  bool get isPaidUser => false; // 기본값은 false로 설정
+
   // 구독 상태 확인
   Future<SubscriptionTier> getCurrentTier([String? userId]) async {
     try {

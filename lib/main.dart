@@ -24,8 +24,10 @@ import 'repositories/auth_repository.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/pdf_repository.dart';
 import 'services/api_key_service.dart';
+import 'services/auth_service.dart';
 import 'services/web_firebase_initializer.dart';
-import 'views/home_page.dart';
+import 'providers/pdf_provider.dart';
+import 'screens/home_page.dart';
 import 'views/auth_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -171,7 +173,67 @@ void main() async {
     // Firebase 초기화 실패해도 앱은 계속 실행
   }
   
-  runApp(const MyApp());
+  // 애플리케이션 실행 코드 부분
+  runApp(
+    // Provider 설정
+    MultiProvider(
+      providers: [
+        // API 키 서비스
+        Provider<ApiKeyService>(
+          create: (_) => ApiKeyService(),
+        ),
+        
+        // 인증 서비스
+        ChangeNotifierProvider<AuthService>(
+          create: (_) => AuthService(),
+        ),
+        
+        // 인증 리포지토리
+        Provider<AuthRepository>(
+          create: (_) => AuthRepository(),
+        ),
+        
+        // 유저 리포지토리
+        Provider<UserRepository>(
+          create: (_) => UserRepository(),
+        ),
+        
+        // PDF 리포지토리
+        Provider<PdfRepository>(
+          create: (_) => PdfRepository(),
+        ),
+        
+        // PDF 프로바이더
+        ChangeNotifierProvider<PDFProvider>(
+          create: (_) => PDFProvider(),
+        ),
+        
+        // 인증 뷰모델
+        ChangeNotifierProvider<AuthViewModel>(
+          create: (context) => AuthViewModel(
+            authRepository: Provider.of<AuthRepository>(context, listen: false),
+            userRepository: Provider.of<UserRepository>(context, listen: false),
+            apiKeyService: Provider.of<ApiKeyService>(context, listen: false),
+          ),
+        ),
+        
+        // PDF 뷰모델
+        ChangeNotifierProvider<PdfViewModel>(
+          create: (context) => PdfViewModel(
+            pdfRepository: Provider.of<PdfRepository>(context, listen: false),
+            userRepository: Provider.of<UserRepository>(context, listen: false),
+            apiKeyService: Provider.of<ApiKeyService>(context, listen: false),
+          ),
+        ),
+        
+        // Home 뷰모델 (전역으로 제공)
+        ChangeNotifierProvider<HomeViewModel>(
+          create: (_) => HomeViewModel(),
+        ),
+      ],
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -179,95 +241,85 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        // 저장소 계층
-        Provider<AuthRepository>(
-          create: (_) => AuthRepository(),
-        ),
-        Provider<UserRepository>(
-          create: (_) => UserRepository(),
-        ),
-        Provider<PdfRepository>(
-          create: (_) => PdfRepository(),
-        ),
-        
-        // 서비스 계층
-        Provider<ApiKeyService>(
-          create: (_) => ApiKeyService(),
-        ),
-        Provider<WebFirebaseInitializer>(
-          create: (_) => WebFirebaseInitializer(),
-        ),
-        
-        // ViewModel 계층
-        ChangeNotifierProvider<AuthViewModel>(
-          create: (context) => AuthViewModel(
-            authRepository: context.read<AuthRepository>(),
-            userRepository: context.read<UserRepository>(),
-            apiKeyService: context.read<ApiKeyService>(),
-          ),
-          lazy: false, // 앱 시작 시 바로 초기화
-        ),
-        ChangeNotifierProvider<PdfViewModel>(
-          create: (context) => PdfViewModel(
-            pdfRepository: context.read<PdfRepository>(),
-            userRepository: context.read<UserRepository>(),
-            apiKeyService: context.read<ApiKeyService>(),
-          ),
-        ),
-        ChangeNotifierProvider<PdfFileViewModel>(
-          create: (context) => PdfFileViewModel(),
-        ),
-        ChangeNotifierProvider<HomeViewModel>(
-          create: (context) => HomeViewModel(),
-        ),
-        ChangeNotifierProvider<PdfViewerViewModel>(
-          create: (context) => PdfViewerViewModel(
-            pdfViewModel: context.read<PdfFileViewModel>(),
-          ),
-        ),
+    return MaterialApp(
+      title: 'PDF Learner',
+      theme: AppTheme.lightTheme,
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const HomePage(),
+        '/auth': (context) => const AuthScreen(),
+      },
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
       ],
-      child: MaterialApp(
-        title: 'PDF Learner',
-        theme: AppTheme.lightTheme,
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const HomePage(),
-          '/auth': (context) => const AuthScreen(),
-        },
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('ko', ''), // 한국어
-          Locale('en', ''), // 영어
-        ],
-        // 앱 전체 오류 처리
-        builder: (context, child) {
-          // 앱 리빌드 시 child가 null인 경우 빈 컨테이너 반환
-          if (child == null) {
-            return Container(
-              color: Colors.white,
-              child: const Center(
-                child: Text('앱 초기화 중 오류가 발생했습니다.'),
-              ),
-            );
-          }
-
-          // 각 페이지를 SafeArea 내에 배치하여 시스템 UI와 겹치지 않도록 함
-          return MediaQuery(
-            // 시스템 폰트 크기 설정 무시
-            data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
-            child: SafeArea(
-              child: child,
+      supportedLocales: const [
+        Locale('ko', ''), // 한국어
+        Locale('en', ''), // 영어
+      ],
+      // 앱 전체 오류 처리
+      builder: (context, child) {
+        // 앱 리빌드 시 child가 null인 경우 빈 컨테이너 반환
+        if (child == null) {
+          return Container(
+            color: Colors.white,
+            child: const Center(
+              child: Text('앱 초기화 중 오류가 발생했습니다.'),
             ),
           );
-        },
-      ),
+        }
+
+        // 각 페이지를 SafeArea 내에 배치하여 시스템 UI와 겹치지 않도록 함
+        return MediaQuery(
+          // 시스템 폰트 크기 설정 무시
+          data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+          child: SafeArea(
+            child: child,
+          ),
+        );
+      },
     );
+  }
+
+  // 웹 환경에서 URL 파라미터 처리
+  void _handleUrlParameters() {
+    // 웹 환경에서만 실행
+    if (kIsWeb) {
+      try {
+        // URL에서 파라미터 추출
+        final uri = Uri.parse(html.window.location.href);
+        final params = uri.queryParameters;
+        
+        // 'pdf' 파라미터가 있으면 PDF 열기
+        if (params.containsKey('pdf')) {
+          final pdfUrl = params['pdf']!;
+          _openPdfFromUrl(pdfUrl);
+        }
+        
+        // 'code' 파라미터가 있으면 인증 코드 처리
+        if (params.containsKey('code')) {
+          final authCode = params['code']!;
+          _handleAuthCode(authCode);
+        }
+      } catch (e) {
+        print('URL 파라미터 처리 오류: $e');
+      }
+    }
+  }
+  
+  // PDF URL을 열기 위한 메서드
+  void _openPdfFromUrl(String pdfUrl) {
+    // PDF 열기 로직 구현
+    debugPrint('PDF URL 오픈: $pdfUrl');
+    // 실제 구현은 PDFProvider를 통해 처리해야 함
+  }
+  
+  // 인증 코드 처리 메서드
+  void _handleAuthCode(String authCode) {
+    // 인증 코드 처리 로직 구현
+    debugPrint('인증 코드 처리: $authCode');
+    // 실제 구현은 AuthService를 통해 처리해야 함
   }
 } 

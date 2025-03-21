@@ -12,7 +12,7 @@ import 'package:js/js.dart';
 import 'package:pdf_learner/models/user_model.dart';
 import 'package:pdf_learner/models/user.dart';
 import 'dart:convert';
-import 'package:universal_html/html.dart';
+import '../utils/non_web_stub.dart' if (dart.library.html) 'package:universal_html/html.dart';
 
 /// 민감한 정보를 안전하게 로깅하는 함수
 void secureLog(String message, {bool isSensitive = false}) {
@@ -80,38 +80,52 @@ class WebFirebaseInitializer {
     
     try {
       // JavaScript 환경 확인
-      if (js.context == null) {
+      if (!_hasJsContext()) {
         debugPrint('JavaScript 컨텍스트가 존재하지 않습니다.');
         return false;
       }
       
-      // JavaScript 함수 존재 확인
-      final hasFunction = js.context.hasProperty('pdfl') && 
-                         js.context['pdfl'].hasProperty('checkFirebaseStatus');
-      if (!hasFunction) {
-        debugPrint('pdfl.checkFirebaseStatus 함수가 JavaScript에 존재하지 않습니다.');
-        return false;
-      }
-      
-      // JavaScript 함수 호출
-      final dynamic result = js.context['pdfl'].callMethod('checkFirebaseStatus', []);
-      
-      if (result != null) {
-        // result가 Map인지 확인하고 안전하게 값을 추출
-        final bool initialized = result is Map && result['initialized'] == true;
-        final bool userLoggedIn = result is Map && result['userLoggedIn'] == true;
-        final dynamic userId = result is Map ? result['userId'] : null;
+      if (kIsWeb) {
+        // 웹 환경에서만 실행
+        // JavaScript 함수 존재 확인
+        final hasFunction = js.context.hasProperty('pdfl') && 
+                          js.context['pdfl'].hasProperty('checkFirebaseStatus');
+        if (!hasFunction) {
+          debugPrint('pdfl.checkFirebaseStatus 함수가 JavaScript에 존재하지 않습니다.');
+          return false;
+        }
         
-        // 상태 업데이트
-        _updateState(initialized, userLoggedIn, userId?.toString());
+        // JavaScript 함수 호출
+        final dynamic result = js.context['pdfl'].callMethod('checkFirebaseStatus', []);
         
-        return initialized;
+        if (result != null) {
+          // result가 Map인지 확인하고 안전하게 값을 추출
+          final bool initialized = result is Map && result['initialized'] == true;
+          final bool userLoggedIn = result is Map && result['userLoggedIn'] == true;
+          final dynamic userId = result is Map ? result['userId'] : null;
+          
+          // 상태 업데이트
+          _updateState(initialized, userLoggedIn, userId?.toString());
+          
+          return initialized;
+        }
       }
     } catch (e) {
       debugPrint('WebFirebaseInitializer: JavaScript 함수 호출 오류 - $e');
     }
     
     return false;
+  }
+
+  // JavaScript 컨텍스트 확인 헬퍼 메서드
+  bool _hasJsContext() {
+    if (!kIsWeb) return false;
+    
+    try {
+      return js.context != null;
+    } catch (e) {
+      return false;
+    }
   }
 
   /// 상태 리스너 등록
@@ -142,37 +156,45 @@ class WebFirebaseInitializer {
     
     try {
       // JavaScript 환경 확인
-      if (js.context == null) {
+      if (!_hasJsContext()) {
         debugPrint('JavaScript 콜백 등록: JavaScript 컨텍스트가 존재하지 않습니다.');
         return;
       }
       
-      // JavaScript에서 호출할 함수 등록
-      js.context['flutterFirebaseAuthChanged'] = allowInterop((dynamic isLoggedIn, dynamic userId) {
-        // Convert JS boolean to Dart boolean
-        final bool loggedIn = isLoggedIn == true;
+      // 웹 환경에서만 실행
+      if (kIsWeb) {
+        // 자바스크립트 허용 (다트:js 사용)
+        dynamic allowInteropFn(Function fn) {
+          return js.allowInterop(fn);
+        }
         
-        debugPrint('WebFirebaseInitializer: JS 콜백 - 로그인=$loggedIn, 사용자ID=$userId');
+        // JavaScript에서 호출할 함수 등록
+        js.context['flutterFirebaseAuthChanged'] = allowInteropFn((dynamic isLoggedIn, dynamic userId) {
+          // Convert JS boolean to Dart boolean
+          final bool loggedIn = isLoggedIn == true;
+          
+          debugPrint('WebFirebaseInitializer: JS 콜백 - 로그인=$loggedIn, 사용자ID=$userId');
+          
+          // 상태 업데이트
+          _updateState(true, loggedIn, userId?.toString());
+        });
         
-        // 상태 업데이트
-        _updateState(true, loggedIn, userId?.toString());
-      });
-      
-      // 개별 서비스 초기화 콜백 등록
-      js.context['ff_trigger_firebase_firestore'] = allowInterop(() {
-        debugPrint('WebFirebaseInitializer: Firestore 초기화 완료 (JS에서 알림)');
-        _serviceInitialized['firestore'] = true;
-      });
-      
-      js.context['ff_trigger_firebase_storage'] = allowInterop(() {
-        debugPrint('WebFirebaseInitializer: Storage 초기화 완료 (JS에서 알림)');
-        _serviceInitialized['storage'] = true;
-      });
-      
-      js.context['ff_trigger_firebase_analytics'] = allowInterop(() {
-        debugPrint('WebFirebaseInitializer: Analytics 초기화 완료 (JS에서 알림)');
-        _serviceInitialized['analytics'] = true;
-      });
+        // 개별 서비스 초기화 콜백 등록
+        js.context['ff_trigger_firebase_firestore'] = allowInteropFn(() {
+          debugPrint('WebFirebaseInitializer: Firestore 초기화 완료 (JS에서 알림)');
+          _serviceInitialized['firestore'] = true;
+        });
+        
+        js.context['ff_trigger_firebase_storage'] = allowInteropFn(() {
+          debugPrint('WebFirebaseInitializer: Storage 초기화 완료 (JS에서 알림)');
+          _serviceInitialized['storage'] = true;
+        });
+        
+        js.context['ff_trigger_firebase_analytics'] = allowInteropFn(() {
+          debugPrint('WebFirebaseInitializer: Analytics 초기화 완료 (JS에서 알림)');
+          _serviceInitialized['analytics'] = true;
+        });
+      }
       
       debugPrint('WebFirebaseInitializer: JavaScript 콜백 등록 완료');
     } catch (e) {
@@ -257,6 +279,87 @@ class WebFirebaseInitializer {
     }
   }
 
+  /// Google 로그인 (웹 전용)
+  Future<Map<String, dynamic>?> signInWithGoogle() async {
+    if (!kIsWeb) return null;
+    
+    try {
+      final result = await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+      final user = result.user;
+      
+      if (user == null) return null;
+      
+      return {
+        'uid': user.uid,
+        'email': user.email ?? '',
+        'displayName': user.displayName ?? '',
+        'photoURL': user.photoURL,
+        'emailVerified': user.emailVerified,
+        'createdAt': DateTime.now().toIso8601String(),
+        'subscriptionTier': 'free',
+      };
+    } catch (e) {
+      debugPrint('WebFirebaseInitializer: Google 로그인 오류 - $e');
+      return null;
+    }
+  }
+  
+  /// 이메일/비밀번호 로그인 (웹 전용)
+  Future<Map<String, dynamic>?> signInWithEmailPassword(String email, String password) async {
+    if (!kIsWeb) return null;
+    
+    try {
+      final result = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      final user = result.user;
+      if (user == null) return null;
+      
+      return {
+        'uid': user.uid,
+        'email': user.email ?? '',
+        'displayName': user.displayName ?? '',
+        'photoURL': user.photoURL,
+        'emailVerified': user.emailVerified,
+        'createdAt': DateTime.now().toIso8601String(),
+        'subscriptionTier': 'free',
+      };
+    } catch (e) {
+      debugPrint('WebFirebaseInitializer: 이메일 로그인 오류 - $e');
+      return null;
+    }
+  }
+  
+  /// 이메일/비밀번호 회원가입 (웹 전용)
+  Future<Map<String, dynamic>?> signUpWithEmailPassword(String email, String password) async {
+    if (!kIsWeb) return null;
+    
+    try {
+      final result = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      final user = result.user;
+      if (user == null) return null;
+      
+      return {
+        'uid': user.uid,
+        'email': user.email ?? '',
+        'displayName': user.displayName ?? '',
+        'photoURL': user.photoURL,
+        'emailVerified': user.emailVerified,
+        'createdAt': DateTime.now().toIso8601String(),
+        'subscriptionTier': 'free',
+      };
+    } catch (e) {
+      debugPrint('WebFirebaseInitializer: 회원가입 오류 - $e');
+      return null;
+    }
+  }
+
   /// 현재 인증된 사용자 확인
   Future<void> _checkCurrentUser() async {
     try {
@@ -288,8 +391,8 @@ class WebFirebaseInitializer {
         // 상태 업데이트
         _updateState(_isInitialized, isLoggedIn, uid);
         
-        // JavaScript에 상태 변경 알림
-        if (kIsWeb && js.context != null && js.context.hasProperty('flutterFirebaseAuthChanged')) {
+        // JavaScript에 상태 변경 알림 (웹 환경에서만)
+        if (kIsWeb && _hasJsContext() && js.context.hasProperty('flutterFirebaseAuthChanged')) {
           js.context.callMethod('flutterFirebaseAuthChanged', [isLoggedIn, uid]);
         }
       });
@@ -344,7 +447,8 @@ class WebFirebaseInitializer {
       await FirebaseAuth.instance.signOut();
       
       // JavaScript를 통한 로그아웃 처리
-      if (js.context != null && js.context.hasProperty('firebase') && 
+      final hasJsContext = WebFirebaseInitializer()._hasJsContext();
+      if (kIsWeb && hasJsContext && js.context.hasProperty('firebase') && 
           js.context['firebase'].hasProperty('auth')) {
         debugPrint('WebFirebaseInitializer: JavaScript로 로그아웃 시도');
         js.context['firebase'].callMethod('auth().signOut', []);
@@ -363,195 +467,73 @@ class WebFirebaseInitializer {
 
   /// 웹 환경에서 현재 로그인된 사용자 정보 가져오기
   Future<UserModel?> getCurrentUser() async {
-    if (!_isInitialized) {
-      debugPrint('Firebase가 초기화되지 않았습니다.');
+    if (!_isInitialized || !kIsWeb) {
+      debugPrint('Firebase가 초기화되지 않았거나 웹 환경이 아닙니다.');
       return null;
     }
 
     try {
       debugPrint('현재 사용자 정보 가져오기 시작');
       
-      // 직접 JavaScript 함수 호출하여 사용자 ID 가져오기
-      final userId = js.context.callMethod('getCurrentUserId', []);
-      if (userId == null || userId == '') {
-        debugPrint('사용자 ID가 null이거나 빈 문자열입니다.');
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        debugPrint('현재 로그인된 사용자가 없습니다.');
         return null;
       }
       
+      final userId = currentUser.uid;
       debugPrint('사용자 ID 가져오기 성공: $userId');
       
       // Firestore에서 사용자 정보 가져오기
       try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId.toString()).get();
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
         
         if (!userDoc.exists) {
           debugPrint('사용자 문서가 존재하지 않습니다.');
           
           // 기본 사용자 정보 생성 및 저장
           final basicUserData = {
-            'uid': userId.toString(),
-            'email': '',
-            'displayName': '사용자',
-            'photoURL': '',
+            'uid': userId,
+            'email': currentUser.email ?? '',
+            'displayName': currentUser.displayName ?? '사용자',
+            'photoURL': currentUser.photoURL ?? '',
             'createdAt': DateTime.now().toIso8601String(),
             'subscriptionTier': 'free',
+            'maxPdfTextLengthPerPdf': 50000,
           };
           
-          await FirebaseFirestore.instance.collection('users').doc(userId.toString()).set(basicUserData);
-          debugPrint('기본 사용자 정보 저장 완료');
+          await FirebaseFirestore.instance.collection('users').doc(userId).set(basicUserData);
           
-          // 기본 사용자 모델 반환
           return UserModel.fromMap(basicUserData);
         }
         
+        debugPrint('사용자 정보를 Firestore에서 가져왔습니다.');
+        
+        // 사용자 정보 반환
         final userData = userDoc.data() as Map<String, dynamic>;
-        debugPrint('사용자 정보 가져오기 성공: $userData');
+        userData['uid'] = userId; // ID 추가 확인
         
         return UserModel.fromMap(userData);
       } catch (e) {
         debugPrint('Firestore에서 사용자 정보 가져오기 오류: $e');
-        return null;
-      }
-    } catch (e) {
-      debugPrint('사용자 정보 가져오기 오류: $e');
-      return null;
-    }
-  }
-
-  /// 웹 환경에서 이메일/비밀번호로 회원가입
-  static Future<Map<String, dynamic>?> signUpWithEmailPassword(String email, String password) async {
-    if (!kIsWeb) return null;
-    
-    try {
-      debugPrint('웹 이메일/비밀번호 회원가입 시도');
-      
-      // Firebase 초기화 확인
-      final instance = WebFirebaseInitializer();
-      if (!instance.isInitialized) {
-        debugPrint('Firebase가 초기화되지 않았습니다. 초기화 시도...');
-        try {
-          await Firebase.initializeApp(
-            options: FirebaseOptions(
-              apiKey: _getEnvValue('FIREBASE_API_KEY'),
-              appId: _getEnvValue('FIREBASE_APP_ID'),
-              messagingSenderId: _getEnvValue('FIREBASE_MESSAGING_SENDER_ID'),
-              projectId: _getEnvValue('FIREBASE_PROJECT_ID'),
-              authDomain: _getEnvValue('FIREBASE_AUTH_DOMAIN'),
-              storageBucket: _getEnvValue('FIREBASE_STORAGE_BUCKET'),
-              measurementId: _getEnvValue('FIREBASE_MEASUREMENT_ID'),
-            ),
-          );
-          instance._isInitialized = true;
-          debugPrint('Firebase 초기화 완료');
-        } catch (e) {
-          debugPrint('Firebase 초기화 실패: $e');
-          // 초기화 실패해도 계속 진행
-        }
-      }
-      
-      dynamic result;
-      try {
-        result = await js.context.callMethod('signUpWithEmailPassword', [email, password]);
-      } catch (e) {
-        debugPrint('회원가입 JavaScript 호출 오류: $e');
-        // 기본 사용자 정보 반환
-        return {
-          'uid': 'guest_user',
-          'email': email,
-          'displayName': '게스트 사용자',
-          'photoURL': '',
-          'createdAt': DateTime.now().toIso8601String(),
-          'subscription': 'free',
-        };
-      }
-      
-      if (result == null) {
-        debugPrint('회원가입 실패: 결과가 null입니다.');
-        // 기본 사용자 정보 반환
-        return {
-          'uid': 'guest_user',
-          'email': email,
-          'displayName': '게스트 사용자',
-          'photoURL': '',
-          'createdAt': DateTime.now().toIso8601String(),
-          'subscription': 'free',
-        };
-      }
-      
-      final userData = _convertJsObjectToMap(result);
-      debugPrint('회원가입 성공: $userData');
-      
-      if (userData != null && userData['uid'] != null) {
-        // 구독 정보 생성
-        try {
-          await _createSubscriptionData(userData['uid']);
-        } catch (e) {
-          debugPrint('구독 정보 생성 실패: $e');
-        }
         
-        // 사용자 정보 저장
-        try {
-          await js.context.callMethod('saveUserLoginTime', [userData['uid']]);
-          debugPrint('사용자 로그인 시간 저장 완료: ${userData['uid']}');
-        } catch (e) {
-          debugPrint('사용자 로그인 시간 저장 실패: $e');
-        }
+        // 기본 사용자 정보 생성
+        return UserModel(
+          uid: userId,
+          email: currentUser.email ?? '',
+          displayName: currentUser.displayName ?? '사용자',
+          photoURL: currentUser.photoURL,
+          emailVerified: currentUser.emailVerified,
+          createdAt: DateTime.now(),
+          subscriptionTier: 'free',
+          maxPdfTextLength: 50000,
+          maxPdfTextLengthPerPage: 1000,
+          maxPdfTextLengthPerDay: 100000,
+          maxPdfTextLengthPerMonth: 1000000,
+          maxPdfTextLengthPerYear: 10000000,
+          maxPdfTextLengthPerLifetime: 100000000,
+        );
       }
-      
-      return userData;
-    } catch (e) {
-      debugPrint('회원가입 오류: $e');
-      // 기본 사용자 정보 반환
-      return {
-        'uid': 'guest_user',
-        'email': email,
-        'displayName': '게스트 사용자',
-        'photoURL': '',
-        'createdAt': DateTime.now().toIso8601String(),
-        'subscription': 'free',
-      };
-    }
-  }
-
-  /// 사용자 정보 저장
-  static Future<void> saveUserData(Map<String, dynamic> userData) async {
-    if (!kIsWeb) return;
-    
-    try {
-      js.context.callMethod('saveUserData', [js.JsObject.jsify(userData)]);
-    } catch (e) {
-      debugPrint('사용자 데이터 저장 오류: $e');
-    }
-  }
-
-  /// 사용자 정보 가져오기
-  Future<Map<String, dynamic>?> getUserData(String userId) async {
-    if (!_isInitialized) {
-      debugPrint('Firebase가 초기화되지 않았습니다.');
-      return null;
-    }
-
-    try {
-      debugPrint('사용자 정보 가져오기 시작: $userId');
-      
-      final result = await js.context.callMethod('getUserData', [
-        userId,
-        js.allowInterop((userData, error) {
-          if (error != null) {
-            debugPrint('사용자 정보 가져오기 오류: $error');
-          } else if (userData != null) {
-            debugPrint('사용자 정보 가져오기 성공: $userData');
-          } else {
-            debugPrint('사용자 정보 없음');
-          }
-        })
-      ]);
-
-      if (result == null) {
-        return null;
-      }
-
-      return js.JsObject.fromBrowserObject(result) as Map<String, dynamic>;
     } catch (e) {
       debugPrint('사용자 정보 가져오기 오류: $e');
       return null;
@@ -562,202 +544,5 @@ class WebFirebaseInitializer {
   void resetInitialization() {
     _isInitialized = false;
     debugPrint('Firebase 초기화 상태가 리셋되었습니다.');
-  }
-
-  /// JavaScript 객체를 Dart Map으로 변환
-  static Map<String, dynamic>? _convertJsObjectToMap(dynamic jsObject) {
-    // 기본 반환값 정의
-    final defaultMap = {
-      'uid': 'guest_user',
-      'email': '',
-      'displayName': '게스트 사용자',
-      'photoURL': '',
-      'createdAt': DateTime.now().toIso8601String(),
-      'subscription': 'free',
-    };
-    
-    if (jsObject == null) {
-      debugPrint('JavaScript 객체가 null입니다.');
-      return defaultMap;
-    }
-    
-    try {
-      // 이미 Map인 경우 바로 반환
-      if (jsObject is Map) {
-        debugPrint('JavaScript 객체가 이미 Map입니다.');
-        return Map<String, dynamic>.from(jsObject);
-      }
-      
-      // 기본 빈 Map 생성
-      final map = <String, dynamic>{};
-      
-      // 안전하게 Object.keys 호출
-      dynamic keys;
-      try {
-        if (js.context.hasProperty('Object')) {
-          keys = js.context['Object'].callMethod('keys', [jsObject]);
-        }
-      } catch (e) {
-        debugPrint('Object.keys 호출 오류: $e');
-        return defaultMap;
-      }
-      
-      // keys가 null이거나 오류 발생 시 기본 Map 반환
-      if (keys == null) {
-        debugPrint('JavaScript 객체의 키를 가져올 수 없습니다. 기본 값 사용');
-        return defaultMap;
-      }
-      
-      debugPrint('JavaScript 객체 키 목록: $keys');
-      
-      // 각 키에 대해 안전하게 값 추출
-      for (var i = 0; i < keys.length; i++) {
-        final key = keys[i];
-        dynamic value;
-        
-        try {
-          value = jsObject[key];
-        } catch (e) {
-          debugPrint('키 $key의 값을 가져오는 중 오류 발생: $e');
-          continue;
-        }
-        
-        debugPrint('키: $key, 값 타입: ${value?.runtimeType}');
-        
-        if (value == null) {
-          map[key] = null;
-        } else if (value is js.JsObject) {
-          map[key] = _convertJsObjectToMap(value);
-        } else {
-          map[key] = value;
-        }
-      }
-      
-      // uid가 null인 경우 기본값 설정
-      if (map['uid'] == null) {
-        map['uid'] = 'guest_user';
-      }
-      
-      debugPrint('JavaScript 객체 변환 결과: $map');
-      return map;
-    } catch (e) {
-      debugPrint('JavaScript 객체 변환 오류: $e');
-      // 오류 발생 시 기본 Map 반환
-      return defaultMap;
-    }
-  }
-
-  /// 구독 정보 생성
-  static Future<void> _createSubscriptionData(String? userId) async {
-    try {
-      // userId가 null이면 기본값 사용
-      final safeUserId = userId ?? 'guest_user';
-      
-      debugPrint('구독 정보 생성 시작: $safeUserId');
-      
-      final subscriptionData = {
-        'userId': safeUserId,
-        'tier': 'free',
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-        'status': 'active',
-        'expiresAt': null,
-        'paymentMethod': null,
-        'paymentStatus': null,
-        'lastPaymentDate': null,
-        'nextPaymentDate': null,
-        'canceledAt': null,
-        'features': {
-          'maxPdfSize': 5 * 1024 * 1024,
-          'maxTextLength': 10000,
-          'maxPdfsPerDay': 5,
-          'maxPdfsTotal': 20,
-          'maxPdfPages': 50,
-          'maxPdfsPerYear': 1000,
-          'maxPdfsPerLifetime': 10000,
-          'maxPdfTextLength': 50000,
-          'maxPdfTextLengthPerPage': 1000,
-          'maxPdfTextLengthPerDay': 100000,
-          'maxPdfTextLengthPerMonth': 1000000,
-          'maxPdfTextLengthPerYear': 10000000,
-          'maxPdfTextLengthPerLifetime': 100000000
-        }
-      };
-      
-      // Firestore에 구독 정보 저장 (안전하게 처리)
-      try {
-        if (js.context.hasProperty('createSubscription')) {
-          js.context.callMethod('createSubscription', [
-            safeUserId,
-            js.JsObject.jsify(subscriptionData),
-            js.allowInterop((error) {
-              if (error != null) {
-                debugPrint('구독 정보 생성 오류');
-              } else {
-                debugPrint('구독 정보 생성 완료: $safeUserId');
-              }
-            })
-          ]);
-        } else {
-          debugPrint('createSubscription 함수가 정의되지 않았습니다. 구독 정보 생성을 건너뜁니다.');
-        }
-      } catch (jsError) {
-        debugPrint('구독 정보 생성 JavaScript 오류: $jsError');
-        // JavaScript 오류 무시하고 계속 진행
-      }
-    } catch (e) {
-      debugPrint('구독 정보 생성 예외: $e');
-      // 오류 무시하고 계속 진행
-    }
-  }
-
-  /// 구독 정보 가져오기
-  static Future<Map<String, dynamic>?> getSubscriptionData(String userId) async {
-    if (!kIsWeb) return null;
-    
-    final completer = Completer<Map<String, dynamic>?>();
-    
-    try {
-      debugPrint('구독 정보 가져오기 시작: $userId');
-      
-      js.context.callMethod('getSubscription', [
-        userId,
-        js.allowInterop((result, error) {
-          if (error != null) {
-            debugPrint('구독 정보 가져오기 오류: $error');
-            completer.complete(null);
-          } else if (result != null) {
-            try {
-              final Map<String, dynamic> subscriptionData = {};
-              
-              if (result is js.JsObject) {
-                subscriptionData['tier'] = result['tier']?.toString() ?? 'free';
-                subscriptionData['status'] = result['status']?.toString() ?? 'active';
-                subscriptionData['expiresAt'] = result['expiresAt']?.toString();
-                subscriptionData['features'] = result['features'] != null 
-                    ? Map<String, dynamic>.from(result['features'])
-                    : null;
-              } else {
-                subscriptionData.addAll(Map<String, dynamic>.from(result));
-              }
-              
-              debugPrint('구독 정보 가져오기 성공: $subscriptionData');
-              completer.complete(subscriptionData);
-            } catch (e) {
-              debugPrint('구독 정보 변환 오류: $e');
-              completer.complete(null);
-            }
-          } else {
-            debugPrint('구독 정보 없음');
-            completer.complete(null);
-          }
-        })
-      ]);
-    } catch (e) {
-      debugPrint('구독 정보 가져오기 예외: $e');
-      completer.complete(null);
-    }
-    
-    return completer.future;
   }
 } 

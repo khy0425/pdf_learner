@@ -11,16 +11,86 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          
+      - name: 환경 변수 파일 생성
+        run: |
+          echo "환경 변수 파일 생성 중..."
+          echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}" > .env
+          echo "FIREBASE_AUTH_DOMAIN=${{ secrets.FIREBASE_AUTH_DOMAIN }}" >> .env
+          echo "FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}" >> .env
+          echo "FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}" >> .env
+          echo "FIREBASE_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}" >> .env
+          echo "FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }}" >> .env
+          echo "FIREBASE_MEASUREMENT_ID=${{ secrets.FIREBASE_MEASUREMENT_ID }}" >> .env
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "HUGGING_FACE_API_KEY=${{ secrets.HUGGING_FACE_API_KEY }}" >> .env
+          
       - run: flutter pub get
       - run: flutter test
+      
+      - name: 의존성 보안 취약점 검사
+        run: |
+          echo "의존성 보안 취약점 검사 중..."
+          flutter pub outdated
+      
+      - name: 정적 코드 분석
+        run: flutter analyze
 
   windows-test:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.19.0'
           channel: 'stable'
+          
+      - name: 환경 변수 파일 생성
+        run: |
+          echo "환경 변수 파일 생성 중..."
+          echo "FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}" > .env
+          echo "FIREBASE_AUTH_DOMAIN=${{ secrets.FIREBASE_AUTH_DOMAIN }}" >> .env
+          echo "FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}" >> .env
+          echo "FIREBASE_STORAGE_BUCKET=${{ secrets.FIREBASE_STORAGE_BUCKET }}" >> .env
+          echo "FIREBASE_MESSAGING_SENDER_ID=${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}" >> .env
+          echo "FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }}" >> .env
+          echo "FIREBASE_MEASUREMENT_ID=${{ secrets.FIREBASE_MEASUREMENT_ID }}" >> .env
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "HUGGING_FACE_API_KEY=${{ secrets.HUGGING_FACE_API_KEY }}" >> .env
+          
       - run: flutter config --enable-windows-desktop
-      - run: flutter test integration_test/app_test.dart -d windows 
+      - run: flutter pub get
+      - run: flutter test integration_test/app_test.dart -d windows
+      
+      - name: 민감한 정보 정리
+        if: always()
+        run: rm -f .env
+        
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: [test, windows-test]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 보안 취약점 스캔
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: 보안 결과 업로드
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif' 

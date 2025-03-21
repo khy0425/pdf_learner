@@ -19,6 +19,7 @@ import '../providers/tutorial_provider.dart';  // TutorialProvider import 추가
 import '../providers/pdf_provider.dart';  // PdfFileInfo 클래스를 위한 import 추가
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/foundation.dart' show kDebugMode;
+import '../models/pdf_file_info.dart';
 
 class PDFViewerScreen extends StatefulWidget {
   final PdfFileInfo pdfFile;
@@ -598,7 +599,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                   note: noteController.text.isEmpty ? null : noteController.text,
                 );
                 context.read<BookmarkProvider>().addBookmark(
-                      widget.pdfFile.path,
+                      widget.pdfFile.localPath ?? widget.pdfFile.id,
                       bookmark,
                     );
                 Navigator.pop(context);
@@ -617,7 +618,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       context: context,
       builder: (context) => Consumer<BookmarkProvider>(
         builder: (context, bookmarkProvider, child) {
-          final bookmarks = bookmarkProvider.getBookmarksForFile(widget.pdfFile.path);
+          final bookmarks = bookmarkProvider.getBookmarksForFile(widget.pdfFile.localPath ?? widget.pdfFile.id);
           return Container(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -661,7 +662,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                                 FilledButton(
                                   onPressed: () {
                                     bookmarkProvider.removeBookmark(
-                                      widget.pdfFile.path,
+                                      widget.pdfFile.localPath ?? widget.pdfFile.id,
                                       bookmark,
                                     );
                                     Navigator.pop(context);
@@ -1129,7 +1130,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       Consumer<BookmarkProvider>(
         builder: (context, bookmarkProvider, _) {
           final isBookmarked = bookmarkProvider.isPageBookmarked(
-            widget.pdfFile.path,
+            widget.pdfFile.localPath ?? widget.pdfFile.id,
             _currentPage,
           );
           return IconButton(
@@ -1236,7 +1237,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
   // 북마크 토글 기능
   void _toggleBookmark(BuildContext context) {
     final bookmarkProvider = context.read<BookmarkProvider>();
-    final filePath = widget.pdfFile.path;
+    final filePath = widget.pdfFile.localPath ?? widget.pdfFile.id;
     
     if (bookmarkProvider.isPageBookmarked(filePath, _currentPage)) {
       // 북마크 제거

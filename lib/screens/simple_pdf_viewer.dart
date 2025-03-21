@@ -3,6 +3,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:pdf_learner/providers/pdf_provider.dart';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:pdf_learner/models/pdf_file_info.dart';
 
 // 간단한 PDF 뷰어 화면
 class SimplePdfViewer extends StatefulWidget {
@@ -144,7 +145,7 @@ class _SimplePdfViewerState extends State<SimplePdfViewer> {
                     style: const TextStyle(fontSize: 14),
                   ),
                   Text(
-                    '파일 크기: ${(widget.pdfFile.size / 1024).toStringAsFixed(1)} KB',
+                    '파일 크기: ${(widget.pdfFile.fileSize / 1024).toStringAsFixed(1)} KB',
                     style: const TextStyle(fontSize: 14),
                   ),
                 ],
@@ -257,5 +258,52 @@ class _SimplePdfViewerState extends State<SimplePdfViewer> {
         ],
       ),
     );
+  }
+
+  // PDF 파일 정보 표시 위젯
+  Widget _buildPdfInfo() {
+    final formattedDate = _formatDate(widget.pdfFile.createdAt);
+    final formattedSize = _formatFileSize(widget.pdfFile.fileSize);
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '파일명: ${widget.pdfFile.fileName}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text('생성일: $formattedDate'),
+          Text('파일 크기: $formattedSize'),
+          if (widget.pdfFile.url != null)
+            Text(
+              'URL: ${widget.pdfFile.url!.length > 40 ? widget.pdfFile.url!.substring(0, 40) + '...' : widget.pdfFile.url!}',
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
+      ),
+    );
+  }
+
+  // 날짜 포맷팅
+  String _formatDate(DateTime date) {
+    return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+  }
+
+  // 파일 크기 형식화
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
   }
 } 

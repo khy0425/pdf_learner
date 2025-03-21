@@ -3,12 +3,13 @@
 
 // 빈 클래스와 함수들을 정의하여 웹 환경에서만 사용되는 코드가 컴파일되도록 합니다.
 class Window {
-  static dynamic get location => _Location();
+  dynamic get location => Location();
   static dynamic get localStorage => <String, String>{};
   static dynamic get navigator => _Navigator();
   static dynamic get history => _History();
   
   void dispatchEvent(dynamic event) {}
+  void open(String url, String target) {}
 }
 
 class _Location {
@@ -72,15 +73,47 @@ class JsObject {
   static dynamic jsify(dynamic object) => object;
 }
 
-class Context {
-  bool hasProperty(String name) => false;
-  void operator []=(String name, dynamic value) {}
-  dynamic operator [](String name) => null;
+// 빈 컨텍스트 클래스
+class JsContext {
   dynamic callMethod(String name, [List<dynamic>? args]) => null;
+  dynamic operator [](String key) => null;
+  operator []=(String key, dynamic value) {}
+  bool hasProperty(String name) => false;
+  dynamic get context => null;
 }
 
-// 안전한 JS 컨텍스트 접근을 위한 전역 변수
-final context = Context();
+// js 객체의 스텁 구현
+final context = JsContext();
 
 // 함수를 JS interop으로 변환하는 대체 함수
-T allowInterop<T extends Function>(T function) => function; 
+T allowInterop<T extends Function>(T function) => function;
+
+// Web APIs를 지원하지 않는 환경을 위한 스텁 구현
+// dart:js 및 dart:html 라이브러리를 지원하지 않는 네이티브 플랫폼에서 사용됨
+
+/// JS 통합을 위한 스텁 함수
+class js {
+  static JsContext get context => JsContext();
+  static dynamic allowInterop(Function function) => function;
+}
+
+/// HTML 스텁 클래스
+class Blob {
+  Blob(List<dynamic> data, [String? type]) {}
+}
+
+class Url {
+  static String createObjectUrlFromBlob(Blob blob) => '';
+  static void revokeObjectUrl(String url) {}
+}
+
+class AnchorElement {
+  AnchorElement({String? href}) {}
+  void setAttribute(String name, String value) {}
+  void click() {}
+}
+
+class Location {
+  String get href => '';
+  set href(String value) {}
+} 

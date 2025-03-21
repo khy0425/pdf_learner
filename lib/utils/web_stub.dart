@@ -1,10 +1,9 @@
 /// 웹 환경에서 사용할 Platform 스텁 클래스
-import 'dart:html' as html;
-import 'dart:js' as js;
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'non_web_stub.dart' if (dart.library.html) 'dart:html' as html;
+import 'non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
 
 class Platform {
   static const bool isWindows = false;
@@ -26,8 +25,9 @@ class WebUtils {
 
   // 웹 엔진 설정
   static void configureWebEngine() {
+    if (!kIsWeb) return;
+    
     try {
-      html.window.navigator.userAgent.toLowerCase();
       if (js.context.hasProperty('flutterWebRenderer')) {
         js.context['flutterWebRenderer'] = 'html';
       }
@@ -46,39 +46,18 @@ class WebUtils {
   
   // 로딩 스플래시 화면 숨기기
   static void hideLoadingScreen() {
+    if (!kIsWeb) return;
+    
     try {
       // 자바스크립트 함수 호출 대신 직접 DOM 접근 방식 추가
-      final loadingElement = html.document.getElementById('loading');
-      if (loadingElement != null) {
-        loadingElement.style.opacity = '0';
-        Future.delayed(const Duration(milliseconds: 500), () {
-          try {
-            loadingElement.style.display = 'none';
-          } catch (e) {
-            log('로딩 화면 스타일 변경 중 오류: $e');
-          }
-        });
-        log('DOM을 통한 로딩 화면 숨기기 성공');
-        return;
+      final loader = html.document.getElementById('flutter-loader');
+      if (loader != null) {
+        loader.style.display = 'none';
       }
       
-      // 백업 방법: JavaScript 메서드 호출 시도
-      try {
-        if (js.context.hasProperty('pdfl')) {
-          final pdfl = js.context['pdfl'];
-          if (pdfl != null && pdfl.hasProperty('hideLoading')) {
-            pdfl.callMethod('hideLoading');
-            log('JS를 통한 로딩 화면 숨기기 성공');
-            return;
-          }
-        }
-      } catch (e) {
-        log('JS 메서드를 통한 로딩 화면 숨기기 오류: $e');
-      }
-
-      log('로딩 화면 요소를 찾을 수 없거나 숨길 수 없습니다.');
+      log('스플래시 화면을 숨겼습니다.');
     } catch (e) {
-      log('로딩 화면을 숨기는 중 오류 발생: $e');
+      log('스플래시 화면 숨기기 오류: $e');
     }
   }
   

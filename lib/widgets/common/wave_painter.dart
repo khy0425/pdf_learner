@@ -1,82 +1,56 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
-/// 물결 효과를 위한 커스텀 페인터
-/// 두 개의 물결 모양을 겹쳐 그려 동적인 느낌을 줍니다.
+/// 물결 효과를 그리는 CustomPainter
+/// 파동, 주파수, 진폭 및 위상 조절 가능
 class WavePainter extends CustomPainter {
-  final Color waveColor;
-  final Color secondWaveColor;
-  
+  final double waveAmplitude;
+  final double frequency;
+  final double phase;
+  final Color color; // 색상 매개변수 추가
+
   WavePainter({
-    required this.waveColor,
-    required this.secondWaveColor,
+    required this.waveAmplitude, 
+    required this.frequency,
+    required this.phase,
+    required this.color, // 색상 매개변수 추가
   });
-  
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = waveColor
+      ..color = color
       ..style = PaintingStyle.fill;
-      
-    final secondPaint = Paint()
-      ..color = secondWaveColor
-      ..style = PaintingStyle.fill;
-    
-    final width = size.width;
-    final height = size.height;
-    
-    // 첫 번째 물결 그리기
+
     final path = Path();
-    path.moveTo(0, height * 0.8);
     
-    // 첫 번째 곡선
-    path.quadraticBezierTo(
-      width * 0.25, height * 0.7,
-      width * 0.5, height * 0.8,
-    );
+    // 시작점 (좌상단)
+    path.moveTo(0, 0);
+
+    // 물결 그리기
+    for (double x = 0; x < size.width; x++) {
+      // 사인 함수로 물결 효과 생성
+      final y = math.sin((x * frequency) + phase) * waveAmplitude;
+      
+      // 물결은 화면 중앙 위에서 시작
+      path.lineTo(x, size.height / 2 + y);
+    }
+
+    // 오른쪽 끝
+    path.lineTo(size.width, 0);
     
-    // 두 번째 곡선
-    path.quadraticBezierTo(
-      width * 0.75, height * 0.9,
-      width, height * 0.8,
-    );
-    
-    // 바닥 부분 완성
-    path.lineTo(width, height);
-    path.lineTo(0, height);
+    // 경로 닫기
     path.close();
     
+    // 화면에 그리기
     canvas.drawPath(path, paint);
-    
-    // 두 번째 물결 그리기 (약간 다른 패턴)
-    final secondPath = Path();
-    secondPath.moveTo(0, height * 0.9);
-    
-    // 첫 번째 곡선
-    secondPath.quadraticBezierTo(
-      width * 0.2, height * 0.75,
-      width * 0.4, height * 0.9,
-    );
-    
-    // 두 번째 곡선
-    secondPath.quadraticBezierTo(
-      width * 0.6, height * 1.05,
-      width * 0.8, height * 0.9,
-    );
-    
-    // 세 번째 곡선
-    secondPath.quadraticBezierTo(
-      width * 0.9, height * 0.85,
-      width, height * 0.9,
-    );
-    
-    // 바닥 부분 완성
-    secondPath.lineTo(width, height);
-    secondPath.lineTo(0, height);
-    secondPath.close();
-    
-    canvas.drawPath(secondPath, secondPaint);
   }
-  
+
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-} 
+  bool shouldRepaint(WavePainter oldDelegate) {
+    return oldDelegate.waveAmplitude != waveAmplitude ||
+        oldDelegate.frequency != frequency ||
+        oldDelegate.phase != phase ||
+        oldDelegate.color != color;
+  }
+}

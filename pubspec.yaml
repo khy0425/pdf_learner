@@ -61,6 +61,7 @@ dependencies:
   google_sign_in: ^6.3.0
   universal_html: ^2.2.4
   crypto: ^3.0.3  # 암호화 패키지 추가
+  encrypt: ^5.0.3  # 강력한 암호화 라이브러리 추가
   lottie: ^3.3.1
   flutter_secure_storage: ^9.2.4
   flutter_pdfview: ^1.4.0
@@ -74,6 +75,7 @@ dev_dependencies:
   mockito: ^5.4.4
   build_runner: ^2.4.8
   flutter_lints: ^5.0.0
+  fake_cloud_firestore: ^3.1.0
 
 flutter:
   uses-material-design: true

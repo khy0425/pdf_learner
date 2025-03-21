@@ -25,7 +25,7 @@ class PdfRepository {
           .get();
       
       return snapshot.docs
-          .map((doc) => PdfFileInfo.fromMap({...doc.data(), 'firestoreId': doc.id}))
+          .map((doc) => PdfFileInfo.fromFirestore(doc.data(), doc.id))
           .toList();
     } catch (e) {
       debugPrint('PDF 목록 가져오기 오류: $e');
@@ -41,7 +41,7 @@ class PdfRepository {
         return null;
       }
       
-      return PdfFileInfo.fromMap({...doc.data()!, 'firestoreId': doc.id});
+      return PdfFileInfo.fromFirestore(doc.data()!, doc.id);
     } catch (e) {
       debugPrint('PDF 가져오기 오류: $e');
       return null;
@@ -109,10 +109,10 @@ class PdfRepository {
       final docRef = await _firestore.collection(_collection).add(pdfData);
       
       // PdfFileInfo 객체 생성 및 반환
-      return PdfFileInfo.fromMap({
+      return PdfFileInfo.fromFirestore({
         ...pdfData,
         'firestoreId': docRef.id,
-      });
+      }, docRef.id);
     } catch (e) {
       debugPrint('PDF 업로드 오류: $e');
       rethrow;
@@ -154,10 +154,10 @@ class PdfRepository {
       final docRef = await _firestore.collection(_collection).add(pdfData);
       
       // PdfFileInfo 객체 생성 및 반환
-      return PdfFileInfo.fromMap({
+      return PdfFileInfo.fromFirestore({
         ...pdfData,
         'firestoreId': docRef.id,
-      });
+      }, docRef.id);
     } catch (e) {
       debugPrint('URL에서 PDF 업로드 오류: $e');
       rethrow;

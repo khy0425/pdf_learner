@@ -4,12 +4,14 @@ import '../models/user_model.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/api_key_service.dart';
+import '../utils/rate_limiter.dart';
 
 /// 인증 관련 비즈니스 로직을 담당하는 ViewModel 클래스
 class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
   final ApiKeyService _apiKeyService;
+  final RateLimiter _rateLimiter;
   
   UserModel? _user;
   bool _isLoading = false;
@@ -49,9 +51,12 @@ class AuthViewModel extends ChangeNotifier {
     AuthRepository? authRepository,
     UserRepository? userRepository,
     ApiKeyService? apiKeyService,
+    RateLimiter? rateLimiter,
   }) : _authRepository = authRepository ?? AuthRepository(),
        _userRepository = userRepository ?? UserRepository(),
-       _apiKeyService = apiKeyService ?? ApiKeyService() {
+       _apiKeyService = apiKeyService ?? ApiKeyService(),
+       _rateLimiter = rateLimiter ?? RateLimiter() {
+    _initializeServices();
     _initializeAuthState();
     
     // Firebase Auth 상태 변경 리스너 추가
@@ -66,6 +71,15 @@ class AuthViewModel extends ChangeNotifier {
       _user = UserModel.createDefaultUser();
       _isInitialized = true;
       notifyListeners();
+    }
+  }
+  
+  /// 서비스 초기화
+  Future<void> _initializeServices() async {
+    try {
+      await _rateLimiter.initialize();
+    } catch (e) {
+      debugPrint('RateLimiter 초기화 오류: $e');
     }
   }
   
@@ -278,6 +292,13 @@ class AuthViewModel extends ChangeNotifier {
       _setLoading(true);
       _error = null;
       
+      // 요청 제한 확인
+      final deviceId = _getDeviceId();
+      if (await _rateLimiter.isRateLimited(deviceId, 'login_attempt')) {
+        _setError('너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      
       await _authRepository.signInWithEmailPassword(email, password);
       
     } on FirebaseAuthException catch (e) {
@@ -400,6 +421,13 @@ class AuthViewModel extends ChangeNotifier {
         return;
       }
       
+      // 요청 제한 확인
+      final deviceId = _getDeviceId();
+      if (await _rateLimiter.isRateLimited(deviceId, 'api_key_validation')) {
+        _setError('너무 많은 API 키 업데이트 요청이 있었습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      
       // API 키 저장
       await _apiKeyService.saveApiKey(userId, apiKey);
       
@@ -417,14 +445,27 @@ class AuthViewModel extends ChangeNotifier {
     } catch (e) {
       if (!mounted) return;
       debugPrint('API 키 업데이트 오류: $e');
-      _setError('API 키 업데이트에 실패했습니다.');
+      
+      // 오류 메시지 개선
+      String errorMessage = 'API 키 업데이트에 실패했습니다.';
+      if (e.toString().contains('API 키 형식이 올바르지 않습니다')) {
+        errorMessage = 'API 키 형식이 올바르지 않습니다. Gemini API 키는 "AI"로 시작해야 합니다.';
+      } else if (e.toString().contains('너무 많은 요청')) {
+        errorMessage = '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.';
+      } else if (e.toString().contains('검증 실패')) {
+        errorMessage = 'API 키 검증에 실패했습니다. 올바른 Gemini API 키인지 확인하세요.';
+      } else if (e.toString().contains('네트워크')) {
+        errorMessage = '네트워크 연결을 확인해주세요.';
+      }
+      
+      _setError(errorMessage);
     } finally {
       if (mounted) _setLoading(false);
     }
   }
   
-  /// API 키 가져오기
-  Future<String?> getApiKey() async {
+  /// API 키 가져오기 (캐시 결과 우선 사용)
+  Future<String?> getApiKey({bool forceRefresh = false}) async {
     if (!mounted) return null;
     
     try {
@@ -434,8 +475,8 @@ class AuthViewModel extends ChangeNotifier {
       final userId = _user!.uid;
       if (userId.isEmpty) return null;
       
-      // 이미 모델에 API 키가 있으면 바로 반환
-      if (_user!.apiKey != null && _user!.apiKey!.isNotEmpty) {
+      // 강제 새로고침이 아니고 이미 모델에 API 키가 있으면 바로 반환
+      if (!forceRefresh && _user!.apiKey != null && _user!.apiKey!.isNotEmpty) {
         return _user!.apiKey;
       }
       
@@ -458,6 +499,33 @@ class AuthViewModel extends ChangeNotifier {
       debugPrint('API 키 가져오기 오류: $e');
       return null;
     }
+  }
+  
+  /// API 키 유효성 검증 (캐시된 결과 사용)
+  Future<bool> isApiKeyValid(String apiKey) async {
+    try {
+      // 요청 제한 확인
+      final deviceId = _getDeviceId();
+      if (await _rateLimiter.isRateLimited(deviceId, 'api_key_validation')) {
+        _setError('너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.');
+        return false;
+      }
+      
+      // 캐시된 결과 있으면 바로 반환
+      if (_apiKeyService.isApiKeyValidCached(apiKey)) {
+        return true;
+      }
+      
+      return await _apiKeyService.isValidApiKey(apiKey);
+    } catch (e) {
+      debugPrint('API 키 유효성 검증 오류: $e');
+      return false;
+    }
+  }
+  
+  /// API 키 유효성 검증 오류 메시지 가져오기
+  String? getApiKeyErrorMessage(String apiKey) {
+    return _apiKeyService.getApiKeyErrorMessage(apiKey);
   }
   
   /// 로딩 상태 설정
@@ -505,6 +573,22 @@ class AuthViewModel extends ChangeNotifier {
         return '로그인 창이 닫혔습니다. 다시 시도해주세요.';
       default:
         return '인증 오류가 발생했습니다: $errorCode';
+    }
+  }
+  
+  /// 디바이스 식별자 생성
+  String _getDeviceId() {
+    try {
+      // 로그인한 사용자 ID가 있으면 사용
+      if (_user != null && _user!.uid.isNotEmpty) {
+        return RateLimiter.generateClientId(_user!.uid);
+      }
+      
+      // 없으면 시간 기반 임시 ID 생성
+      return RateLimiter.generateClientId('anonymous_${DateTime.now().millisecondsSinceEpoch}');
+    } catch (e) {
+      debugPrint('디바이스 ID 생성 오류: $e');
+      return 'fallback_device_id';
     }
   }
   
