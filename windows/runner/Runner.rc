@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "ai_pdf_study_assistant" "\0"
+            VALUE "CompanyName", "com.reaf" "\0"
+            VALUE "FileDescription", "pdf_learner_v2" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "ai_pdf_study_assistant" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "ai_pdf_study_assistant.exe" "\0"
-            VALUE "ProductName", "ai_pdf_study_assistant" "\0"
+            VALUE "InternalName", "pdf_learner_v2" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2025 com.reaf. All rights reserved." "\0"
+            VALUE "OriginalFilename", "pdf_learner_v2.exe" "\0"
+            VALUE "ProductName", "pdf_learner_v2" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
