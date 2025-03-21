@@ -27,7 +27,7 @@ import 'services/api_key_service.dart';
 import 'services/auth_service.dart';
 import 'services/web_firebase_initializer.dart';
 import 'providers/pdf_provider.dart';
-import 'screens/home_page.dart';
+import 'views/home_page.dart';
 import 'views/auth_screen.dart';
 import 'theme/app_theme.dart';
 

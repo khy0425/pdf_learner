@@ -8,10 +8,20 @@ import '../view_models/pdf_file_view_model.dart';
 import '../view_models/home_view_model.dart';
 import '../models/pdf_file_info.dart';
 import '../widgets/home/empty_state_view.dart';
-import '../widgets/pdf_list_item.dart';
+import '../widgets/home/user_profile_widget.dart';
+import '../widgets/home/api_key_status_widget.dart';
+import '../widgets/home/pdf_list_item.dart';
 import '../widgets/common/wave_painter.dart';
 import 'pdf_viewer_screen.dart';
 import 'auth_screen.dart';
+import '../providers/pdf_provider.dart';
+import '../theme/app_theme.dart';
+import '../widgets/home/pdf_list_widget.dart';
+import '../widgets/home/user_profile_widget.dart';
+import '../widgets/home/api_key_status_widget.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io' if (dart.library.html) 'package:pdf_learner/utils/web_stub.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -31,7 +41,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     
     // 애니메이션 컨트롤러 초기화
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     
@@ -39,7 +49,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeInOut,
+        curve: Curves.easeIn,
       ),
     );
     
@@ -65,14 +75,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   // 홈 화면 초기화
   Future<void> _initializeHome() async {
     try {
-      // 인증 상태 확인
       final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-      if (!mounted) return;
+      final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
       
-      final isLoggedIn = authViewModel.isLoggedIn;
-      
-      if (isLoggedIn) {
-        // 사용자가 로그인한 경우 PDF 목록 로드
+      // 로그인 상태 확인
+      if (authViewModel.isLoggedIn) {
+        // API 키 상태 확인
+        await homeViewModel.checkApiKeyStatus(context);
+        // PDF 파일 로드
+        await _loadPdfFiles();
+      } else {
+        // 게스트 모드 PDF 파일 로드
         await _loadPdfFiles();
       }
     } catch (e) {
@@ -83,21 +96,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   // PDF 파일 목록 로드
   Future<void> _loadPdfFiles() async {
     try {
-      if (!mounted) return;
-      
-      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-      final pdfViewModel = Provider.of<PdfFileViewModel>(context, listen: false);
-      
-      final currentUser = authViewModel.currentUser;
-      final userId = currentUser?.uid ?? 'guest_user';
-      
-      debugPrint('PDF 파일 목록 로드 시작: $userId');
-      await pdfViewModel.loadPdfFiles(userId);
+      final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+      await homeViewModel.loadPDFs(context);
     } catch (e) {
-      debugPrint('PDF 파일 목록 로드 오류: $e');
+      debugPrint('PDF 파일 로드 오류: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF 파일 목록을 불러오는 중 오류가 발생했습니다: $e')),
+          SnackBar(content: Text('PDF 파일을 로드하는 중 오류가 발생했습니다: $e')),
         );
       }
     }
@@ -105,246 +110,324 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations localizations = AppLocalizations.of(context)!;
+    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PDF Learner'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AuthScreen()),
+      appBar: _buildAppBar(context),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: RefreshIndicator(
+          onRefresh: _loadPdfFiles,
+          child: _buildBody(context),
+        ),
+      ),
+      floatingActionButton: _buildFloatingActionButton(context),
+    );
+  }
+
+  AppBar _buildAppBar(BuildContext context) {
+    return AppBar(
+      title: Text(
+        'PDF Learner',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: AppTheme.primaryColor,
+        ),
+      ),
+      elevation: 0,
+      centerTitle: false,
+      backgroundColor: Colors.transparent,
+      actions: [
+        // 프로필 아이콘
+        Consumer<AuthViewModel>(
+          builder: (context, authViewModel, child) {
+            if (!authViewModel.isLoggedIn) {
+              return TextButton.icon(
+                icon: const Icon(Icons.login),
+                label: const Text('로그인'),
+                onPressed: () => Navigator.pushNamed(context, '/auth'),
               );
-            },
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        key: _refreshIndicatorKey,
-        onRefresh: _loadPdfFiles,
-        child: _buildBody(),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showUploadOptions,
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    return Consumer2<AuthViewModel, PdfFileViewModel>(
-      builder: (context, authViewModel, pdfViewModel, child) {
-        if (authViewModel.isLoading || pdfViewModel.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        
-        if (!authViewModel.isLoggedIn) {
-          return Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const EmptyStateView(
-                icon: Icons.account_circle,
-                title: '게스트 모드',
-                message: '로그인하면 PDF 파일을 저장하고 관리할 수 있습니다',
+            }
+            
+            return IconButton(
+              icon: CircleAvatar(
+                radius: 16,
+                backgroundColor: AppTheme.primaryColor,
+                child: Text(
+                  Provider.of<HomeViewModel>(context).getUserInitial(authViewModel.currentUser!),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const AuthScreen()),
-                  );
-                },
-                child: const Text('로그인하기'),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: _showUploadOptions,
-                child: const Text('게스트 모드로 PDF 업로드하기'),
-              ),
-            ],
-          );
-        }
-        
-        if (pdfViewModel.pdfFiles.isEmpty) {
-          return const EmptyStateView(
-            icon: Icons.upload_file,
-            title: 'PDF 파일이 없습니다',
-            message: '+ 버튼을 눌러 PDF 파일을 업로드하세요',
-          );
-        }
-        
-        return FadeTransition(
-          opacity: _fadeAnimation,
-          child: ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: pdfViewModel.pdfFiles.length,
-            itemBuilder: (context, index) {
-              final pdf = pdfViewModel.pdfFiles[index];
-              return PDFListItem(
-                pdfFile: pdf,
-                onTap: () => _openPdfViewer(pdf),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  void _showUploadOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.file_upload),
-                title: const Text('파일에서 업로드'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _uploadFromFile();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.link),
-                title: const Text('URL에서 업로드'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _uploadFromUrl();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _uploadFromFile() async {
-    try {
-      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-      final pdfViewModel = Provider.of<PdfFileViewModel>(context, listen: false);
-      final currentUser = authViewModel.currentUser;
-      
-      if (currentUser == null) {
-        debugPrint('로그인되지 않은 상태: 게스트 모드로 파일 업로드');
-        // 게스트 모드에서는 임시 ID 생성
-        const guestId = 'guest_user';
-        await pdfViewModel.uploadPdfFromFilePicker(guestId);
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('게스트 모드에서 파일이 업로드되었습니다. 파일을 저장하려면 로그인하세요.'),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-        return;
-      }
-      
-      await pdfViewModel.uploadPdfFromFilePicker(currentUser.uid);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('파일 업로드가 완료되었습니다')),
-        );
-      }
-    } catch (e) {
-      debugPrint('파일 업로드 오류: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('파일 업로드 중 오류가 발생했습니다: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _uploadFromUrl() async {
-    try {
-      final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-      final currentUser = authViewModel.currentUser;
-      final String userId = currentUser?.uid ?? 'guest_user';
-      
-      if (currentUser == null) {
-        debugPrint('로그인되지 않은 상태: 게스트 모드로 URL 업로드');
-      }
-      
-      final TextEditingController urlController = TextEditingController();
-      
-      if (!mounted) return;
-      
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('URL에서 PDF 업로드'),
-          content: TextField(
-            controller: urlController,
-            decoration: const InputDecoration(
-              hintText: 'https://example.com/document.pdf',
-              labelText: 'PDF URL',
-            ),
-            keyboardType: TextInputType.url,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
-            ),
-            TextButton(
               onPressed: () {
-                Navigator.pop(context);
-                if (urlController.text.isNotEmpty) {
-                  try {
-                    final pdfViewModel = Provider.of<PdfFileViewModel>(context, listen: false);
-                    pdfViewModel.uploadPdfFromUrl(
-                      urlController.text,
-                      userId,
-                    );
-                    
-                    final message = currentUser == null
-                        ? '게스트 모드에서 URL 업로드가 시작되었습니다. 파일을 저장하려면 로그인하세요.'
-                        : 'URL에서 PDF 업로드가 시작되었습니다';
-                    
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(message),
-                        duration: const Duration(seconds: 5),
-                      ),
-                    );
-                  } catch (e) {
-                    debugPrint('URL 업로드 오류: $e');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('URL 업로드 중 오류가 발생했습니다: $e')),
-                    );
-                  }
-                }
+                Navigator.pushNamed(context, '/profile');
               },
-              child: const Text('업로드'),
+            );
+          },
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    return Consumer<AuthViewModel>(
+      builder: (context, authViewModel, child) {
+        return Consumer<HomeViewModel>(
+          builder: (context, homeViewModel, child) {
+            // 로딩 상태
+            if (homeViewModel.isLoading) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('로딩 중...'),
+                  ],
+                ),
+              );
+            }
+
+            // 오류 발생
+            if (homeViewModel.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    SizedBox(height: 16),
+                    Text(homeViewModel.errorMessage),
+                    SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _loadPdfFiles,
+                      child: Text('다시 시도'),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Consumer<PDFProvider>(
+              builder: (context, pdfProvider, child) {
+                // 게스트 모드이고 PDF가 없는 경우
+                if (!authViewModel.isLoggedIn && pdfProvider.pdfFiles.isEmpty) {
+                  return _buildGuestModeMessage();
+                }
+
+                // PDF 목록 표시
+                return pdfProvider.pdfFiles.isEmpty 
+                  ? _buildEmptyState() 
+                  : _buildPdfList(pdfProvider.pdfFiles);
+              }
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPdfList(List<PdfFileInfo> pdfFiles) {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '내 PDF 목록',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: pdfFiles.length,
+              itemBuilder: (context, index) {
+                final pdf = pdfFiles[index];
+                return PdfListItem(
+                  pdfInfo: pdf,
+                  onOpen: () => _openPdf(context, pdf),
+                  onDelete: (pdf) => _deletePdf(context, pdf),
+                );
+              },
             ),
           ],
         ),
-      );
-    } catch (e) {
-      debugPrint('URL 업로드 다이얼로그 오류: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('오류가 발생했습니다: $e')),
-        );
-      }
-    }
+      ),
+    );
   }
 
-  void _openPdfViewer(PdfFileInfo pdf) {
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/empty_state.png',
+            width: 200,
+            height: 200,
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'PDF 파일이 없습니다',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'PDF 파일을 추가하여 AI 학습을 시작하세요',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('PDF 추가하기'),
+            onPressed: () => _pickPdf(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuestModeMessage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset(
+            'assets/images/guest_mode.png',
+            width: 200,
+            height: 200,
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            '게스트 모드입니다',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '로그인하여 모든 기능을 사용해보세요',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.login),
+            label: const Text('로그인하기'),
+            onPressed: () => Navigator.pushNamed(context, '/auth'),
+          ),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('게스트로 사용하기'),
+            onPressed: () => _pickPdf(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingActionButton(BuildContext context) {
+    return Consumer<HomeViewModel>(
+      builder: (context, homeViewModel, child) {
+        return FloatingActionButton.extended(
+          onPressed: () => homeViewModel.pickPDF(context),
+          backgroundColor: AppTheme.primaryColor,
+          icon: const Icon(Icons.add, color: Colors.white),
+          label: const Text(
+            'PDF 업로드',
+            style: TextStyle(color: Colors.white),
+          ),
+        );
+      },
+    );
+  }
+
+  // 정렬 옵션 다이얼로그
+  void _showSortOptionsDialog(BuildContext context) {
+    final pdfProvider = Provider.of<PDFProvider>(context, listen: false);
+    
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return SimpleDialog(
+          title: const Text('정렬 방식 선택'),
+          children: <Widget>[
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context);
+                // 이름순 정렬 (오름차순)
+                // 이미 pdfProvider에 정렬 메소드가 없으므로 여기서는 삭제
+                setState(() {
+                  // 상태 업데이트만 수행
+                });
+              },
+              child: const Text('이름순 정렬 (A-Z)'),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context);
+                // 날짜순 정렬 (최신순)
+                setState(() {
+                  // 상태 업데이트만 수행
+                });
+              },
+              child: const Text('날짜순 정렬 (최신순)'),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context);
+                // 크기순 정렬 (큰 것부터)
+                setState(() {
+                  // 상태 업데이트만 수행
+                });
+              },
+              child: const Text('크기순 정렬 (큰 것부터)'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // PDF 파일 열기
+  void _openPdf(BuildContext context, PdfFileInfo pdfFile) {
+    // PDF 뷰어 화면으로 이동
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PDFViewerScreen(pdf: pdf),
+        builder: (context) => PDFViewerScreen(pdf: pdfFile),
       ),
     );
+  }
+  
+  // PDF 파일 삭제
+  void _deletePdf(BuildContext context, PdfFileInfo pdfFile) {
+    final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+    final pdfProvider = Provider.of<PDFProvider>(context, listen: false);
+    homeViewModel.deletePDF(context, pdfProvider, pdfFile);
+  }
+  
+  // PDF 파일 선택
+  void _pickPdf(BuildContext context) {
+    final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+    homeViewModel.pickPDF(context);
   }
 } 

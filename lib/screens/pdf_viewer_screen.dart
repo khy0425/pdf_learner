@@ -534,7 +534,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       // 결과 표시
       showGeneralDialog(
         context: context,
-        pageBuilder: (context, animation, secondaryAnimation) => _SummaryDialog(summary: summary),
+        pageBuilder: (context, animation, secondaryAnimation) => _SummaryDialog(summary: summary ?? '요약을 생성할 수 없습니다.'),
         transitionBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,
@@ -1817,7 +1817,7 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                Text(summary),
+                Text(summary ?? '요약을 생성할 수 없습니다.'),
               ],
             ),
           ),
@@ -2025,9 +2025,12 @@ class _LoadingOverlay extends StatelessWidget {
 // 요약 결과를 보여주는 위젯
 class _SummaryDialog extends StatelessWidget {
   final String summary;
-
-  const _SummaryDialog({required this.summary});
-
+  
+  const _SummaryDialog({
+    Key? key,
+    required this.summary,
+  }) : super(key: key);
+  
   @override
   Widget build(BuildContext context) {
     return Dialog(

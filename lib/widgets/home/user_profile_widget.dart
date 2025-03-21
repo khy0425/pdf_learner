@@ -1,159 +1,185 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../services/auth_service.dart';
-import '../../models/user_model.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../theme/app_theme.dart';
+import '../../view_models/home_view_model.dart';
 
 /// 사용자 프로필 위젯
 /// 로그인 상태에 따라 프로필 또는 로그인 버튼을 표시합니다.
 class UserProfileWidget extends StatelessWidget {
-  const UserProfileWidget({Key? key}) : super(key: key);
+  final User user;
+  final HomeViewModel homeViewModel;
 
-  // 사용자 초성(이니셜) 가져오기
-  String _getUserInitials(UserModel? user) {
-    if (user == null || (user.displayName.isEmpty && (user.email.isEmpty))) {
-      return '?';
-    }
-    
-    if (user.displayName.isNotEmpty) {
-      final nameParts = user.displayName.split(' ');
-      if (nameParts.length > 1) {
-        // 이름이 여러 단어로 구성된 경우 첫 글자만 사용
-        return '${nameParts[0][0]}${nameParts[1][0]}'.toUpperCase();
-      } else if (nameParts.isNotEmpty && nameParts[0].isNotEmpty) {
-        // 이름이 한 단어인 경우 첫 두 글자 사용
-        return nameParts[0].length > 1 
-            ? nameParts[0].substring(0, 2).toUpperCase()
-            : nameParts[0][0].toUpperCase();
-      }
-    }
-    
-    // 이름이 없는 경우 이메일 첫 글자 사용
-    return user.email.isNotEmpty ? user.email[0].toUpperCase() : '?';
-  }
-
-  // 사용자 표시 이름 가져오기
-  String _getUserDisplayName(UserModel? user) {
-    if (user == null) return '게스트';
-    
-    if (user.displayName.isNotEmpty) {
-      return user.displayName;
-    } else if (user.email.isNotEmpty) {
-      // 이메일에서 @ 앞부분 사용
-      return user.email.split('@')[0];
-    } else {
-      return '게스트';
-    }
-  }
-
-  // 사용자 아바타 위젯 생성
-  Widget _buildUserAvatar(UserModel? user) {
-    if (user != null && user.photoURL != null && user.photoURL!.isNotEmpty) {
-      // 프로필 이미지가 있는 경우
-      return CircleAvatar(
-        backgroundImage: NetworkImage(user.photoURL!),
-        radius: 20,
-      );
-    } else {
-      // 프로필 이미지가 없는 경우 이니셜 사용
-      return CircleAvatar(
-        backgroundColor: Colors.blue.shade700,
-        radius: 20,
-        child: Text(
-          _getUserInitials(user),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-    }
-  }
-
-  // 사용자 프로필 다이얼로그 표시
-  void _showUserProfileDialog(BuildContext context, UserModel? user, AuthService authService) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('사용자 프로필'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildUserAvatar(user),
-            const SizedBox(height: 16),
-            Text(
-              _getUserDisplayName(user),
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (user?.email != null && user!.email.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  user.email,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 24),
-            if (authService.isLoggedIn)
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  authService.signOut();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                ),
-                child: const Text('로그아웃'),
-              )
-            else
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/login');
-                },
-                child: const Text('로그인'),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('닫기'),
-          ),
-        ],
-      ),
-    );
-  }
+  const UserProfileWidget({
+    super.key,
+    required this.user,
+    required this.homeViewModel,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-    final UserModel? user = authService.user;
-    
-    return GestureDetector(
-      onTap: () => _showUserProfileDialog(context, user, authService),
-      child: Row(
-        children: [
-          _buildUserAvatar(user),
-          const SizedBox(width: 8),
-          Text(
-            authService.isLoggedIn 
-                ? '환영합니다, ${_getUserDisplayName(user)}님' 
-                : '로그인하세요',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
       ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 사용자 정보 헤더
+            Row(
+              children: [
+                // 사용자 아바타
+                _buildUserAvatar(),
+                
+                const SizedBox(width: 16),
+                
+                // 사용자 정보
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        homeViewModel.getUserDisplayName(user),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (user.email != null) 
+                        Text(
+                          user.email!,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                
+                // 프로필 편집 버튼
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () => Navigator.pushNamed(context, '/profile'),
+                  tooltip: '프로필 편집',
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
+            
+            // 사용자 통계 정보
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem(
+                  icon: Icons.description,
+                  label: 'PDF',
+                  value: '0',
+                ),
+                _buildStatItem(
+                  icon: Icons.quiz,
+                  label: '퀴즈',
+                  value: '0',
+                ),
+                _buildStatItem(
+                  icon: Icons.bookmark,
+                  label: '북마크',
+                  value: '0',
+                ),
+                _buildStatItem(
+                  icon: Icons.event_note,
+                  label: '노트',
+                  value: '0',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildUserAvatar() {
+    return CircleAvatar(
+      radius: 30,
+      backgroundColor: AppTheme.primaryColor,
+      child: user.photoURL != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: Image.network(
+                user.photoURL!,
+                width: 60,
+                height: 60,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Text(
+                    homeViewModel.getUserInitial(user),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  );
+                },
+              ),
+            )
+          : Text(
+              homeViewModel.getUserInitial(user),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+    );
+  }
+  
+  Widget _buildStatItem({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Column(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: AppTheme.primaryColor,
+            size: 24,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+          ),
+        ),
+      ],
     );
   }
 } 

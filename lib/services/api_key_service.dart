@@ -18,6 +18,43 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 
+/// API 키 캐시 클래스
+class _CachedApiKey {
+  final String apiKey;
+  final DateTime timestamp;
+  final bool isValid;
+  
+  _CachedApiKey({
+    required this.apiKey,
+    required this.timestamp,
+    required this.isValid,
+  });
+}
+
+/// 프리미엄 사용자 상태 캐시 클래스
+class _CachedPremiumStatus {
+  final bool isPremium;
+  final DateTime timestamp;
+  
+  _CachedPremiumStatus({
+    required this.isPremium,
+    required this.timestamp,
+  });
+}
+
+/// 검증 상태 클래스
+class _ValidationStatus {
+  final bool isValid;
+  final DateTime timestamp;
+  final bool isValidating;
+  
+  _ValidationStatus({
+    required this.isValid,
+    required this.timestamp,
+    this.isValidating = false,
+  });
+}
+
 /// API 키 관리를 담당하는 Service 클래스
 class ApiKeyService {
   final UserRepository _userRepository;
@@ -39,6 +76,9 @@ class ApiKeyService {
   
   // 테스트 전용: 오버라이드 값
   Map<String, dynamic> testOverrides = {};
+  
+  // 사용자가 프리미엄 사용자인지 확인합니다
+  final Map<String, _CachedPremiumStatus> _premiumStatusCache = {};
   
   ApiKeyService({UserRepository? userRepository}) 
       : _userRepository = userRepository ?? UserRepository(),
@@ -321,196 +361,74 @@ class ApiKeyService {
   
   /// API 키 유효성 검사 (결과 캐싱 적용)
   Future<bool> isValidApiKey(String apiKey) async {
-    // 테스트 오버라이드 확인
-    if (testOverrides.containsKey('isValidApiKey')) {
-      final testImpl = testOverrides['isValidApiKey'] as Future<bool> Function(String);
-      return await testImpl(apiKey);
-    }
-    
-    // 빈 API 키는 유효하지 않음
-    if (apiKey.isEmpty) {
-      _apiKeyErrorMessages[apiKey] = '빈 API 키는 유효하지 않습니다.';
-      _securityLogger.log(
-        SecurityEvent.apiKeyFailed,
-        'API 키가 비어있음',
-        level: SecurityLogLevel.warn,
-      );
-      return false;
-    }
-    
-    // 형식 검사
-    if (!InputValidator.isValidApiKey(apiKey, ApiKeyType.gemini)) {
-      _apiKeyErrorMessages[apiKey] = 'API 키 형식이 올바르지 않습니다. Gemini API 키는 "AI"로 시작해야 합니다.';
-      _securityLogger.log(
-        SecurityEvent.apiKeyFailed,
-        '잘못된 API 키 형식',
-        level: SecurityLogLevel.warn,
-      );
-      return false;
-    }
-    
-    // 검증 중인지 확인
-    if (_validationStatus.containsKey(apiKey) && 
-        _validationStatus[apiKey]!.isValidating &&
-        DateTime.now().difference(_validationStatus[apiKey]!.startTime).inSeconds < 30) {
-      // 30초 이내에 이미 검증 중이면 이전 결과 반환 또는 대기
-      if (_validationStatus[apiKey]!.lastResult != null) {
-        return _validationStatus[apiKey]!.lastResult!;
-      }
-      
-      // 최대 3초 대기
-      int attempts = 0;
-      while (_validationStatus.containsKey(apiKey) && 
-             _validationStatus[apiKey]!.isValidating && 
-             attempts < 6) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        attempts++;
-      }
-      
-      if (_validationStatus.containsKey(apiKey) && _validationStatus[apiKey]!.lastResult != null) {
-        return _validationStatus[apiKey]!.lastResult!;
-      }
-    }
-    
-    // 요청 제한 확인
-    final clientId = RateLimiter.generateClientId(apiKey.substring(0, min(apiKey.length, 10)));
-    if (await _rateLimiter.isRateLimited(clientId, 'api_key_validation')) {
-      _apiKeyErrorMessages[apiKey] = '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.';
-      
-      _securityLogger.log(
-        SecurityEvent.rateLimit,
-        'API 키 검증 속도 제한 초과',
-        level: SecurityLogLevel.warn,
-        data: {'clientId': clientId},
-      );
-      
-      return false;
-    }
-    
-    // 검증 상태 설정
-    _validationStatus[apiKey] = _ValidationStatus(
-      isValidating: true,
-      startTime: DateTime.now(),
-      lastResult: null,
-    );
-    
-    return await _isValidApiKeyImpl(apiKey);
-  }
-  
-  /// API 키 유효성 실제 검사 구현부 (테스트용으로 분리)
-  Future<bool> _isValidApiKeyImpl(String apiKey) async {
-    // 테스트 오버라이드 확인
-    if (testOverrides.containsKey('isValidApiKeyImpl')) {
-      final testImpl = testOverrides['isValidApiKeyImpl'] as Future<bool> Function(String);
-      final isValid = await testImpl(apiKey);
-      
-      // 검증 상태 업데이트
-      _validationStatus[apiKey] = _ValidationStatus(
-        isValidating: false,
-        startTime: _validationStatus[apiKey]!.startTime,
-        lastResult: isValid,
-        lastCheck: DateTime.now(),
-      );
-      
-      return isValid;
-    }
-    
-    // API 호출을 통한 실제 검증 시도
     try {
-      final response = await http.post(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'contents': [
-            {
-              'parts': [
-                {'text': 'Hello'}
-              ]
-            }
-          ],
-        }),
-      );
+      if (apiKey.isEmpty) {
+        _apiKeyErrorMessages[apiKey] = 'API 키가 비어있습니다.';
+        return false;
+      }
       
-      final isValid = response.statusCode == 200;
-      
-      // 오류 메시지 설정
-      if (!isValid) {
-        try {
-          final errorJson = jsonDecode(response.body);
-          final errorMessage = errorJson['error']?['message'] ?? '알 수 없는 오류가 발생했습니다.';
-          _apiKeyErrorMessages[apiKey] = 'API 키 검증 실패: $errorMessage';
-        } catch (_) {
-          _apiKeyErrorMessages[apiKey] = 'API 키 검증 실패: 상태 코드 ${response.statusCode}';
+      // 이미 검증된 키는 즉시 결과 반환
+      if (_validationStatus.containsKey(apiKey)) {
+        final status = _validationStatus[apiKey]!;
+        if (DateTime.now().difference(status.timestamp).inMinutes < 30) {
+          return status.isValid;
         }
-      } else {
-        _apiKeyErrorMessages.remove(apiKey);
       }
       
-      if (isValid) {
-        _securityLogger.log(
-          SecurityEvent.apiKeyVerified,
-          'API 키 유효성 검증 성공',
-          level: SecurityLogLevel.info,
-        );
-      } else {
-        _securityLogger.log(
-          SecurityEvent.apiKeyFailed,
-          'API 키 유효성 검증 실패',
-          level: SecurityLogLevel.warn,
-          data: {'statusCode': response.statusCode, 'response': response.body.substring(0, min(response.body.length, 100))},
-        );
-      }
+      // 실제 API 호출을 통한 검증
+      final isValid = await _validateApiKey(apiKey);
       
-      // 검증 상태 업데이트
+      // 검증 결과 저장
       _validationStatus[apiKey] = _ValidationStatus(
-        isValidating: false,
-        startTime: _validationStatus[apiKey]!.startTime,
-        lastResult: isValid,
-        lastCheck: DateTime.now(),
+        isValid: isValid,
+        timestamp: DateTime.now(),
       );
       
       return isValid;
     } catch (e) {
-      debugPrint('API 키 검증 오류: $e');
-      
-      String errorMessage = '네트워크 오류가 발생했습니다.';
-      
-      if (e is SocketException) {
-        errorMessage = '네트워크 연결을 확인해주세요.';
-      } else if (e is TimeoutException) {
-        errorMessage = '서버 응답 시간이 초과되었습니다.';
-      } else if (e is FormatException) {
-        errorMessage = '응답 데이터 형식이 올바르지 않습니다.';
-      }
-      
-      _apiKeyErrorMessages[apiKey] = 'API 키 검증 중 오류 발생: $errorMessage';
-      
-      _securityLogger.log(
-        SecurityEvent.apiKeyFailed,
-        'API 키 검증 중 오류 발생',
-        level: SecurityLogLevel.error,
-        data: {'error': e.toString()},
-      );
-      
-      // 검증 상태 업데이트
-      _validationStatus[apiKey] = _ValidationStatus(
-        isValidating: false,
-        startTime: _validationStatus[apiKey]!.startTime,
-        lastResult: false,
-        lastCheck: DateTime.now(),
-      );
-      
+      debugPrint('isValidApiKey 오류: $e');
+      _apiKeyErrorMessages[apiKey] = '유효성 검사 중 오류: ${e.toString()}';
       return false;
     }
   }
   
-  /// API 키 마스킹 (보안을 위해 일부만 표시)
+  // API 키의 실제 검증 로직
+  Future<bool> _validateApiKey(String apiKey) async {
+    try {
+      final uri = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro?key=$apiKey');
+      final response = await http.get(uri);
+      
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        final errorBody = jsonDecode(response.body);
+        _apiKeyErrorMessages[apiKey] = errorBody['error']['message'] ?? '유효하지 않은 API 키';
+        return false;
+      }
+    } catch (e) {
+      debugPrint('API 키 검증 오류: $e');
+      _apiKeyErrorMessages[apiKey] = '네트워크 오류: ${e.toString()}';
+      return false;
+    }
+  }
+  
+  /// API 키를 마스킹 처리하여 반환합니다
   String maskApiKey(String apiKey) {
-    if (apiKey.length <= 8) return '********';
-    return '${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}';
+    if (apiKey.isEmpty) {
+      return '';
+    }
+    
+    if (apiKey.length <= 8) {
+      return '********';
+    }
+    
+    // 처음 4자와 마지막 4자만 표시하고 나머지는 *로 마스킹
+    final prefix = apiKey.substring(0, 4);
+    final suffix = apiKey.substring(apiKey.length - 4);
+    final maskedLength = apiKey.length - 8;
+    final maskedPart = '*' * maskedLength;
+    
+    return '$prefix$maskedPart$suffix';
   }
   
   // 유료 구독 확인
@@ -601,7 +519,7 @@ class ApiKeyService {
     );
     
     _validationStatus.removeWhere((_, status) => 
-      !status.isValidating && now.difference(status.lastCheck ?? status.startTime).inMinutes > 30  // 30분 이상 된 검증 상태 제거
+      !status.isValidating && now.difference(status.timestamp).inMinutes > 30  // 30분 이상 된 검증 상태 제거
     );
     
     // 100개 이상의 오류 메시지가 있으면 가장 오래된 것부터 제거
@@ -617,10 +535,9 @@ class ApiKeyService {
   bool isApiKeyValidCached(String apiKey) {
     // 검증 상태 확인
     if (_validationStatus.containsKey(apiKey) && 
-        _validationStatus[apiKey]!.lastResult != null &&
-        !_validationStatus[apiKey]!.isValidating &&
-        DateTime.now().difference(_validationStatus[apiKey]!.lastCheck ?? DateTime.now()).inMinutes < 60) {
-      return _validationStatus[apiKey]!.lastResult!;
+        _validationStatus[apiKey]!.isValid &&
+        DateTime.now().difference(_validationStatus[apiKey]!.timestamp).inMinutes < 60) {
+      return true;
     }
     
     // 캐시된 값이 없으면 형식만 검사
@@ -636,32 +553,32 @@ class ApiKeyService {
   String? getCurrentUserId() {
     return _auth.currentUser?.uid;
   }
-}
-
-// 캐시된 API 키 클래스
-class _CachedApiKey {
-  final String apiKey;
-  final DateTime timestamp;
-  final bool isValid;
   
-  _CachedApiKey({
-    required this.apiKey,
-    required this.timestamp,
-    required this.isValid,
-  });
-}
-
-// API 키 검증 상태
-class _ValidationStatus {
-  final bool isValidating;
-  final DateTime startTime;
-  final bool? lastResult;
-  final DateTime? lastCheck;
-  
-  _ValidationStatus({
-    required this.isValidating,
-    required this.startTime,
-    this.lastResult,
-    this.lastCheck,
-  });
+  /// 사용자가 프리미엄 사용자인지 확인합니다
+  Future<bool> isPremiumUser(String userId) async {
+    try {
+      // 캐시된 값이 있을 경우 사용
+      final now = DateTime.now();
+      if (_premiumStatusCache.containsKey(userId)) {
+        final cacheEntry = _premiumStatusCache[userId]!;
+        if (now.difference(cacheEntry.timestamp).inHours < 1) {
+          return cacheEntry.isPremium;
+        }
+      }
+      
+      // 실제 구현은 SubscriptionService를 통해 확인
+      final isPremium = await _checkPremiumStatus(userId);
+      
+      // 캐시 업데이트
+      _premiumStatusCache[userId] = _CachedPremiumStatus(
+        isPremium: isPremium,
+        timestamp: now,
+      );
+      
+      return isPremium;
+    } catch (e) {
+      debugPrint('isPremiumUser 오류: $e');
+      return false;
+    }
+  }
 } 

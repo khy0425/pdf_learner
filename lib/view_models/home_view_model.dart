@@ -266,7 +266,7 @@ class HomeViewModel extends ChangeNotifier {
       
       // API 키 확인
       final apiKey = await apiKeyService.getApiKey(user.uid);
-      _hasValidApiKey = apiKey != null && apiKey.isNotEmpty && apiKeyService.isValidApiKey(apiKey);
+      _hasValidApiKey = apiKey != null && apiKey.isNotEmpty && await apiKeyService.isValidApiKey(apiKey);
       
       if (apiKey != null && apiKey.isNotEmpty) {
         _maskedApiKey = apiKeyService.maskApiKey(apiKey);

@@ -5,6 +5,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../view_models/pdf_file_view_model.dart';
 import '../services/pdf_service.dart';
 import '../services/ai_service.dart';
+import '../models/pdf_file_info.dart';
 
 /// PDF 페이지 모델
 class PdfPageModel {
@@ -90,6 +91,7 @@ class PdfViewerViewModel extends ChangeNotifier {
   List<String> get bookmarks => _bookmarks;
   List<PdfPageModel> get pages => _pages;
   int get pageCount => _pages.length;
+  int get totalPages => _pages.length;
   bool get isTextExtractionComplete => _isPdfLoaded && !_isLoading;
   SummaryModel? get summary => _summary;
   
@@ -304,7 +306,7 @@ class PdfViewerViewModel extends ChangeNotifier {
   }
   
   /// AI 요약 생성
-  Future<void> generateSummary([String? pdfId]) async {
+  Future<String?> generateSummary([String? pdfId]) async {
     try {
       _setLoading(true);
       
@@ -320,8 +322,11 @@ class PdfViewerViewModel extends ChangeNotifier {
       );
       
       _setLoading(false);
+      
+      return _summary?.content;
     } catch (e) {
       _setError('요약 생성 중 오류가 발생했습니다: $e');
+      return null;
     }
   }
   
@@ -367,5 +372,34 @@ class PdfViewerViewModel extends ChangeNotifier {
   
   void clearError() {
     _clearError();
+  }
+  
+  /// PDF 데이터 로드 (파일에서)
+  Future<void> loadPdf(PdfFileInfo pdf) async {
+    try {
+      _setLoading(true);
+      _clearError();
+      
+      if (pdf.id.isEmpty) {
+        debugPrint('PDF ID가 비어 있습니다.');
+        throw Exception('유효하지 않은 PDF ID입니다.');
+      }
+      
+      await loadPdfData(pdf.id);
+    } catch (e) {
+      debugPrint('PDF 파일 로드 오류: $e');
+      _setError(e.toString());
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// 페이지 북마크 상태 확인
+  bool isPageBookmarked(int pageNumber) {
+    if (pageNumber < 1 || pageNumber > _pages.length) {
+      return false;
+    }
+    
+    return _pages[pageNumber - 1].isBookmarked;
   }
 } 

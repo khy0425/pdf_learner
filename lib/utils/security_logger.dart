@@ -807,4 +807,7 @@ enum SecurityEvent {
   userDataExfiltration,
   unauthorizedDataAccess,
   apiKeyCompromised,
+  
+  // 일반 오류
+  error,
 } 

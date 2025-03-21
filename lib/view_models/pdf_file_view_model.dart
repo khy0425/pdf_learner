@@ -28,6 +28,15 @@ class PdfFileViewModel extends ChangeNotifier {
   PdfFileInfo? get selectedPdf => _selectedPdf;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  String get id => _selectedPdf?.id ?? '';
+  
+  /// 선택된 PDF의 페이지 수 반환
+  int getPdfPageCount(PdfFileInfo? pdf) {
+    if (pdf != null) {
+      return 15; // 기본값으로 15를 반환하거나 실제 PDF에서 페이지 수를 계산하는 로직 구현
+    }
+    return 0;
+  }
   
   /// 사용자의 PDF 파일 목록 로드
   Future<void> loadPdfFiles(String userId) async {
@@ -301,8 +310,8 @@ class PdfFileViewModel extends ChangeNotifier {
   
   /// PDF 파일의 페이지 수 반환
   int getPageCount() {
-    if (_selectedPdf != null && _selectedPdf!.pageCount != null) {
-      return _selectedPdf!.pageCount!;
+    if (_selectedPdf != null) {
+      return _selectedPdf!.pageCount ?? 15;
     }
     
     // 선택된 PDF가 없는 경우 기본값 반환

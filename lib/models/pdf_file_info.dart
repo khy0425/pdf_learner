@@ -16,6 +16,7 @@ class PdfFileInfo {
   final Uint8List? bytes;
   final String userId;
   final String? firestoreId;
+  final int? pageCount;
   
   /// 생성자
   PdfFileInfo({
@@ -28,6 +29,7 @@ class PdfFileInfo {
     this.bytes,
     required this.userId,
     this.firestoreId,
+    this.pageCount,
   });
   
   /// 파일이 웹 URL인지 여부
@@ -47,6 +49,9 @@ class PdfFileInfo {
   
   /// 파일 확장자
   String get extension => path.extension(fileName).toLowerCase();
+  
+  /// 파일 이름 간단한 형태 (확장자 포함)
+  String get name => fileName;
   
   /// 로컬 파일 경로 (웹에서는 null)
   String? get localPath => isLocal ? file?.path : null;
@@ -143,6 +148,7 @@ class PdfFileInfo {
     String? userId,
     String? firestoreId,
     String? cloudUrl,
+    int? pageCount,
   }) {
     return PdfFileInfo(
       id: id ?? this.id,
@@ -154,6 +160,7 @@ class PdfFileInfo {
       bytes: bytes ?? this.bytes,
       userId: userId ?? this.userId,
       firestoreId: firestoreId ?? this.firestoreId,
+      pageCount: pageCount ?? this.pageCount,
     );
   }
   

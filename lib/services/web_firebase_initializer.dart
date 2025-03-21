@@ -1,4 +1,4 @@
-import '../utils/non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
+import '../utils/non_web_stub.dart' if (dart.library.html) 'dart:js' as js;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -8,7 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide User;
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:js/js.dart';
+import '../utils/non_web_stub.dart' if (dart.library.html) 'package:js/js.dart';
 import 'package:pdf_learner/models/user_model.dart';
 import 'package:pdf_learner/models/user.dart';
 import 'dart:convert';
