@@ -1,90 +1,82 @@
 {
-  "appTitle": "PDF Learner",
-  "welcome": "Welcome!",
-  "guestUser": "Guest User",
-  "login": "Login",
-  "logout": "Logout",
-  "totalPdfs": "Total {count} PDFs",
-  "@totalPdfs": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "uploadPdf": "Upload PDF",
-  "upgrade": "Upgrade",
-  "viewTutorial": "View Tutorial",
-  "tutorialTitle": "Welcome to PDF Learner!",
-  "tutorialDesc": "This app is a tool for managing PDF documents and learning with AI. Let's explore the main features.",
-  "uploadButtonTitle": "Upload PDF",
-  "uploadButtonDesc": "Click this button to choose a PDF file and upload it to the app. Uploaded PDFs will be displayed in the list.",
-  "upgradeTitle": "Upgrade Subscription",
-  "upgradeDesc": "Upgrade to premium subscription to get unlimited AI analysis, cross-device sync, and more features.",
-  "pdfListTitle": "PDF List",
-  "pdfListDesc": "Your uploaded PDF files will appear in this area. Click a file to view the PDF and create AI summaries and quizzes.",
-  "loginTitle": "Login or Sign up",
-  "loginDesc": "Log in with Google or sign up with an API key. Logging in allows you to sync PDFs across devices.",
-  "requireLogin": "Login Required",
-  "loginPrompt": "Do you want to log in?",
+  "appTitle": "PDF Learner V2",
+  "homeTitle": "Home",
+  "settingsTitle": "Settings",
+  "profileTitle": "Profile",
+  "loginTitle": "Login",
+  "registerTitle": "Register",
+  "logoutButton": "Logout",
+  "loginButton": "Login",
+  "registerButton": "Register",
+  "forgotPasswordButton": "Forgot Password",
+  "emailLabel": "Email",
+  "passwordLabel": "Password",
+  "confirmPasswordLabel": "Confirm Password",
+  "nameLabel": "Name",
+  "searchHint": "Search...",
+  "recentFiles": "Recent Files",
+  "favoriteFiles": "Favorites",
+  "allFiles": "All Files",
+  "noFilesAvailable": "No files available",
+  "addFileButton": "Add File",
+  "darkMode": "Dark Mode",
+  "lightMode": "Light Mode",
+  "systemMode": "System Mode",
+  "languageSettings": "Language Settings",
+  "notificationSettings": "Notification Settings",
+  "accountSettings": "Account Settings",
+  "aboutApp": "About App",
+  "helpAndSupport": "Help & Support",
+  "privacyPolicy": "Privacy Policy",
+  "termsOfService": "Terms of Service",
+  "version": "Version",
+  "errorOccurred": "An error occurred",
+  "tryAgain": "Try Again",
   "cancel": "Cancel",
-  "emailLogin": "Login with Email",
-  "googleLogin": "Login with Google",
-  "uploadPdfPrompt": "Please upload a PDF file",
-  "aiAnalysisDesc": "AI will analyze uploaded PDFs to assist your learning",
-  "fileSize": "File size: {size} KB",
-  "@fileSize": {
-    "placeholders": {
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "view": "View",
+  "save": "Save",
   "delete": "Delete",
-  "skip": "Skip",
+  "edit": "Edit",
+  "share": "Share",
+  "close": "Close",
+  "confirm": "Confirm",
+  "loading": "Loading...",
+  "noInternet": "No internet connection",
+  "retry": "Retry",
+  "ok": "OK",
+  "yes": "Yes",
+  "no": "No",
+  "pdfViewer": "PDF Viewer",
+  "pdfNotFound": "PDF file not found",
+  "invalidPdf": "Invalid PDF file",
+  "zoom": "Zoom",
+  "page": "Page",
+  "bookmark": "Bookmark",
+  "highlight": "Highlight",
+  "note": "Note",
+  "search": "Search",
   "next": "Next",
   "previous": "Previous",
-  "freePlan": "Free Plan",
-  "basicPlan": "Basic Plan ($4.99/month)",
-  "premiumPlan": "Premium Plan ($9.99/month)",
-  "freeDesc": "Free, Limited Features",
-  "basicDesc": "$4.99/month, Additional Features",
-  "premiumDesc": "$9.99/month, All Features",
-  "chooseSubscription": "Choose Subscription Plan",
-  "guestUsage": "Guest Usage: {current}/{max}",
-  "@guestUsage": {
-    "placeholders": {
-      "current": {
-        "type": "int"
-      },
-      "max": {
-        "type": "int"
-      }
-    }
-  },
-  "remainingDays": "{days} days remaining",
-  "@remainingDays": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-  "remainingHours": "{hours} hours remaining",
-  "@remainingHours": {
-    "placeholders": {
-      "hours": {
-        "type": "int"
-      }
-    }
-  },
-  "trialExpired": "Trial period expired",
-  "expired": "Expired",
-  "premiumTrial": "Premium Trial",
-  "language": "Language",
-  "changeLanguage": "Change Language",
-  "english": "English",
-  "korean": "Korean",
-  "systemDefault": "System Default"
+  "goToPage": "Go to Page",
+  "fileInfo": "File Info",
+  "fileName": "File Name",
+  "fileSize": "File Size",
+  "fileType": "File Type",
+  "creationDate": "Creation Date",
+  "modificationDate": "Modification Date",
+  "author": "Author",
+  "pageCount": "Page Count",
+  "deleteConfirmation": "Are you sure you want to delete?",
+  "deleteWarning": "This action cannot be undone",
+  "shareFile": "Share File",
+  "shareVia": "Share via",
+  "exportAs": "Export as",
+  "print": "Print",
+  "openWith": "Open with",
+  "downloadFile": "Download File",
+  "downloadSuccess": "Download complete",
+  "downloadFailed": "Download failed",
+  "uploadFile": "Upload File",
+  "uploadSuccess": "Upload complete",
+  "uploadFailed": "Upload failed",
+  "processingFile": "Processing file..."
 } 

@@ -11,10 +11,10 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 import '../utils/non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
-import 'package:pdf_learner/services/storage_service.dart';
-import 'package:pdf_learner/services/auth_service.dart';
-import 'package:pdf_learner/services/subscription_service.dart';
-import 'package:pdf_learner/models/pdf_file_info.dart';
+import 'package:pdf_learner_v2/services/storage_service.dart';
+import 'package:pdf_learner_v2/services/auth_service.dart';
+import 'package:pdf_learner_v2/services/subscription_service.dart';
+import 'package:pdf_learner_v2/models/pdf_file_info.dart';
 
 class PDFProvider with ChangeNotifier {
   List<PdfFileInfo> _pdfFiles = [];

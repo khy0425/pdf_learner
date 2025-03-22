@@ -1,16 +1,213 @@
-# pdf_learner_v2
+# PDF 학습기 (PDF Learner v2)
 
-A new Flutter project.
+PDF 파일을 쉽게 관리하고 학습할 수 있는 크로스 플랫폼 애플리케이션입니다. Flutter 기반으로 개발되어 Android, iOS, Web에서 사용 가능합니다.
 
-## Getting Started
+## 프로젝트 개요
 
-This project is a starting point for a Flutter application.
+- **프레임워크**: Flutter
+- **아키텍처**: MVVM (Model-View-ViewModel)
+- **상태 관리**: Provider
 
-A few resources to get you started if this is your first Flutter project:
+## 구독 플랜
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+PDF 학습기는 다양한 사용자 요구에 맞춘 세 가지 구독 플랜을 제공합니다:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 무료 플랜
+- 기본 PDF 뷰어 기능
+- 일일 3회 AI 요약 기능
+- 매월 5회 퀴즈 생성
+- 최대 5개 PDF 문서 저장
+- 기본 검색 기능
+
+### 베이직 플랜 ($1/월, 약 ₩1,300/월)
+- 매월 30회 AI 요약 기능
+- 매월 20회 퀴즈 생성
+- 최대 50개 PDF 문서 저장
+- 기본 북마크 및 하이라이트 기능
+- 광고 제거
+- 간단한 학습 통계
+- 텍스트 검색 기능 강화
+
+### 프리미엄 플랜 ($3/월, 약 ₩3,900/월)
+- **무제한 PDF 저장**
+- **무제한 AI 요약 및 퀴즈 생성**
+- **다중 기기 동기화** (클라우드 저장)
+- **AI 기반 학습 패턴 분석**
+- **맞춤형 학습 계획 생성**
+- **고급 플래시카드 기능**
+- **오프라인 모드** (다운로드된 PDF 및 생성된 퀴즈)
+- **OCR 텍스트 인식** (스캔된 PDF도 검색 가능)
+- **고급 퀴즈 형식** (객관식, 주관식, 짝 맞추기)
+- **PDF 협업 및 공유 기능**
+- **우선 기술 지원**
+
+## 주요 기능
+
+- [x] 기본 앱 구조 설정
+- [ ] PDF 파일 관리
+  - [x] PDF 모델 구현
+  - [ ] PDF 목록 보기
+  - [ ] PDF 파일 추가
+  - [ ] PDF 파일 삭제
+  - [ ] PDF 상세 정보 편집
+- [x] PDF 뷰어
+  - [x] 기본 PDF 렌더링
+  - [x] 페이지 이동 및 줌
+  - [x] 다크 모드 지원
+  - [x] 전체 화면 모드
+  - [x] 두 페이지 보기 모드
+- [ ] PDF 학습 지원 기능
+  - [ ] 텍스트 하이라이트
+  - [ ] 노트 작성
+  - [ ] 북마크 기능
+  - [ ] 검색 기능
+- [x] 사용자 관리
+  - [x] 로그인/회원가입
+  - [ ] 마이페이지
+  - [ ] 사용자 설정
+- [ ] 데이터 동기화
+  - [x] Firebase 연동
+  - [ ] 클라우드 저장소 연동
+- [ ] UI/UX
+  - [ ] 반응형 레이아웃
+  - [ ] 사용자 친화적 인터페이스
+  - [ ] 테마 및 색상 커스터마이징
+
+## 플랫폼별 구현 사항
+
+### Android 플랫폼
+
+- [ ] 파일 시스템 접근 권한 처리
+  - [ ] 저장소 권한 요청 구현
+  - [ ] 파일 픽커 통합
+- [ ] 알림 시스템 구현
+  - [ ] FCM 연동
+  - [ ] 로컬 알림
+- [ ] 백그라운드 동기화
+  - [ ] WorkManager 연동
+- [ ] 앱 위젯
+  - [ ] 최근 문서 위젯
+  - [ ] 북마크 위젯
+- [ ] 성능 최적화
+  - [ ] 메모리 사용량 최적화
+  - [ ] 배터리 사용량 최적화
+
+### Web 플랫폼
+
+- [x] 반응형 웹 디자인
+  - [x] 모바일 레이아웃
+  - [ ] 데스크톱 레이아웃
+- [x] PWA 지원
+  - [x] 오프라인 모드
+  - [x] 설치 가능한 웹앱
+- [x] Firebase 호스팅
+  - [ ] CI/CD 파이프라인
+  - [ ] 배포 자동화
+- [x] 웹 스토리지 활용
+  - [x] IndexedDB 사용
+  - [x] 로컬 스토리지 사용
+- [x] 크로스 브라우저 호환성
+  - [x] Chrome 지원
+  - [ ] Firefox 지원
+  - [ ] Safari 지원
+
+## 보안 구현 사항
+
+- [ ] 사용자 인증 보안
+  - [ ] 암호화된 저장소 사용
+  - [ ] Firebase 인증 연동
+- [ ] API 키 관리
+  - [x] 안전한 API 키 저장
+  - [ ] API 키 교체 메커니즘
+- [ ] 문서 암호화
+  - [ ] 민감한 PDF 문서 암호화
+  - [ ] 파일 접근 제어
+
+## 기술적 구현 계획
+
+- [ ] 코드 품질 관리
+  - [ ] 단위 테스트 작성
+  - [ ] 통합 테스트 작성
+  - [ ] 정적 코드 분석
+- [ ] 성능 모니터링
+  - [ ] 앱 성능 측정
+  - [ ] 크래시 보고
+- [ ] 지속적 통합
+  - [ ] GitHub Actions 설정
+  - [ ] 자동화된 테스트
+- [ ] 국제화
+  - [ ] 다국어 지원
+  - [ ] 지역화
+
+## 결과물 이미지
+
+(스크린샷 이미지가 추가될 예정입니다)
+
+## 개발 일정
+
+1. **기초 작업** (진행 중)
+   - [x] 프로젝트 설정
+   - [x] 기본 구조 설계
+   - [x] 핵심 모델 정의
+
+2. **핵심 기능 개발** (예정)
+   - [ ] PDF 뷰어 구현
+   - [ ] 파일 관리 기능
+   - [ ] 기본 UI 구현
+
+3. **고급 기능 개발** (예정)
+   - [ ] 사용자 관리
+   - [ ] 데이터 동기화
+   - [ ] 학습 지원 기능
+
+4. **플랫폼별 최적화** (예정)
+   - [ ] Android 최적화
+   - [ ] Web 최적화
+   - [ ] iOS 최적화
+
+5. **테스트 및 배포** (예정)
+   - [ ] 베타 테스트
+   - [ ] 버그 수정
+   - [ ] 최종 배포
+
+## 개발 환경 설정
+
+1. Flutter 설치
+```bash
+git clone https://github.com/flutter/flutter.git
+export PATH="$PATH:`pwd`/flutter/bin"
+flutter doctor
+```
+
+2. 프로젝트 클론
+```bash
+git clone https://github.com/yourusername/pdf_learner_v2.git
+cd pdf_learner_v2
+```
+
+3. 의존성 설치
+```bash
+flutter pub get
+```
+
+4. 환경 변수 설정
+```bash
+cp .env.example .env
+# .env 파일을 수정하여 API 키 등 설정
+```
+
+5. 애플리케이션 실행
+```bash
+flutter run
+```
+
+## 기여 방법
+
+1. 이슈 생성 또는 기존 이슈 확인
+2. 브랜치 생성 (`feature/your-feature-name`)
+3. 변경 사항 커밋
+4. 풀 리퀘스트 생성
+
+## 라이센스
+
+이 프로젝트는 MIT 라이센스에 따라 배포됩니다. 자세한 내용은 LICENSE 파일을 참조하세요.

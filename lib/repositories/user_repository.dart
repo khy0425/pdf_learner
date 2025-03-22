@@ -1,169 +1,167 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import '../models/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-/// 사용자 데이터 관련 데이터 액세스를 담당하는 Repository 클래스
+/// 사용자 데이터 관리를 위한 Repository
 class UserRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final String _collection = 'users';
   
-  /// 사용자 정보 조회
-  Future<UserModel?> getUser(String uid) async {
+  /// 사용자 프로필 생성
+  Future<void> createUserProfile(String userId, Map<String, dynamic> userData) async {
     try {
-      debugPrint('사용자 정보 조회 시작: $uid');
+      // Firestore에 사용자 정보 저장
+      await _firestore.collection(_collection).doc(userId).set({
+        ...userData,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      });
       
-      // UID 유효성 검사
-      if (uid.isEmpty) {
-        debugPrint('getUser: 빈 uid가 전달됨');
-        return null;
-      }
-      
-      // 로컬 스토리지에서 먼저 확인
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('user_$uid');
-      
-      if (userJson != null) {
-        try {
-          debugPrint('로컬 스토리지에서 사용자 정보 발견');
-          final userMap = json.decode(userJson) as Map<String, dynamic>?;
-          if (userMap != null) {
-            return UserModel.fromJson(userMap);
-          } else {
-            debugPrint('로컬 스토리지의 JSON 데이터가 null입니다');
-            await prefs.remove('user_$uid');
-          }
-        } catch (e) {
-          debugPrint('로컬 스토리지의 사용자 정보 파싱 오류: $e');
-          // 로컬 데이터가 손상된 경우 삭제
-          await prefs.remove('user_$uid');
-        }
-      } else {
-        debugPrint('사용자 정보가 로컬 스토리지에 없습니다.');
-      }
-      
-      // Firestore에서 조회
-      try {
-        final doc = await _firestore.collection('users').doc(uid).get();
-        
-        if (doc.exists && doc.data() != null) {
-          debugPrint('Firestore에서 사용자 정보 발견');
-          final userData = UserModel.fromFirestore(doc);
-          
-          // 로컬 스토리지에 캐싱
-          try {
-            await prefs.setString('user_$uid', json.encode(userData.toJson()));
-            debugPrint('사용자 정보를 로컬 스토리지에 캐싱 완료');
-          } catch (e) {
-            debugPrint('사용자 정보 로컬 캐싱 실패: $e');
-            // 캐싱 실패는 무시하고 계속 진행
-          }
-          
-          return userData;
-        } else {
-          debugPrint('Firestore에 사용자 정보가 없습니다: $uid');
-          return null;
-        }
-      } catch (e) {
-        debugPrint('Firestore 사용자 정보 조회 오류: $e');
-        throw Exception('사용자 정보를 가져오는 중 오류가 발생했습니다: $e');
-      }
+      // 로컬 스토리지에도 캐싱
+      await _cacheUserData(userId, userData);
     } catch (e) {
-      debugPrint('getUser 메서드 오류: $e');
-      // 모든 오류 상황에서 null 반환
-      return null;
+      debugPrint('사용자 프로필 생성 실패: $e');
+      rethrow;
     }
   }
   
-  /// 사용자 정보 저장
-  Future<void> saveUser(UserModel user) async {
+  /// 사용자 프로필 가져오기
+  Future<Map<String, dynamic>> getUserProfile(String userId) async {
     try {
-      debugPrint('사용자 정보 저장 시작: ${user.uid}');
-      
-      // Firestore에 저장
-      try {
-        await _firestore.collection('users').doc(user.uid).set(user.toMap());
-        debugPrint('Firestore에 사용자 정보 저장 완료');
-      } catch (e) {
-        debugPrint('Firestore 사용자 정보 저장 오류: $e');
-        throw Exception('사용자 정보를 Firestore에 저장하는 중 오류가 발생했습니다: $e');
+      // 오프라인 지원을 위해 로컬 캐시 먼저 확인
+      final cachedData = await _getCachedUserData(userId);
+      if (cachedData != null) {
+        return cachedData;
       }
+      
+      // 네트워크에서 데이터 가져오기
+      final doc = await _firestore.collection(_collection).doc(userId).get();
+      if (!doc.exists) {
+        throw Exception('사용자 프로필을 찾을 수 없습니다.');
+      }
+      
+      final userData = doc.data()!;
       
       // 로컬 스토리지에 캐싱
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_${user.uid}', json.encode(user.toJson()));
-        debugPrint('로컬 스토리지에 사용자 정보 캐싱 완료');
-      } catch (e) {
-        debugPrint('로컬 스토리지 사용자 정보 캐싱 오류: $e');
-        // 로컬 캐싱 실패는 무시하고 계속 진행
-      }
-    } catch (e) {
-      debugPrint('saveUser 메서드 오류: $e');
-      throw Exception('사용자 정보 저장 중 오류가 발생했습니다: $e');
-    }
-  }
-  
-  /// 사용자 정보 업데이트
-  Future<void> updateUser(String uid, Map<String, dynamic> data) async {
-    try {
-      await _firestore.collection(_collection).doc(uid).update(data);
-    } catch (e) {
-      debugPrint('사용자 정보 업데이트 오류: $e');
-      throw Exception('사용자 정보를 업데이트할 수 없습니다.');
-    }
-  }
-  
-  /// API 키 저장
-  Future<void> saveApiKey(String uid, String apiKey) async {
-    try {
-      await _firestore.collection(_collection).doc(uid).update({
-        'apiKey': apiKey,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('API 키 저장 오류: $e');
-      throw Exception('API 키를 저장할 수 없습니다.');
-    }
-  }
-  
-  /// API 키 가져오기
-  Future<String?> getApiKey(String uid) async {
-    try {
-      final doc = await _firestore.collection(_collection).doc(uid).get();
-      if (!doc.exists) {
-        return null;
-      }
+      await _cacheUserData(userId, userData);
       
-      final data = doc.data() as Map<String, dynamic>;
-      return data['apiKey'] as String?;
+      return userData;
     } catch (e) {
-      debugPrint('API 키 가져오기 오류: $e');
+      debugPrint('사용자 프로필 가져오기 실패: $e');
+      rethrow;
+    }
+  }
+  
+  /// 사용자 프로필 업데이트
+  Future<void> updateUserProfile(String userId, Map<String, dynamic> userData) async {
+    try {
+      // Firestore에서 사용자 정보 업데이트
+      await _firestore.collection(_collection).doc(userId).update({
+        ...userData,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+      
+      // 로컬 캐시도 업데이트
+      final cachedData = await _getCachedUserData(userId);
+      if (cachedData != null) {
+        await _cacheUserData(userId, {
+          ...cachedData,
+          ...userData,
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        });
+      }
+    } catch (e) {
+      debugPrint('사용자 프로필 업데이트 실패: $e');
+      rethrow;
+    }
+  }
+  
+  /// 사용자 프로필 삭제
+  Future<void> deleteUserProfile(String userId) async {
+    try {
+      // Firestore에서 사용자 정보 삭제
+      await _firestore.collection(_collection).doc(userId).delete();
+      
+      // 로컬 캐시도 삭제
+      await _clearCachedUserData(userId);
+    } catch (e) {
+      debugPrint('사용자 프로필 삭제 실패: $e');
+      rethrow;
+    }
+  }
+  
+  /// 현재 로그인된 사용자 프로필 가져오기
+  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return null;
+    }
+    
+    try {
+      return await getUserProfile(user.uid);
+    } catch (e) {
+      debugPrint('현재 사용자 프로필 가져오기 실패: $e');
       return null;
     }
   }
   
-  /// 사용자 삭제
-  Future<void> deleteUser(String uid) async {
+  /// 사용자 설정 저장
+  Future<void> saveUserSettings(String userId, Map<String, dynamic> settings) async {
     try {
-      await _firestore.collection(_collection).doc(uid).delete();
+      await updateUserProfile(userId, {'settings': settings});
     } catch (e) {
-      debugPrint('사용자 삭제 오류: $e');
-      throw Exception('사용자를 삭제할 수 없습니다.');
+      debugPrint('사용자 설정 저장 실패: $e');
+      rethrow;
     }
   }
   
-  /// 사용량 업데이트
-  Future<void> updateUsage(String uid) async {
+  /// 사용자 설정 가져오기
+  Future<Map<String, dynamic>> getUserSettings(String userId) async {
     try {
-      await _firestore.collection(_collection).doc(uid).update({
-        'usageCount': FieldValue.increment(1),
-        'lastUsageAt': DateTime.now().toIso8601String(),
-      });
+      final userData = await getUserProfile(userId);
+      return userData['settings'] as Map<String, dynamic>? ?? {};
     } catch (e) {
-      debugPrint('사용량 업데이트 오류: $e');
-      // 사용량 업데이트는 중요하지 않으므로 예외를 던지지 않음
+      debugPrint('사용자 설정 가져오기 실패: $e');
+      return {};
     }
   }
-} 
+  
+  /// 로컬 스토리지에 사용자 데이터 캐싱
+  Future<void> _cacheUserData(String userId, Map<String, dynamic> userData) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDataJson = jsonEncode(userData);
+      await prefs.setString('user_$userId', userDataJson);
+    } catch (e) {
+      debugPrint('사용자 데이터 캐싱 실패: $e');
+    }
+  }
+  
+  /// 로컬 스토리지에서 캐시된 사용자 데이터 가져오기
+  Future<Map<String, dynamic>?> _getCachedUserData(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDataJson = prefs.getString('user_$userId');
+      if (userDataJson == null) {
+        return null;
+      }
+      
+      return jsonDecode(userDataJson) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('캐시된 사용자 데이터 가져오기 실패: $e');
+      return null;
+    }
+  }
+  
+  /// 로컬 스토리지에서 캐시된 사용자 데이터 삭제
+  Future<void> _clearCachedUserData(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_$userId');
+    } catch (e) {
+      debugPrint('캐시된 사용자 데이터 삭제 실패: $e');
+    }
+  }
+}

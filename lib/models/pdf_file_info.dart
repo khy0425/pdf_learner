@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
@@ -8,38 +9,49 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// PDF 파일 정보를 담는 모델 클래스
 class PdfFileInfo {
   final String id;
+  final String title;
   final String fileName;
-  final String? url;
-  final File? file;
-  final DateTime createdAt;
+  final String path;
   final int fileSize;
-  final Uint8List? bytes;
+  final int pageCount;
+  final String? url;
   final String userId;
   final String? firestoreId;
-  final int? pageCount;
-  
-  /// 생성자
+  final DateTime createdAt;
+  final DateTime lastOpenedAt;
+  final int accessCount;
+  final Uint8List? bytes; // PDF 데이터 바이트 배열
+  final File? file; // 로컬 파일 참조
+  final String? thumbnailPath;
+
   PdfFileInfo({
     required this.id,
+    required this.title,
     required this.fileName,
-    this.url,
-    this.file,
-    required this.createdAt,
+    required this.path,
     required this.fileSize,
-    this.bytes,
+    this.pageCount = 0,
+    this.url,
     required this.userId,
     this.firestoreId,
-    this.pageCount,
-  });
+    DateTime? createdAt,
+    DateTime? lastOpenedAt,
+    this.accessCount = 0,
+    this.bytes,
+    this.file,
+    this.thumbnailPath,
+  }) : 
+    createdAt = createdAt ?? DateTime.now(),
+    lastOpenedAt = lastOpenedAt ?? DateTime.now();
   
   /// 파일이 웹 URL인지 여부
   bool get isWeb => url != null && url!.isNotEmpty;
   
   /// 파일이 로컬 파일인지 여부
-  bool get isLocal => file != null;
+  bool get isLocal => url == null;
   
   /// 파일이 바이트 데이터를 가지고 있는지 여부
-  bool get hasBytes => bytes != null && bytes!.isNotEmpty;
+  bool get hasBytes => url != null;
   
   /// 파일이 게스트 사용자의 것인지 여부
   bool get isGuestFile => id.startsWith('guest_') || userId == 'guest_user';
@@ -54,7 +66,7 @@ class PdfFileInfo {
   String get name => fileName;
   
   /// 로컬 파일 경로 (웹에서는 null)
-  String? get localPath => isLocal ? file?.path : null;
+  String? get localPath => isLocal ? path : null;
   
   /// 클라우드 URL (로컬 파일만 있는 경우 null)
   String? get cloudUrl => url;
@@ -76,91 +88,68 @@ class PdfFileInfo {
   }
   
   /// PDF 바이트 데이터 읽기
-  Future<Uint8List> readAsBytes() async {
-    if (kDebugMode) {
-      print('[PdfFileInfo] PDF 바이트 읽기 시작 - 파일명: $fileName');
-      print('[PdfFileInfo] 읽기 유형 - hasBytes: $hasBytes, isLocal: $isLocal, isWeb: $isWeb');
-    }
-    
-    if (hasBytes) {
-      if (kDebugMode) {
-        print('[PdfFileInfo] 이미 메모리에 바이트 데이터가 있음: ${bytes!.length} 바이트');
-      }
-      return bytes!;
+  Future<Uint8List?> getBytes() async {
+    if (bytes != null) {
+      return bytes;
     } else if (isLocal && file != null) {
       try {
-        if (kDebugMode) {
-          print('[PdfFileInfo] 로컬 파일에서 바이트 읽기 시작: ${file!.path}');
-        }
-        final fileBytes = await file!.readAsBytes();
-        if (kDebugMode) {
-          print('[PdfFileInfo] 로컬 파일에서 바이트 읽기 성공: ${fileBytes.length} 바이트');
-        }
-        return fileBytes;
+        return await file!.readAsBytes();
       } catch (e) {
-        if (kDebugMode) {
-          print('[PdfFileInfo] 로컬 파일에서 바이트 읽기 실패: $e');
-        }
-        throw Exception('로컬 PDF 파일을 읽을 수 없습니다: $e');
+        debugPrint('로컬 파일 읽기 오류: $e');
       }
-    } else if (isWeb && url != null) {
-      // URL에서 파일 다운로드
+    } else if (url != null) {
       try {
-        if (kDebugMode) {
-          print('[PdfFileInfo] URL에서 바이트 다운로드 시작: $url');
-        }
         final response = await http.get(Uri.parse(url!));
         if (response.statusCode == 200) {
-          if (kDebugMode) {
-            print('[PdfFileInfo] URL에서 바이트 다운로드 성공: ${response.bodyBytes.length} 바이트');
-          }
           return response.bodyBytes;
-        } else {
-          if (kDebugMode) {
-            print('[PdfFileInfo] URL에서 바이트 다운로드 실패: 상태 코드 ${response.statusCode}');
-          }
-          throw Exception('PDF 파일을 가져올 수 없습니다 (상태 코드: ${response.statusCode})');
         }
       } catch (e) {
-        if (kDebugMode) {
-          print('[PdfFileInfo] PDF 파일 다운로드 오류: $e');
-        }
-        throw Exception('PDF 파일 다운로드 오류: $e');
+        debugPrint('URL에서 파일 읽기 오류: $e');
       }
-    } else {
-      if (kDebugMode) {
-        print('[PdfFileInfo] PDF 파일을 읽을 수 없음 - 유효한 파일 정보 없음');
-      }
-      // 기본 빈 PDF 바이트 반환 (오류 방지)
-      return Uint8List.fromList([37, 80, 68, 70, 45, 49, 46, 52, 10, 37, 226, 227, 207, 211, 10]);
     }
+    return null;
+  }
+  
+  /// 문자열에서 바이트 데이터로 변환
+  Future<Uint8List?> getBytesFromString(String? text) async {
+    if (text == null) return null;
+    return Future.value(Uint8List.fromList(utf8.encode(text)));
   }
   
   /// 새 속성을 가진 복사본 생성
   PdfFileInfo copyWith({
     String? id,
+    String? title,
     String? fileName,
-    String? url,
-    File? file,
-    DateTime? createdAt,
+    String? path,
     int? fileSize,
-    Uint8List? bytes,
+    int? pageCount,
+    String? url,
     String? userId,
     String? firestoreId,
-    String? cloudUrl,
-    int? pageCount,
+    DateTime? createdAt,
+    DateTime? lastOpenedAt,
+    int? accessCount,
+    Uint8List? bytes,
+    File? file,
+    String? thumbnailPath,
   }) {
     return PdfFileInfo(
       id: id ?? this.id,
+      title: title ?? this.title,
       fileName: fileName ?? this.fileName,
-      url: cloudUrl ?? url ?? this.url,
-      file: file ?? this.file,
-      createdAt: createdAt ?? this.createdAt,
+      path: path ?? this.path,
       fileSize: fileSize ?? this.fileSize,
-      bytes: bytes ?? this.bytes,
+      pageCount: pageCount ?? this.pageCount,
+      url: url ?? this.url,
       userId: userId ?? this.userId,
       firestoreId: firestoreId ?? this.firestoreId,
-      pageCount: pageCount ?? this.pageCount,
+      createdAt: createdAt ?? this.createdAt,
+      lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
+      accessCount: accessCount ?? this.accessCount,
+      bytes: bytes ?? this.bytes,
+      file: file ?? this.file,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
     );
   }
   
@@ -168,56 +157,101 @@ class PdfFileInfo {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'title': title,
       'fileName': fileName,
-      'url': url,
-      'createdAt': createdAt.toIso8601String(),
+      'path': path,
       'fileSize': fileSize,
+      'pageCount': pageCount,
+      'url': url,
       'userId': userId,
       'firestoreId': firestoreId,
+      'createdAt': createdAt.toIso8601String(),
+      'lastOpenedAt': lastOpenedAt.toIso8601String(),
+      'accessCount': accessCount,
+      'bytes': bytes,
+      'file': file,
+      'thumbnailPath': thumbnailPath,
     };
   }
   
   /// JSON 역직렬화
   factory PdfFileInfo.fromJson(Map<String, dynamic> json) {
     return PdfFileInfo(
-      id: json['id'],
-      fileName: json['fileName'],
-      url: json['url'],
-      createdAt: DateTime.parse(json['createdAt']),
-      fileSize: json['fileSize'] ?? json['size'] ?? 0,
-      userId: json['userId'] ?? '',
-      firestoreId: json['firestoreId'],
+      id: json['id'] as String,
+      title: json['title'] as String,
+      fileName: json['fileName'] as String,
+      path: json['path'] as String,
+      fileSize: json['fileSize'] as int,
+      pageCount: json['pageCount'] as int? ?? 0,
+      url: json['url'] as String?,
+      userId: json['userId'] as String,
+      firestoreId: json['firestoreId'] as String?,
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String) 
+          : null,
+      lastOpenedAt: json['lastOpenedAt'] != null 
+          ? DateTime.parse(json['lastOpenedAt'] as String) 
+          : null,
+      accessCount: json['accessCount'] as int? ?? 0,
+      bytes: json['bytes'] as Uint8List?,
+      file: json['file'] as File?,
+      thumbnailPath: json['thumbnailPath'] as String?,
     );
   }
   
   /// Firestore 데이터에서 객체 생성
   factory PdfFileInfo.fromFirestore(Map<String, dynamic> data, String docId) {
-    DateTime createdAt;
-    try {
-      if (data['timestamp'] is Timestamp) {
-        createdAt = (data['timestamp'] as Timestamp).toDate();
-      } else if (data['createdAt'] is Timestamp) {
-        createdAt = (data['createdAt'] as Timestamp).toDate();
-      } else if (data['timestamp'] != null) {
-        createdAt = DateTime.parse(data['timestamp'].toString());
-      } else if (data['createdAt'] != null) {
-        createdAt = DateTime.parse(data['createdAt'].toString());
-      } else {
-        createdAt = DateTime.now();
-      }
-    } catch (e) {
-      debugPrint('Firestore 날짜 파싱 오류: $e');
-      createdAt = DateTime.now();
-    }
-    
     return PdfFileInfo(
-      id: data['createdAt']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      fileName: data['fileName'] ?? '알 수 없는 PDF',
-      url: data['url'],
-      createdAt: createdAt,
-      fileSize: data['fileSize'] ?? data['size'] ?? 0,
-      userId: data['userId'] ?? '',
+      id: data['id'] as String? ?? docId,
+      title: data['title'] as String? ?? 'Untitled',
+      fileName: data['fileName'] as String? ?? 'document.pdf',
+      path: data['path'] as String? ?? '',
+      fileSize: data['fileSize'] as int? ?? 0,
+      pageCount: data['pageCount'] as int? ?? 0,
+      url: data['url'] as String?,
+      userId: data['userId'] as String? ?? '',
       firestoreId: docId,
+      createdAt: data['createdAt'] != null && data['createdAt'] is Map
+          ? (data['createdAt']['_seconds'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  (data['createdAt']['_seconds'] as int) * 1000)
+              : DateTime.now())
+          : DateTime.now(),
+      lastOpenedAt: data['lastOpenedAt'] != null && data['lastOpenedAt'] is Map
+          ? (data['lastOpenedAt']['_seconds'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  (data['lastOpenedAt']['_seconds'] as int) * 1000)
+              : DateTime.now())
+          : DateTime.now(),
+      accessCount: data['accessCount'] as int? ?? 0,
+      bytes: data['bytes'] as Uint8List?,
+      file: data['file'] as File?,
+      thumbnailPath: data['thumbnailPath'] as String?,
     );
+  }
+  
+  /// Firestore에 저장할 데이터
+  Map<String, dynamic> toFirestore() {
+    return {
+      'id': id,
+      'title': title,
+      'fileName': fileName,
+      'path': path,
+      'fileSize': fileSize,
+      'pageCount': pageCount,
+      'url': url,
+      'userId': userId,
+      'createdAt': createdAt,
+      'lastOpenedAt': lastOpenedAt,
+      'accessCount': accessCount,
+      'bytes': bytes,
+      'file': file,
+      'thumbnailPath': thumbnailPath,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'PdfFileInfo(id: $id, title: $title, fileName: $fileName, fileSize: $fileSize, pageCount: $pageCount)';
   }
 } 

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+// AppLocalizations은 아직 생성되지 않았으므로 주석 처리
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../view_models/pdf_viewer_view_model.dart';

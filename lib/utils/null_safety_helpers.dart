@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 /// null 안전성을 위한 유틸리티 클래스
 class NullSafetyHelpers {
@@ -20,10 +21,157 @@ class NullSafetyHelpers {
     return value == null || value.isEmpty;
   }
   
-  /// 안전한 문자열 변환
-  static String safeToString(dynamic value) {
-    if (value == null) return '';
+  /// 안전하게 문자열 값을 반환합니다.
+  static String safeStringValue(dynamic value, [String defaultValue = '']) {
+    if (value == null) {
+      return defaultValue;
+    }
     return value.toString();
+  }
+  
+  /// 안전하게 정수 값을 반환합니다.
+  static int safeIntValue(dynamic value, [int defaultValue = 0]) {
+    if (value == null) {
+      return defaultValue;
+    }
+    
+    if (value is int) {
+      return value;
+    }
+    
+    if (value is String) {
+      return int.tryParse(value) ?? defaultValue;
+    }
+    
+    return defaultValue;
+  }
+  
+  /// 안전하게 실수 값을 반환합니다.
+  static double safeDoubleValue(dynamic value, [double defaultValue = 0.0]) {
+    if (value == null) {
+      return defaultValue;
+    }
+    
+    if (value is double) {
+      return value;
+    }
+    
+    if (value is int) {
+      return value.toDouble();
+    }
+    
+    if (value is String) {
+      return double.tryParse(value) ?? defaultValue;
+    }
+    
+    return defaultValue;
+  }
+  
+  /// 안전하게 불리언 값을 반환합니다.
+  static bool safeBoolValue(dynamic value, [bool defaultValue = false]) {
+    if (value == null) {
+      return defaultValue;
+    }
+    
+    if (value is bool) {
+      return value;
+    }
+    
+    if (value is String) {
+      return value.toLowerCase() == 'true';
+    }
+    
+    if (value is num) {
+      return value != 0;
+    }
+    
+    return defaultValue;
+  }
+  
+  /// 안전하게 DateTime 값을 반환합니다.
+  static DateTime? safeDateTime(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    
+    if (value is DateTime) {
+      return value;
+    }
+    
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        // 기본 파싱 실패 시 다양한 형식 시도
+        final formats = [
+          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+          "yyyy-MM-dd'T'HH:mm:ss'Z'",
+          "yyyy-MM-dd HH:mm:ss",
+          "yyyy-MM-dd",
+          "MM/dd/yyyy HH:mm:ss",
+          "MM/dd/yyyy"
+        ];
+        
+        for (final format in formats) {
+          try {
+            final dateFormat = DateFormat(format);
+            return dateFormat.parse(value);
+          } catch (_) {
+            // 다음 형식 시도
+            continue;
+          }
+        }
+      }
+    }
+    
+    if (value is int) {
+      // 타임스탬프로 가정
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    
+    return null;
+  }
+  
+  /// 안전한 Timestamp 값 반환 (null이면 현재 시간 기준 Timestamp 반환)
+  static DateTime safeTimestampValue(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is int) {
+      try {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      } catch (e) {
+        if (kDebugMode) {
+          print('safeTimestampValue int 변환 오류: $e');
+        }
+        return DateTime.now();
+      }
+    }
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        if (kDebugMode) {
+          print('safeTimestampValue String 변환 오류: $e');
+        }
+        return DateTime.now();
+      }
+    }
+    if (value is Map && value.containsKey('_seconds')) {
+      try {
+        final seconds = value['_seconds'] as int;
+        final nanoseconds = value['_nanoseconds'] as int? ?? 0;
+        return DateTime.fromMillisecondsSinceEpoch(
+          seconds * 1000 + (nanoseconds ~/ 1000000),
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('safeTimestampValue Map 변환 오류: $e');
+        }
+        return DateTime.now();
+      }
+    }
+    return DateTime.now();
   }
   
   /// 안전하게 JSON 값 가져오기
@@ -77,121 +225,5 @@ class NullSafetyHelpers {
   static V? safeMapGet<K, V>(Map<K, V>? map, K key) {
     if (map == null) return null;
     return map[key];
-  }
-  
-  /// 문자열 값을 안전하게 가져오기
-  static String safeStringValue(dynamic value, String defaultValue) {
-    if (value == null) return defaultValue;
-    
-    try {
-      return value.toString();
-    } catch (e) {
-      debugPrint('문자열 변환 오류: $e');
-      return defaultValue;
-    }
-  }
-  
-  /// nullable 문자열 값을 안전하게 가져오기
-  static String? safeStringValueNullable(dynamic value) {
-    if (value == null) return null;
-    
-    try {
-      return value.toString();
-    } catch (e) {
-      debugPrint('문자열 변환 오류: $e');
-      return null;
-    }
-  }
-  
-  /// 정수 값을 안전하게 가져오기
-  static int safeIntValue(dynamic value, int defaultValue) {
-    if (value == null) return defaultValue;
-    
-    try {
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      if (value is String) {
-        final parsed = int.tryParse(value);
-        if (parsed != null) return parsed;
-      }
-      return defaultValue;
-    } catch (e) {
-      debugPrint('정수 변환 오류: $e');
-      return defaultValue;
-    }
-  }
-  
-  /// 실수 값을 안전하게 가져오기
-  static double safeDoubleValue(dynamic value, double defaultValue) {
-    if (value == null) return defaultValue;
-    
-    try {
-      if (value is double) return value;
-      if (value is num) return value.toDouble();
-      if (value is String) {
-        final parsed = double.tryParse(value);
-        if (parsed != null) return parsed;
-      }
-      return defaultValue;
-    } catch (e) {
-      debugPrint('실수 변환 오류: $e');
-      return defaultValue;
-    }
-  }
-  
-  /// 불리언 값을 안전하게 가져오기
-  static bool safeBoolValue(dynamic value, bool defaultValue) {
-    if (value == null) return defaultValue;
-    
-    try {
-      if (value is bool) return value;
-      if (value is String) {
-        if (value.toLowerCase() == 'true') return true;
-        if (value.toLowerCase() == 'false') return false;
-      }
-      if (value is num) return value != 0;
-      return defaultValue;
-    } catch (e) {
-      debugPrint('불리언 변환 오류: $e');
-      return defaultValue;
-    }
-  }
-  
-  /// Firestore 타임스탬프를 안전하게 가져오기
-  static DateTime safeTimestampValue(dynamic value) {
-    if (value == null) return DateTime.now();
-    
-    try {
-      if (value is Timestamp) return value.toDate();
-      if (value is DateTime) return value;
-      if (value is String) {
-        final parsed = DateTime.tryParse(value);
-        if (parsed != null) return parsed;
-      }
-      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-      return DateTime.now();
-    } catch (e) {
-      debugPrint('타임스탬프 변환 오류: $e');
-      return DateTime.now();
-    }
-  }
-  
-  /// DateTime을 안전하게 가져오기
-  static DateTime safeDateTimeValue(dynamic value) {
-    if (value == null) return DateTime.now();
-    
-    try {
-      if (value is DateTime) return value;
-      if (value is Timestamp) return value.toDate();
-      if (value is String) {
-        final parsed = DateTime.tryParse(value);
-        if (parsed != null) return parsed;
-      }
-      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-      return DateTime.now();
-    } catch (e) {
-      debugPrint('날짜 변환 오류: $e');
-      return DateTime.now();
-    }
   }
 } 

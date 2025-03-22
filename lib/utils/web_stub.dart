@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'non_web_stub.dart' if (dart.library.html) 'dart:html' as html;
 import 'non_web_stub.dart' if (dart.library.js) 'dart:js' as js;
+import 'dart:io' as io;
 
 class Platform {
   static const bool isWindows = false;
@@ -15,7 +16,12 @@ class Platform {
   static const bool isWeb = true;
   static String get pathSeparator => '/';
   static String get operatingSystem => 'web';
-  static String get operatingSystemVersion => '';
+  static String get operatingSystemVersion => '1.0.0';
+  
+  static Map<String, String> environment = {};
+  static String localeName = 'unknown';
+  
+  static int numberOfProcessors = 1;
 }
 
 /// 웹에서 사용할 추가 유틸리티 기능
@@ -418,4 +424,159 @@ class Window {
       debugPrint('로컬 스토리지 삭제 오류: $e');
     }
   }
+}
+
+/// dart:io의 웹 환경 스텁
+// 이 파일은 조건부 임포트에 의해 웹 환경에서만 사용됩니다
+// dart:io를 대체하는 빈 클래스와 함수를 제공합니다
+
+class File {
+  final String path;
+  
+  File(this.path);
+  
+  Future<bool> exists() async => false;
+  bool existsSync() => false;
+  Future<List<int>> readAsBytes() async => [];
+  Future<String> readAsString() async => '';
+  Future<File> writeAsBytes(List<int> bytes) async => this;
+  Future<File> writeAsString(String contents) async => this;
+  
+  // 추가된 메서드들
+  Future<File> copy(String newPath) async => File(newPath);
+  Future<int> length() async => 0;
+  Future<FileStat> stat() async => FileStat();
+  Future<DateTime> lastModified() async => DateTime.now();
+  Future<File> delete({bool recursive = false}) async => this;
+  Stream<List<int>> openRead([int? start, int? end]) => 
+      Stream<List<int>>.empty();
+  Future<File> create({bool recursive = false, bool exclusive = false}) async => this;
+  
+  // 웹용 파일 다운로드 메서드
+  static Future<void> downloadFile(String url, String fileName) async {
+    try {
+      // 웹에서는 파일 다운로드를 직접 구현할 수 없으므로 스텁만 제공
+      debugPrint('웹에서 파일 다운로드 시도: $url -> $fileName');
+    } catch (e) {
+      debugPrint('파일 다운로드 오류: $e');
+    }
+  }
+}
+
+// FileStat 클래스 추가
+class FileStat {
+  final DateTime changed = DateTime.now();
+  final DateTime modified = DateTime.now();
+  final DateTime accessed = DateTime.now();
+  final int size = 0;
+  final String modeString = '---------';
+  
+  FileStat();
+}
+
+class Directory {
+  final String path;
+  
+  Directory(this.path);
+  
+  Future<bool> exists() async => false;
+  Future<Directory> create({bool recursive = false}) async => this;
+  Future<Directory> delete({bool recursive = false}) async => this;
+  Future<List<FileSystemEntity>> list() async => [];
+  
+  static Future<String> get systemTemp async => '/tmp';
+  static Future<Directory> get temporary async => Directory('/tmp');
+  static Future<Directory> get current async => Directory('/current');
+  
+  static Directory get currentDirectory => Directory('/current');
+  static set currentDirectory(Directory directory) {}
+}
+
+class FileSystemEntity {
+  static Future<bool> isDirectory(String path) async => false;
+  static Future<bool> isFile(String path) async => false;
+}
+
+/// 인코딩 스텁
+class Encoding {
+  static const Encoding systemEncoding = Encoding._();
+  
+  const Encoding._();
+  
+  String decode(List<int> bytes) {
+    return String.fromCharCodes(bytes);
+  }
+}
+
+class SystemEncoding extends Encoding {
+  const SystemEncoding() : super._();
+}
+
+/// Process 클래스의 웹 스텁
+class Process {
+  static Future<ProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    bool includeParentEnvironment = true,
+    bool runInShell = false,
+    Encoding? stdoutEncoding = Encoding.systemEncoding,
+    Encoding? stderrEncoding = Encoding.systemEncoding,
+  }) async {
+    throw UnsupportedError('Process.run은 웹에서 지원되지 않습니다.');
+  }
+  
+  static Future<io.Process> start(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    bool includeParentEnvironment = true,
+    bool runInShell = false,
+    io.ProcessStartMode mode = io.ProcessStartMode.normal,
+  }) async {
+    throw UnsupportedError('Process.start는 웹에서 지원되지 않습니다.');
+  }
+}
+
+/// 프로세스 결과 스텁
+class ProcessResult {
+  final int pid;
+  final int exitCode;
+  final dynamic stdout;
+  final dynamic stderr;
+  
+  ProcessResult(this.pid, this.exitCode, this.stdout, this.stderr);
+}
+
+/// path_provider 스텁
+Future<Directory> getApplicationDocumentsDirectory() async {
+  return Directory('/web/documents');
+}
+
+Future<Directory> getTemporaryDirectory() async {
+  return Directory('/web/temp');
+}
+
+class PathProviderPlatform {
+  static PathProviderPlatform get instance => _SingletonWebPathProvider();
+  
+  Future<String?> getApplicationDocumentsPath() async {
+    return '/web/documents';
+  }
+  
+  Future<String?> getTemporaryPath() async {
+    return '/web/temp';
+  }
+}
+
+class _SingletonWebPathProvider extends PathProviderPlatform {
+  static final _SingletonWebPathProvider _instance = _SingletonWebPathProvider._();
+  
+  factory _SingletonWebPathProvider() {
+    return _instance;
+  }
+  
+  _SingletonWebPathProvider._();
 } 

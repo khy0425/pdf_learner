@@ -1,17 +1,200 @@
 /// 웹이 아닌 환경에서 dart:html과 dart:js를 대체하기 위한 스텁 파일입니다.
 /// 이 파일은 웹이 아닌 환경에서 컴파일 오류를 방지하기 위해 사용됩니다.
 
-// 빈 클래스와 함수들을 정의하여 웹 환경에서만 사용되는 코드가 컴파일되도록 합니다.
+/// html 네임스페이스의 스텁 파일
+/// 웹이 아닌 환경에서 dart:html을 import할 때 사용됩니다.
+
+/// html의 window 스텁
 class Window {
-  dynamic get location => Location();
-  static dynamic get localStorage => <String, String>{};
-  static dynamic get navigator => _Navigator();
-  static dynamic get history => _History();
+  Location location = Location();
+  Navigator navigator = Navigator();
+  Document document = Document();
   
-  void dispatchEvent(dynamic event) {}
-  void open(String url, String target) {}
+  void alert(String message) {}
+  void confirm(String message) {}
+  void prompt(String message, String defaultValue) {}
+  
+  void open(String url, String target, {String? features}) {}
+  void postMessage(dynamic message, String targetOrigin, {List<dynamic>? transfer}) {}
+  
+  void reload() {}
 }
 
+/// html의 navigator 스텁
+class Navigator {
+  String userAgent = '';
+  
+  void share(Map<String, dynamic> data) {}
+}
+
+/// html의 Location 스텁
+class Location {
+  String href = '';
+  String host = '';
+  String hostname = '';
+  String protocol = '';
+  String origin = '';
+  String port = '';
+  String pathname = '';
+  String search = '';
+  String hash = '';
+  
+  void reload() {}
+  void replace(String url) {}
+  void assign(String url) {}
+}
+
+/// html의 Document 스텁
+class Document {
+  Element body = Element();
+  Element head = Element();
+  
+  Element createElement(String tagName) => Element();
+  Element? getElementById(String id) => null;
+  List<Element> getElementsByTagName(String tagName) => [];
+  List<Element> getElementsByClassName(String className) => [];
+  
+  Element? querySelector(String selectors) => null;
+  List<Element> querySelectorAll(String selectors) => [];
+}
+
+/// html의 Element 스텁
+class Element {
+  String id = '';
+  String className = '';
+  String innerHTML = '';
+  String outerHTML = '';
+  
+  void append(dynamic child) {}
+  void remove() {}
+  
+  void setAttribute(String name, String value) {}
+  String? getAttribute(String name) => null;
+  
+  void addEventListener(String type, dynamic listener, {bool useCapture = false}) {}
+  void removeEventListener(String type, dynamic listener, {bool useCapture = false}) {}
+}
+
+/// html의 style 스텁
+class Style {
+  String display = '';
+  String position = '';
+  String left = '';
+  String top = '';
+  String width = '';
+  String height = '';
+  String opacity = '';
+}
+
+/// html의 AnchorElement 스텁
+class AnchorElement extends Element {
+  String? href;
+  
+  AnchorElement({this.href});
+}
+
+/// html의 TextAreaElement 스텁
+class TextAreaElement extends Element {
+  String value = '';
+  
+  void select() {
+    print('TextArea select (stub) called');
+  }
+}
+
+/// html의 FileUploadInputElement 스텁
+class FileUploadInputElement extends Element {
+  String accept = '';
+  bool multiple = false;
+  List<File>? files;
+  
+  Stream<Event> get onChange => _OnChangeStreamController().stream;
+}
+
+/// html의 Event 스텁
+class Event {
+  bool preventDefault() => false;
+  bool stopPropagation() => false;
+}
+
+/// html의 OnChange 스트림 컨트롤러 스텁
+class _OnChangeStreamController {
+  Stream<Event> get stream => Stream<Event>.empty();
+}
+
+/// html의 파일 스텁
+class File {
+  String get name => 'stub-file.txt';
+  int get size => 0;
+  String get type => 'text/plain';
+}
+
+/// html의 Blob 스텁
+class Blob {
+  Blob(List<dynamic> contents, String type) {
+    print('Blob (stub) created with type: $type');
+  }
+}
+
+/// html의 Url 스텁
+class Url {
+  static String createObjectUrlFromBlob(Blob blob) => 'stub://blob-url';
+  static void revokeObjectUrl(String url) {
+    print('URL.revokeObjectUrl (stub) called with: $url');
+  }
+}
+
+/// html의 Notification 스텁
+class Notification {
+  static bool get supported => false;
+  static String get permission => 'denied';
+  
+  static Future<String> requestPermission() async => 'denied';
+  
+  Notification(String title, {String? body, String? icon}) {
+    print('Notification (stub) created with title: $title, body: $body');
+  }
+}
+
+/// html의 Clipboard 스텁
+class Clipboard {
+  Future<void> writeText(String text) async {
+    print('Clipboard writeText (stub) called with: $text');
+    throw UnsupportedError('Clipboard API is not available in non-web environment');
+  }
+}
+
+/// html의 IndexedDB 스텁
+class IdbDatabase {
+  String get name => 'stub-indexeddb';
+  int get version => 1;
+  
+  void close() {
+    print('IdbDatabase close (stub) called');
+  }
+}
+
+/// JS 스텁 클래스
+class JsObject {
+  dynamic callMethod(String method, [List? args]) => null;
+  dynamic getProperty(String name) => null;
+}
+
+/// JS 스텁 클래스
+class JsFunction {
+  dynamic apply(dynamic thisArg, [List? args]) => null;
+}
+
+/// JS 스텁 클래스
+class JsArray {
+  int get length => 0;
+  void add(dynamic value) {}
+}
+
+/// 윈도우 전역 객체
+final Window window = Window();
+
+// 빈 클래스와 함수들을 정의하여 웹 환경에서만 사용되는 코드가 컴파일되도록 합니다.
 class _Location {
   String get href => '';
   set href(String value) {}
@@ -23,18 +206,6 @@ class _Navigator {
 
 class _History {
   void back() {}
-}
-
-class Document {
-  dynamic getElementById(String id) => null;
-  dynamic get body => null;
-}
-
-class Element {
-  List<Element> get children => [];
-  dynamic get style => _Style();
-  int get clientWidth => 0;
-  int get clientHeight => 0;
 }
 
 class _Style {
@@ -60,20 +231,13 @@ class _Style {
   set backgroundColor(String value) {}
 }
 
-class Event {
-  Event(String type);
+class HttpRequest {
+  static Future<HttpRequest> request(String url, {String? method, dynamic sendData}) {
+    throw UnsupportedError('HttpRequest는 비웹 환경에서 사용할 수 없습니다.');
+  }
 }
-
-// 전역 객체
-final window = Window();
-final document = Document();
 
 // js 스텁
-class JsObject {
-  static dynamic jsify(dynamic object) => object;
-}
-
-// 빈 컨텍스트 클래스
 class JsContext {
   dynamic callMethod(String name, [List<dynamic>? args]) => null;
   dynamic operator [](String key) => null;
@@ -87,9 +251,6 @@ final context = JsContext();
 
 // 함수를 JS interop으로 변환하는 대체 함수
 T allowInterop<T extends Function>(T function) => function;
-
-// Web APIs를 지원하지 않는 환경을 위한 스텁 구현
-// dart:js 및 dart:html 라이브러리를 지원하지 않는 네이티브 플랫폼에서 사용됨
 
 /// JS 통합을 위한 스텁 함수
 class js {

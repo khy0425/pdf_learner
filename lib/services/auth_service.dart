@@ -4,249 +4,257 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/user_model.dart';
-import '../services/web_firebase_initializer.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class AuthService with ChangeNotifier {
+class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   
-  UserModel? _user;
+  UserModel _currentUser = UserModel.guest();
   bool _isLoading = false;
   String? _error;
   
-  UserModel? get user => _user;
+  UserModel get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get isLoggedIn => _user != null;
-  
-  final WebFirebaseInitializer _webFirebaseInitializer = WebFirebaseInitializer();
+  bool get isLoggedIn => _auth.currentUser != null;
+  bool get isPremiumUser => _currentUser.isPremium;
   
   AuthService() {
-    if (kDebugMode) {
-      print('AuthService 초기화');
-      print('현재 인증된 사용자: ${_auth.currentUser?.uid}');
-    }
-    
-    _initialize();
+    _initializeAuthListener();
   }
   
-  Future<void> _initialize() async {
-    try {
-      final currentUser = _auth.currentUser;
-      if (currentUser != null) {
-        print('현재 로그인된 사용자 발견: ${currentUser.uid}');
-        await _onAuthStateChanged(currentUser);
-      } else {
-        print('로그인된 사용자 없음');
-        _user = null;
+  void _initializeAuthListener() {
+    _auth.authStateChanges().listen((User? user) async {
+      if (user == null) {
+        _currentUser = UserModel.guest();
         notifyListeners();
+        return;
       }
-    } catch (e) {
-      print('인증 상태 초기화 오류: $e');
-      _error = '인증 상태를 확인하는 중 오류가 발생했습니다.';
-      notifyListeners();
-    }
+      
+      await _loadUserData(user.uid);
+    });
   }
   
-  Future<void> _onAuthStateChanged(User? firebaseUser) async {
-    print('인증 상태 변경: ${firebaseUser?.uid}');
-    
-    if (firebaseUser == null) {
-      print('사용자가 로그아웃됨');
-      _user = null;
-      notifyListeners();
-      return;
-    }
-    
+  Future<void> _loadUserData(String userId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('user_${firebaseUser.uid}');
+      _setLoading(true);
       
-      if (userJson != null) {
-        print('기존 사용자 정보 로드');
-        _user = UserModel.fromJson(
-          Map<String, dynamic>.from(const JsonDecoder().convert(userJson))
-        );
+      // Firestore에서
+      final doc = await _firestore.collection('users').doc(userId).get();
+      
+      if (doc.exists) {
+        // 저장된 사용자 정보 로드
+        final userData = doc.data() as Map<String, dynamic>;
+        _currentUser = UserModel.fromMap(userData);
       } else {
-        print('신규 사용자 정보 생성');
-        _user = UserModel(
-          uid: firebaseUser.uid,
-          email: firebaseUser.email ?? '',
-          displayName: firebaseUser.displayName ?? '사용자',
-          photoURL: firebaseUser.photoURL,
-          emailVerified: firebaseUser.emailVerified,
+        // 신규 사용자 생성
+        final user = _auth.currentUser!;
+        _currentUser = UserModel(
+          id: user.uid,
+          email: user.email,
+          name: user.displayName ?? '사용자',
+          role: UserRole.free, // 기본적으로 무료 회원으로 설정
           createdAt: DateTime.now(),
-          subscriptionTier: 'free',
-          maxPdfTextLength: 50000,
-          maxPdfTextLengthPerPage: 1000,
-          maxPdfTextLengthPerDay: 100000,
-          maxPdfTextLengthPerMonth: 1000000,
-          maxPdfTextLengthPerYear: 10000000,
-          maxPdfTextLengthPerLifetime: 100000000,
+          lastLoginAt: DateTime.now(),
         );
         
-        print('신규 사용자 정보 저장 시도');
-        await _saveUser(_user!);
-        print('신규 사용자 정보 저장 완료');
+        // Firestore에 저장
+        await _firestore.collection('users').doc(userId).set(_currentUser.toMap());
       }
       
-      print('사용자 상태 업데이트 완료: ${_user?.uid}');
       notifyListeners();
     } catch (e) {
-      print('사용자 데이터 로드 오류: $e');
-      _error = '사용자 데이터를 불러오는 중 오류가 발생했습니다.';
-      notifyListeners();
+      debugPrint('사용자 데이터 로드 중 오류: $e');
+      _currentUser = UserModel.guest();
+    } finally {
+      _setLoading(false);
     }
   }
   
-  Future<void> _saveUser(UserModel user) async {
+  Future<bool> signInWithEmail(String email, String password) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'user_${user.uid}',
-        JsonEncoder().convert(user.toJson())
+      _setLoading(true);
+      
+      final result = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
-    } catch (e) {
-      print('사용자 정보 저장 오류: $e');
-      throw Exception('사용자 정보 저장 실패: $e');
-    }
-  }
-  
-  Future<void> signInWithGoogle() async {
-    try {
-      print('Google 로그인 시도');
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
       
-      if (kIsWeb) {
-        final userData = await _webFirebaseInitializer.signInWithGoogle();
-        print('웹 Google 로그인 결과: $userData');
-        
-        if (userData != null) {
-          _user = UserModel.fromMap(userData);
-          await _saveUser(_user!);
-          print('웹 Google 로그인 성공: ${_user?.uid}');
-        } else {
-          throw Exception('Google 로그인 실패: 사용자 데이터를 받지 못했습니다.');
-        }
-      } else {
-        final googleUser = await _googleSignIn.signIn();
-        if (googleUser == null) throw Exception('Google 로그인이 취소되었습니다.');
-        
-        print('Google 계정 선택 완료');
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        
-        final userCredential = await _auth.signInWithCredential(credential);
-        print('Firebase 인증 완료: ${userCredential.user?.uid}');
-      }
+      return result.user != null;
     } catch (e) {
-      print('Google 로그인 오류: $e');
-      _error = 'Google 로그인에 실패했습니다.';
-      _user = null;
+      debugPrint('이메일 로그인 오류: $e');
+      return false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
-  Future<void> signInWithEmailPassword(String email, String password) async {
+  Future<bool> signUpWithEmail(String email, String password, String name) async {
     try {
-      print('이메일/비밀번호 로그인 시도');
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      _setLoading(true);
       
-      if (kIsWeb) {
-        final userData = await _webFirebaseInitializer.signInWithEmailPassword(email, password);
+      final result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      if (result.user != null) {
+        // 사용자 정보 업데이트
+        await result.user!.updateDisplayName(name);
         
-        if (userData != null) {
-          _user = UserModel.fromMap(userData);
-          await _saveUser(_user!);
-        } else {
-          throw Exception('로그인 실패: 사용자 데이터를 받지 못했습니다.');
-        }
-      } else {
-        final userCredential = await _auth.signInWithEmailAndPassword(
+        // Firestore에 저장
+        final newUser = UserModel(
+          id: result.user!.uid,
           email: email,
-          password: password,
+          name: name,
+          role: UserRole.free,
+          createdAt: DateTime.now(),
+          lastLoginAt: DateTime.now(),
         );
         
-        if (userCredential.user == null) {
-          throw Exception('Firebase 로그인 실패');
-        }
+        await _firestore.collection('users').doc(result.user!.uid).set(newUser.toMap());
+        return true;
       }
+      
+      return false;
     } catch (e) {
-      print('이메일/비밀번호 로그인 오류: $e');
-      _error = '이메일 또는 비밀번호가 올바르지 않습니다.';
+      debugPrint('회원가입 오류: $e');
+      return false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
-  Future<void> signUpWithEmailPassword(String email, String password, String displayName) async {
+  Future<bool> signInWithGoogle() async {
     try {
-      print('이메일/비밀번호 회원가입 시도');
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      _setLoading(true);
       
-      if (kIsWeb) {
-        final userData = await _webFirebaseInitializer.signUpWithEmailPassword(email, password);
-        
-        if (userData != null) {
-          _user = UserModel.fromMap(userData);
-          await _saveUser(_user!);
-        } else {
-          throw Exception('회원가입 실패: 사용자 데이터를 받지 못했습니다.');
-        }
-      } else {
-        final userCredential = await _auth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return false;
+      
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      
+      final result = await _auth.signInWithCredential(credential);
+      
+      if (result.user != null && result.additionalUserInfo?.isNewUser == true) {
+        // 신규 사용자 정보 저장
+        final newUser = UserModel(
+          id: result.user!.uid,
+          email: result.user!.email,
+          name: result.user!.displayName ?? '사용자',
+          role: UserRole.free,
+          createdAt: DateTime.now(),
+          lastLoginAt: DateTime.now(),
         );
         
-        if (userCredential.user == null) {
-          throw Exception('Firebase 회원가입 실패');
-        }
-        
-        await userCredential.user!.updateDisplayName(displayName);
+        await _firestore.collection('users').doc(result.user!.uid).set(newUser.toMap());
       }
+      
+      return result.user != null;
     } catch (e) {
-      print('회원가입 오류: $e');
-      _error = '회원가입에 실패했습니다.';
+      debugPrint('구글 로그인 오류: $e');
+      return false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
   
   Future<void> signOut() async {
     try {
-      _isLoading = true;
-      notifyListeners();
-      
+      _setLoading(true);
+      await _googleSignIn.signOut();
       await _auth.signOut();
     } catch (e) {
-      print('로그아웃 오류: $e');
-      _error = '로그아웃에 실패했습니다.';
+      debugPrint('로그아웃 오류: $e');
     } finally {
-      _user = null;
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
+  }
+  
+  Future<bool> upgradeToPayment({String planType = 'premium'}) async {
+    // 여기에 실제 결제 로직 구현
+    // 결제 성공시 사용자 역할을 설정한 구독 플랜으로 변경
+    try {
+      _setLoading(true);
+      
+      if (!isLoggedIn) return false;
+      
+      // 결제 처리 성공을 가정
+      final userId = _auth.currentUser!.uid;
+      
+      // 구독 만료일 설정 (30일 후)
+      final subscriptionEndDate = DateTime.now().add(const Duration(days: 30));
+      
+      // 플랜 타입에 따라 사용자 역할 설정
+      UserRole userRole;
+      if (planType == 'basic') {
+        userRole = UserRole.basic;
+      } else {
+        userRole = UserRole.premium;
+      }
+      
+      // 사용자 정보 업데이트
+      _currentUser = _currentUser.copyWith(
+        role: userRole,
+        subscriptionEndDate: subscriptionEndDate,
+        planType: planType,
+      );
+      
+      // Firestore에 저장
+      await _firestore.collection('users').doc(userId).update({
+        'role': userRole.toString(),
+        'subscriptionEndDate': subscriptionEndDate.millisecondsSinceEpoch,
+        'planType': planType,
+      });
+      
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('유료회원 업그레이드 오류: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  Future<bool> checkSubscription() async {
+    try {
+      if (!isLoggedIn) return false;
+      
+      final userId = _auth.currentUser!.uid;
+      final doc = await _firestore.collection('users').doc(userId).get();
+      
+      if (!doc.exists) return false;
+      
+      final userData = doc.data() as Map<String, dynamic>;
+      final userModel = UserModel.fromMap(userData);
+      
+      _currentUser = userModel;
+      notifyListeners();
+      
+      return userModel.isPremium;
+    } catch (e) {
+      debugPrint('구독 확인 오류: $e');
+      return false;
+    }
+  }
+  
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
   }
   
   Future<void> updateApiKey(String apiKey) async {
     try {
-      if (_user == null) throw Exception('로그인이 필요합니다.');
+      if (_currentUser == null) throw Exception('로그인이 필요합니다.');
       
-      await _saveApiKey(_user!.uid, apiKey);
+      await _saveApiKey(_currentUser!.uid, apiKey);
       notifyListeners();
     } catch (e) {
       print('API 키 업데이트 오류: $e');
@@ -267,8 +275,8 @@ class AuthService with ChangeNotifier {
   
   Future<String?> getStoredApiKey() async {
     try {
-      if (_user == null) return null;
-      return await _getApiKey(_user!.uid);
+      if (_currentUser == null) return null;
+      return await _getApiKey(_currentUser!.uid);
     } catch (e) {
       print('API 키 가져오기 오류: $e');
       return null;
@@ -285,8 +293,22 @@ class AuthService with ChangeNotifier {
     }
   }
   
+  Future<void> _saveUser(UserModel user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'user_${user.uid}',
+        JsonEncoder().convert(user.toJson())
+      );
+    } catch (e) {
+      print('사용자 정보 저장 오류: $e');
+      throw Exception('사용자 정보 저장 실패: $e');
+    }
+  }
+  
   void clearError() {
     _error = null;
     notifyListeners();
   }
+} 
 } 

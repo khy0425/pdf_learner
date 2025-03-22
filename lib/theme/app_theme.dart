@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:pdf_learner_v2/config/platform_config.dart';
 
 class AppTheme {
   // 앱 브랜드 색상 - 더 생생한 색상으로 업데이트
@@ -6,6 +8,13 @@ class AppTheme {
   static const Color secondaryColor = Color(0xFF00BFA5); // 밝은 청록색
   static const Color accentColor = Color(0xFFFF4081); // 밝은 핑크
   static const Color tertiaryColor = Color(0xFFFF9800); // 밝은 주황색
+  
+  // 다크 모드 색상
+  static const Color primaryDarkColor = Color(0xFF0D47A1); // 어두운 파란색
+  static const Color secondaryDarkColor = Color(0xFF00796B); // 어두운 청록색
+  static const Color accentDarkColor = Color(0xFFAD1457); // 어두운 핑크
+  static const Color tertiaryDarkColor = Color(0xFFE65100); // 어두운 주황색
+  static const Color surfaceDarkColor = Color(0xFF121212); // 다크 모드 배경색
   
   // 그라데이션 색상 - 더 다양한 색상으로 업데이트
   static const List<Color> primaryGradient = [
@@ -31,6 +40,17 @@ class AppTheme {
     Color(0xFFFF9800), // 중간 주황색
     Color(0xFFFFCC80), // 밝은 주황색
   ];
+  
+  // 크로스 플랫폼 테마 적용을 위한 메서드
+  static ThemeData getThemeForPlatform({required bool isDark, required BuildContext? context}) {
+    final platform = PlatformConfig();
+    
+    if (platform.isIOS || platform.isMacOS) {
+      return isDark ? _cupertinoThemeDark : _cupertinoThemeLight;
+    } else {
+      return isDark ? darkTheme : lightTheme;
+    }
+  }
   
   // 라이트 테마 정의
   static final ThemeData lightTheme = ThemeData(
@@ -187,111 +207,182 @@ class AppTheme {
     ),
   );
 
-  static ThemeData darkTheme = ThemeData(
+  // 다크 테마 정의
+  static final ThemeData darkTheme = ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primaryDarkColor,
+      primary: primaryDarkColor,
+      secondary: secondaryDarkColor,
+      tertiary: tertiaryDarkColor,
+      brightness: Brightness.dark,
+    ),
+    primaryColor: primaryDarkColor,
+    scaffoldBackgroundColor: surfaceDarkColor,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: primaryDarkColor,
+      foregroundColor: Colors.white,
+      elevation: 4,
+      centerTitle: true,
+    ),
+    cardTheme: const CardTheme(
+      color: Color(0xFF1E1E1E),
+      elevation: 4,
+      margin: EdgeInsets.all(8),
+    ),
+    dialogTheme: const DialogTheme(
+      backgroundColor: Color(0xFF1E1E1E),
+      elevation: 8,
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Color(0xFF1E1E1E),
+      selectedItemColor: primaryColor,
+      unselectedItemColor: Colors.grey,
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: primaryDarkColor,
+      foregroundColor: Colors.white,
+    ),
+    textTheme: const TextTheme(
+      displayLarge: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      displayMedium: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      displaySmall: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      headlineMedium: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      headlineSmall: TextStyle(fontFamily: '.SF Pro Display', color: Colors.white),
+      titleLarge: TextStyle(fontFamily: '.SF Pro Display', color: Colors.white),
+      titleMedium: TextStyle(fontFamily: '.SF Pro Display', color: Colors.white),
+      titleSmall: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white70),
+      bodyLarge: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white),
+      bodyMedium: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white),
+      bodySmall: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white70),
+      labelLarge: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white),
+      labelMedium: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white70),
+    ),
+    iconTheme: const IconThemeData(
+      color: Colors.white,
+    ),
+    dividerColor: Colors.white30,
+  );
+  
+  // Cupertino 스타일 라이트 테마
+  static final ThemeData _cupertinoThemeLight = ThemeData(
+    useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
-      brightness: Brightness.dark,
       primary: primaryColor,
       secondary: secondaryColor,
       tertiary: tertiaryColor,
-      error: Colors.red[300]!,
-      background: const Color(0xFF121212),
-      surface: const Color(0xFF1E1E1E),
-      onPrimary: Colors.white,
-      onSecondary: Colors.black,
-      onTertiary: Colors.black,
-      onError: Colors.white,
-      onBackground: Colors.white,
-      onSurface: Colors.white,
+      brightness: Brightness.light,
     ),
-    // PDF 뷰어 배경색 (어두운 모드)
-    scaffoldBackgroundColor: const Color(0xFF121212),
-    // 드래그 앤 드롭 영역 스타일
-    cardTheme: CardTheme(
-      elevation: 3,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+    primaryColor: primaryColor,
+    scaffoldBackgroundColor: CupertinoColors.systemBackground,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: CupertinoColors.systemBackground,
+      foregroundColor: CupertinoColors.label,
+      elevation: 0,
+      centerTitle: true,
+      iconTheme: IconThemeData(
+        color: primaryColor,
       ),
-      color: const Color(0xFF1E1E1E),
-      shadowColor: primaryColor.withOpacity(0.5),
     ),
-    // 버튼 스타일
+    cardTheme: const CardTheme(
+      color: CupertinoColors.systemBackground,
+      elevation: 1,
+      margin: EdgeInsets.all(8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+      ),
+    ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        elevation: 2,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
       ),
     ),
-    // 앱바 스타일
-    appBarTheme: AppBarTheme(
-      backgroundColor: const Color(0xFF1A1A1A),
-      foregroundColor: Colors.white,
-      elevation: 0,
-      centerTitle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          bottom: Radius.circular(16),
-        ),
-      ),
-    ),
-    // 텍스트 스타일
-    textTheme: const TextTheme(
-      headlineLarge: TextStyle(fontWeight: FontWeight.bold),
-      headlineMedium: TextStyle(fontWeight: FontWeight.bold),
-      titleLarge: TextStyle(fontWeight: FontWeight.bold),
-    ),
-    // 아이콘 테마
-    iconTheme: IconThemeData(
-      color: primaryColor,
-      size: 24,
-    ),
-    // 입력 필드 테마
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: const Color(0xFF2A2A2A),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: primaryColor.withOpacity(0.5)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: primaryColor, width: 2),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-    ),
-    // 버튼 테마
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: primaryColor,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+    ),
+    textTheme: const TextTheme(
+      displayLarge: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display'),
+      displayMedium: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display'),
+      displaySmall: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display'),
+      headlineMedium: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display'),
+      headlineSmall: TextStyle(fontFamily: '.SF Pro Display'),
+      titleLarge: TextStyle(fontFamily: '.SF Pro Display'),
+      titleMedium: TextStyle(fontFamily: '.SF Pro Display'),
+      titleSmall: TextStyle(fontFamily: '.SF Pro Text'),
+      bodyLarge: TextStyle(fontFamily: '.SF Pro Text'),
+      bodyMedium: TextStyle(fontFamily: '.SF Pro Text'),
+      bodySmall: TextStyle(fontFamily: '.SF Pro Text'),
+      labelLarge: TextStyle(fontFamily: '.SF Pro Text'),
+      labelMedium: TextStyle(fontFamily: '.SF Pro Text'),
+    ),
+  );
+  
+  // Cupertino 스타일 다크 테마 
+  static final ThemeData _cupertinoThemeDark = ThemeData(
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primaryDarkColor,
+      primary: primaryDarkColor,
+      secondary: secondaryDarkColor,
+      tertiary: tertiaryDarkColor,
+      brightness: Brightness.dark,
+    ),
+    primaryColor: primaryDarkColor,
+    scaffoldBackgroundColor: CupertinoColors.darkBackgroundGray,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: CupertinoColors.darkBackgroundGray,
+      foregroundColor: CupertinoColors.white,
+      elevation: 0,
+      centerTitle: true,
+      iconTheme: IconThemeData(
+        color: primaryColor,
+      ),
+    ),
+    cardTheme: const CardTheme(
+      color: Color(0xFF1E1E1E),
+      elevation: 1,
+      margin: EdgeInsets.all(8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
     ),
-    // 체크박스 테마
-    checkboxTheme: CheckboxThemeData(
-      fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-        if (states.contains(MaterialState.selected)) {
-          return primaryColor;
-        }
-        return const Color(0xFF3A3A3A);
-      }),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: primaryColor,
       ),
+    ),
+    textTheme: const TextTheme(
+      displayLarge: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      displayMedium: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      displaySmall: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      headlineMedium: TextStyle(fontWeight: FontWeight.bold, fontFamily: '.SF Pro Display', color: Colors.white),
+      headlineSmall: TextStyle(fontFamily: '.SF Pro Display', color: Colors.white),
+      titleLarge: TextStyle(fontFamily: '.SF Pro Display', color: Colors.white),
+      titleMedium: TextStyle(fontFamily: '.SF Pro Display', color: Colors.white),
+      titleSmall: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white70),
+      bodyLarge: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white),
+      bodyMedium: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white),
+      bodySmall: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white70),
+      labelLarge: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white),
+      labelMedium: TextStyle(fontFamily: '.SF Pro Text', color: Colors.white70),
     ),
   );
   

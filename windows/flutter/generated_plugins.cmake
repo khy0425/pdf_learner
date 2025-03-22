@@ -3,6 +3,19 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  cloud_firestore
+  desktop_drop
+  file_selector_windows
+  firebase_auth
+  firebase_core
+  firebase_storage
+  flutter_acrylic
+  flutter_secure_storage_windows
+  screen_retriever_windows
+  syncfusion_pdfviewer_windows
+  url_launcher_windows
+  window_manager
+  window_size
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

@@ -1,90 +1,82 @@
 {
-  "appTitle": "PDF 학습기",
-  "welcome": "안녕하세요!",
-  "guestUser": "게스트 사용자",
-  "login": "로그인",
-  "logout": "로그아웃",
-  "totalPdfs": "총 {count}개의 PDF",
-  "@totalPdfs": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "uploadPdf": "PDF 업로드하기",
-  "upgrade": "업그레이드",
-  "viewTutorial": "튜토리얼 보기",
-  "tutorialTitle": "PDF 학습기에 오신 것을 환영합니다!",
-  "tutorialDesc": "이 앱은 PDF 문서를 관리하고, AI를 활용해 학습할 수 있는 도구입니다. 짧은 튜토리얼로 주요 기능을 알아보세요.",
-  "uploadButtonTitle": "PDF 업로드하기",
-  "uploadButtonDesc": "이 버튼을 클릭하면 PDF 파일을 선택하여 앱에 업로드할 수 있습니다. 업로드한 PDF는 목록에 표시됩니다.",
-  "upgradeTitle": "구독 업그레이드",
-  "upgradeDesc": "프리미엄 구독으로 업그레이드하면 무제한 AI 분석, 크로스 디바이스 동기화 등 더 많은 기능을 이용할 수 있습니다.",
-  "pdfListTitle": "PDF 목록",
-  "pdfListDesc": "업로드한 PDF 파일들이 이 영역에 표시됩니다. 파일을 클릭하면 PDF를 보고 AI 요약과 퀴즈를 만들 수 있습니다.",
-  "loginTitle": "로그인 또는 회원가입",
-  "loginDesc": "구글 계정으로 로그인하거나 API 키로 회원가입할 수 있습니다. 로그인하면 기기 간에 PDF를 동기화할 수 있습니다.",
-  "requireLogin": "로그인 필요",
-  "loginPrompt": "로그인하시겠습니까?",
+  "appTitle": "PDF Learner V2",
+  "homeTitle": "홈",
+  "settingsTitle": "설정",
+  "profileTitle": "프로필",
+  "loginTitle": "로그인",
+  "registerTitle": "회원가입",
+  "logoutButton": "로그아웃",
+  "loginButton": "로그인",
+  "registerButton": "회원가입",
+  "forgotPasswordButton": "비밀번호 찾기",
+  "emailLabel": "이메일",
+  "passwordLabel": "비밀번호",
+  "confirmPasswordLabel": "비밀번호 확인",
+  "nameLabel": "이름",
+  "searchHint": "검색...",
+  "recentFiles": "최근 파일",
+  "favoriteFiles": "즐겨찾기",
+  "allFiles": "모든 파일",
+  "noFilesAvailable": "사용 가능한 파일이 없습니다",
+  "addFileButton": "파일 추가",
+  "darkMode": "다크 모드",
+  "lightMode": "라이트 모드",
+  "systemMode": "시스템 모드",
+  "languageSettings": "언어 설정",
+  "notificationSettings": "알림 설정",
+  "accountSettings": "계정 설정",
+  "aboutApp": "앱 정보",
+  "helpAndSupport": "도움말 및 지원",
+  "privacyPolicy": "개인정보 처리방침",
+  "termsOfService": "서비스 이용약관",
+  "version": "버전",
+  "errorOccurred": "오류가 발생했습니다",
+  "tryAgain": "다시 시도",
   "cancel": "취소",
-  "emailLogin": "이메일로 로그인",
-  "googleLogin": "Google로 로그인",
-  "uploadPdfPrompt": "PDF 파일을 업로드해주세요",
-  "aiAnalysisDesc": "업로드한 PDF 파일을 AI가 분석하여 학습을 도와드립니다",
-  "fileSize": "파일 크기: {size} KB",
-  "@fileSize": {
-    "placeholders": {
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "view": "보기",
+  "save": "저장",
   "delete": "삭제",
-  "skip": "건너뛰기",
+  "edit": "편집",
+  "share": "공유",
+  "close": "닫기",
+  "confirm": "확인",
+  "loading": "로딩 중...",
+  "noInternet": "인터넷 연결이 없습니다",
+  "retry": "재시도",
+  "ok": "확인",
+  "yes": "예",
+  "no": "아니오",
+  "pdfViewer": "PDF 뷰어",
+  "pdfNotFound": "PDF 파일을 찾을 수 없습니다",
+  "invalidPdf": "유효하지 않은 PDF 파일입니다",
+  "zoom": "확대/축소",
+  "page": "페이지",
+  "bookmark": "북마크",
+  "highlight": "하이라이트",
+  "note": "노트",
+  "search": "검색",
   "next": "다음",
   "previous": "이전",
-  "freePlan": "무료 플랜",
-  "basicPlan": "베이직 플랜 (월 $4.99)",
-  "premiumPlan": "프리미엄 플랜 (월 $9.99)",
-  "freeDesc": "무료, 제한된 기능",
-  "basicDesc": "월 $4.99, 추가 기능",
-  "premiumDesc": "월 $9.99, 모든 기능",
-  "chooseSubscription": "구독 플랜 선택",
-  "guestUsage": "미회원 사용: {current}/{max}",
-  "@guestUsage": {
-    "placeholders": {
-      "current": {
-        "type": "int"
-      },
-      "max": {
-        "type": "int"
-      }
-    }
-  },
-  "remainingDays": "{days}일 남음",
-  "@remainingDays": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-  "remainingHours": "{hours}시간 남음",
-  "@remainingHours": {
-    "placeholders": {
-      "hours": {
-        "type": "int"
-      }
-    }
-  },
-  "trialExpired": "체험 기간 만료됨",
-  "expired": "만료됨",
-  "premiumTrial": "프리미엄 체험 중",
-  "language": "언어",
-  "changeLanguage": "언어 변경",
-  "english": "영어",
-  "korean": "한국어",
-  "systemDefault": "시스템 기본값"
+  "goToPage": "페이지로 이동",
+  "fileInfo": "파일 정보",
+  "fileName": "파일 이름",
+  "fileSize": "파일 크기",
+  "fileType": "파일 유형",
+  "creationDate": "생성 날짜",
+  "modificationDate": "수정 날짜",
+  "author": "작성자",
+  "pageCount": "페이지 수",
+  "deleteConfirmation": "정말로 삭제하시겠습니까?",
+  "deleteWarning": "이 작업은 취소할 수 없습니다",
+  "shareFile": "파일 공유",
+  "shareVia": "공유 방법",
+  "exportAs": "다른 형식으로 내보내기",
+  "print": "인쇄",
+  "openWith": "다른 앱으로 열기",
+  "downloadFile": "파일 다운로드",
+  "downloadSuccess": "다운로드 완료",
+  "downloadFailed": "다운로드 실패",
+  "uploadFile": "파일 업로드",
+  "uploadSuccess": "업로드 완료",
+  "uploadFailed": "업로드 실패",
+  "processingFile": "파일 처리 중..."
 } 
