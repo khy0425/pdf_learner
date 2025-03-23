@@ -176,8 +176,11 @@ class IdbDatabase {
 
 /// JS 스텁 클래스
 class JsObject {
-  dynamic callMethod(String method, [List? args]) => null;
-  dynamic getProperty(String name) => null;
+  JsObject(dynamic object);
+  dynamic operator [](Object property) => null;
+  void operator []=(Object property, dynamic value) {}
+  bool hasProperty(Object property) => false;
+  dynamic callMethod(String method, [List<dynamic>? args]) => null;
 }
 
 /// JS 스텁 클래스
@@ -277,4 +280,11 @@ class AnchorElement {
 class Location {
   String get href => '';
   set href(String value) {}
+}
+
+class Storage {
+  String? getItem(String key) => null;
+  void setItem(String key, String value) {}
+  void removeItem(String key) {}
+  void clear() {}
 } 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../view_models/auth_view_model.dart';
+import 'dart:math' as Math;
 
 /// 로그인 화면
 class LoginScreen extends StatefulWidget {
@@ -201,18 +202,55 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     
                     // 구글 로그인 버튼
-                    OutlinedButton.icon(
-                      icon: Image.asset(
-                        'assets/images/google_logo.png',
-                        height: 24,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(Icons.g_mobiledata);
-                        },
+                    Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.grey.shade300),
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      label: const Text('Google로 계속하기'),
-                      onPressed: isLoading ? null : _signInWithGoogle,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(24),
+                        child: InkWell(
+                          onTap: isLoading ? null : _signInWithGoogle,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  child: CustomPaint(
+                                    size: const Size(24, 24),
+                                    painter: GoogleLogoPainter(),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Center(
+                                    child: Text(
+                                      'Google로 계속하기',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black.withOpacity(0.7),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 24), // 오른쪽 여백을 맞추기 위한 공간
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -246,4 +284,113 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
+
+// Google 로고를 그리는 CustomPainter
+class GoogleLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double width = size.width;
+    final double height = size.height;
+    
+    // 색상 정의
+    final Paint redPaint = Paint()..color = const Color(0xFFEA4335);
+    final Paint bluePaint = Paint()..color = const Color(0xFF4285F4);
+    final Paint yellowPaint = Paint()..color = const Color(0xFFFBBC05);
+    final Paint greenPaint = Paint()..color = const Color(0xFF34A853);
+    
+    // 가운데 정렬을 위한 조정
+    final double centerX = width / 2;
+    final double centerY = height / 2;
+    final double iconSize = Math.min(width, height);
+    
+    // 스케일 조정
+    canvas.save();
+    canvas.translate(centerX - iconSize/2, centerY - iconSize/2);
+    
+    // G 로고 그리기 (SVG 경로에 기반한 단순화된 버전)
+    final Path gPath = Path();
+    
+    // 빨간색 부분
+    gPath.moveTo(iconSize * 0.5, iconSize * 0.2);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.2, iconSize * 0.2, iconSize * 0.6, iconSize * 0.6),
+      -Math.pi / 2,
+      Math.pi / 2,
+      false
+    );
+    gPath.lineTo(iconSize * 0.8, iconSize * 0.5);
+    gPath.lineTo(iconSize * 0.65, iconSize * 0.65);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.3, iconSize * 0.3, iconSize * 0.4, iconSize * 0.4),
+      Math.pi / 4,
+      -3 * Math.pi / 4,
+      false
+    );
+    gPath.close();
+    canvas.drawPath(gPath, redPaint);
+    
+    // 파란색 부분
+    gPath.reset();
+    gPath.moveTo(iconSize * 0.8, iconSize * 0.5);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.2, iconSize * 0.2, iconSize * 0.6, iconSize * 0.6),
+      0,
+      Math.pi / 2,
+      false
+    );
+    gPath.lineTo(iconSize * 0.65, iconSize * 0.65);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.3, iconSize * 0.3, iconSize * 0.4, iconSize * 0.4),
+      Math.pi / 4,
+      -Math.pi / 4,
+      false
+    );
+    gPath.close();
+    canvas.drawPath(gPath, bluePaint);
+    
+    // 노란색 부분
+    gPath.reset();
+    gPath.moveTo(iconSize * 0.2, iconSize * 0.5);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.2, iconSize * 0.2, iconSize * 0.6, iconSize * 0.6),
+      Math.pi,
+      Math.pi / 2,
+      false
+    );
+    gPath.lineTo(iconSize * 0.35, iconSize * 0.65);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.3, iconSize * 0.3, iconSize * 0.4, iconSize * 0.4),
+      3 * Math.pi / 4,
+      -Math.pi / 4,
+      false
+    );
+    gPath.close();
+    canvas.drawPath(gPath, yellowPaint);
+    
+    // 초록색 부분
+    gPath.reset();
+    gPath.moveTo(iconSize * 0.5, iconSize * 0.8);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.2, iconSize * 0.2, iconSize * 0.6, iconSize * 0.6),
+      Math.pi / 2,
+      Math.pi / 2,
+      false
+    );
+    gPath.lineTo(iconSize * 0.35, iconSize * 0.65);
+    gPath.lineTo(iconSize * 0.65, iconSize * 0.65);
+    gPath.arcTo(
+      Rect.fromLTWH(iconSize * 0.3, iconSize * 0.3, iconSize * 0.4, iconSize * 0.4),
+      -3 * Math.pi / 4,
+      Math.pi / 2,
+      false
+    );
+    gPath.close();
+    canvas.drawPath(gPath, greenPaint);
+    
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 } 

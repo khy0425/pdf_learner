@@ -11,6 +11,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_storage
   flutter_acrylic
   flutter_secure_storage_windows
+  printing
   screen_retriever_windows
   syncfusion_pdfviewer_windows
   url_launcher_windows

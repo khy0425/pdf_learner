@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:ui';
+import 'package:flutter/material.dart';
 
 /// 주석 유형 열거형
 enum AnnotationType {
@@ -9,220 +11,141 @@ enum AnnotationType {
   stamp
 }
 
-/// 사각형 영역 표현 클래스
-class Rect {
-  final double left;
-  final double top;
-  final double right;
-  final double bottom;
-
-  Rect({
-    required this.left,
-    required this.top,
-    required this.right,
-    required this.bottom,
-  });
-
-  factory Rect.fromJson(Map<String, dynamic> json) {
-    return Rect(
-      left: json['left'].toDouble(),
-      top: json['top'].toDouble(),
-      right: json['right'].toDouble(),
-      bottom: json['bottom'].toDouble(),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'left': left,
-      'top': top,
-      'right': right,
-      'bottom': bottom,
-    };
-  }
-}
-
-/// PDF 문서 데이터 모델
+/// PDF 문서 모델
 class PDFDocument {
-  /// 문서 고유 ID
+  /// 고유 ID
   final String id;
   
   /// 문서 제목
   final String title;
   
-  /// 문서 설명
-  final String? description;
-  
   /// 파일 경로
-  final String filePath;
+  final String path;
   
-  /// 파일 이름
-  final String fileName;
-  
-  /// 파일 크기 (바이트)
-  final int fileSize;
+  /// 썸네일 이미지 경로
+  final String thumbnailPath;
   
   /// 페이지 수
   final int pageCount;
   
-  /// 문서 URL (원격 파일인 경우)
-  final String? url;
+  /// 추가된 날짜
+  final DateTime dateAdded;
   
-  /// 총 단어 수
-  final int totalWords;
+  /// 마지막으로 열어본 날짜
+  final DateTime lastOpened;
   
-  /// 생성 일시
-  final DateTime createdAt;
+  /// 파일 크기 (바이트)
+  final int fileSize;
   
-  /// 수정 일시
-  final DateTime updatedAt;
+  /// 즐겨찾기 페이지 목록
+  final List<int> favorites;
   
-  /// 마지막 접근 일시
-  final DateTime lastAccessedAt;
-  
-  /// 접근 횟수
-  final int accessCount;
-  
-  /// 문서 썸네일 경로
-  final String? thumbnailPath;
-  
-  /// 북마크 목록
+  /// 북마크 목록 (하위 호환용)
   final List<PDFBookmark> bookmarks;
   
-  /// 주석 목록
+  /// 주석 목록 (하위 호환용)
   final List<PDFAnnotation> annotations;
-
-  /// 생성자
+  
+  /// 리워드 광고 버튼 표시 여부
+  final bool showRewardButton;
+  
+  /// 광고 표시 여부
+  final bool showAds;
+  
+  /// PDF 문서 생성자
   PDFDocument({
     required this.id,
     required this.title,
-    this.description,
-    required this.filePath,
-    required this.fileName,
-    required this.fileSize,
+    required this.path,
+    this.thumbnailPath = '',
     this.pageCount = 0,
-    this.url,
-    this.totalWords = 0,
-    required this.createdAt,
-    DateTime? updatedAt,
-    DateTime? lastAccessedAt,
-    this.accessCount = 0,
-    this.thumbnailPath,
+    required this.dateAdded,
+    required this.lastOpened,
+    this.fileSize = 0,
+    List<int>? favorites,
     List<PDFBookmark>? bookmarks,
     List<PDFAnnotation>? annotations,
+    this.showRewardButton = false,
+    this.showAds = true,
   }) : 
-    updatedAt = updatedAt ?? createdAt,
-    lastAccessedAt = lastAccessedAt ?? createdAt,
-    bookmarks = bookmarks ?? [],
-    annotations = annotations ?? [];
-
-  /// JSON에서 객체 생성
-  factory PDFDocument.fromJson(Map<String, dynamic> json) {
-    List<PDFBookmark> bookmarks = [];
-    if (json['bookmarks'] != null) {
-      bookmarks = (json['bookmarks'] as List)
-          .map((item) => PDFBookmark.fromJson(item))
-          .toList();
-    }
-    
-    List<PDFAnnotation> annotations = [];
-    if (json['annotations'] != null) {
-      annotations = (json['annotations'] as List)
-          .map((item) => PDFAnnotation.fromJson(item))
-          .toList();
-    }
-    
-    return PDFDocument(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String?,
-      filePath: json['filePath'] as String,
-      fileName: json['fileName'] as String? ?? 'document.pdf',
-      fileSize: json['fileSize'] as int? ?? 0,
-      pageCount: json['pageCount'] as int? ?? 0,
-      url: json['url'] as String?,
-      totalWords: json['totalWords'] as int? ?? 0,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
-      lastAccessedAt: json['lastAccessedAt'] != null
-          ? DateTime.parse(json['lastAccessedAt'] as String)
-          : null,
-      accessCount: json['accessCount'] as int? ?? 0,
-      thumbnailPath: json['thumbnailPath'] as String?,
-      bookmarks: bookmarks,
-      annotations: annotations,
-    );
-  }
-
-  /// 객체를 JSON으로 변환
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'filePath': filePath,
-      'fileName': fileName,
-      'fileSize': fileSize,
-      'pageCount': pageCount,
-      'url': url,
-      'totalWords': totalWords,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'lastAccessedAt': lastAccessedAt.toIso8601String(),
-      'accessCount': accessCount,
-      'thumbnailPath': thumbnailPath,
-      'bookmarks': bookmarks.map((e) => e.toJson()).toList(),
-      'annotations': annotations.map((e) => e.toJson()).toList(),
-    };
-  }
-
-  /// 객체 복사 및 일부 속성 수정
+    this.favorites = favorites ?? const [],
+    this.bookmarks = bookmarks ?? const [],
+    this.annotations = annotations ?? const [];
+  
+  /// filePath getter (하위 호환성 유지)
+  String? get filePath => path;
+  
+  /// 복사본 생성 (일부 속성 변경 가능)
   PDFDocument copyWith({
     String? id,
     String? title,
-    String? description,
-    String? filePath,
-    String? fileName,
-    int? fileSize,
-    int? pageCount,
-    String? url,
-    int? totalWords,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    DateTime? lastAccessedAt,
-    int? accessCount,
+    String? path,
     String? thumbnailPath,
+    int? pageCount,
+    DateTime? dateAdded,
+    DateTime? lastOpened,
+    int? fileSize,
+    List<int>? favorites,
     List<PDFBookmark>? bookmarks,
     List<PDFAnnotation>? annotations,
+    bool? showRewardButton,
+    bool? showAds,
   }) {
     return PDFDocument(
       id: id ?? this.id,
       title: title ?? this.title,
-      description: description ?? this.description,
-      filePath: filePath ?? this.filePath,
-      fileName: fileName ?? this.fileName,
-      fileSize: fileSize ?? this.fileSize,
-      pageCount: pageCount ?? this.pageCount,
-      url: url ?? this.url,
-      totalWords: totalWords ?? this.totalWords,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
-      accessCount: accessCount ?? this.accessCount,
+      path: path ?? this.path,
       thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      pageCount: pageCount ?? this.pageCount,
+      dateAdded: dateAdded ?? this.dateAdded,
+      lastOpened: lastOpened ?? this.lastOpened,
+      fileSize: fileSize ?? this.fileSize,
+      favorites: favorites ?? this.favorites,
       bookmarks: bookmarks ?? this.bookmarks,
       annotations: annotations ?? this.annotations,
+      showRewardButton: showRewardButton ?? this.showRewardButton,
+      showAds: showAds ?? this.showAds,
     );
   }
   
-  /// 문서 접근 횟수 증가
-  PDFDocument incrementAccessCount() {
-    return copyWith(
-      lastAccessedAt: DateTime.now(),
-      accessCount: accessCount + 1,
+  /// JSON에서 PDF 문서 생성
+  factory PDFDocument.fromJson(Map<String, dynamic> json) {
+    return PDFDocument(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      path: json['path'] as String? ?? json['filePath'] as String? ?? '',
+      thumbnailPath: json['thumbnailPath'] as String? ?? '',
+      pageCount: json['pageCount'] as int? ?? 0,
+      dateAdded: DateTime.parse(json['dateAdded'] as String),
+      lastOpened: DateTime.parse(json['lastOpened'] as String),
+      fileSize: json['fileSize'] as int? ?? 0,
+      favorites: (json['favorites'] as List<dynamic>?)
+          ?.map((e) => e as int)
+          .toList() ?? const [],
+      bookmarks: (json['bookmarks'] as List<dynamic>?)
+          ?.map((e) => PDFBookmark.fromJson(e as Map<String, dynamic>))
+          .toList() ?? const [],
+      annotations: (json['annotations'] as List<dynamic>?)
+          ?.map((e) => PDFAnnotation.fromJson(e as Map<String, dynamic>))
+          .toList() ?? const [],
     );
+  }
+  
+  /// PDF 문서를 JSON으로 변환
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'path': path,
+      'thumbnailPath': thumbnailPath,
+      'pageCount': pageCount,
+      'dateAdded': dateAdded.toIso8601String(),
+      'lastOpened': lastOpened.toIso8601String(),
+      'fileSize': fileSize,
+      'favorites': favorites,
+      'bookmarks': bookmarks.map((e) => e.toJson()).toList(),
+      'annotations': annotations.map((e) => e.toJson()).toList(),
+    };
   }
 
   @override
@@ -231,118 +154,167 @@ class PDFDocument {
   }
 }
 
-class PDFAnnotation {
+/// PDF 북마크 모델
+class PDFBookmark {
+  /// 고유 ID
   final String id;
+  
+  /// 북마크 제목
+  final String title;
+  
+  /// 페이지 번호
   final int pageNumber;
-  final String content;
-  final AnnotationType type;
-  final Rect rect;
+  
+  /// 스크롤 위치 (y좌표)
+  final double scrollPosition;
+
+  /// 생성일
   final DateTime createdAt;
-  final String? color;
 
-  PDFAnnotation({
-    required this.id,
+  /// 북마크 생성자
+  PDFBookmark({
+    String? id,
+    required this.title,
     required this.pageNumber,
-    required this.content,
-    required this.type,
-    required this.rect,
-    required this.createdAt,
-    this.color,
-  });
+    required this.scrollPosition,
+    DateTime? createdAt,
+  }) : 
+    this.id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    this.createdAt = createdAt ?? DateTime.now();
 
-  factory PDFAnnotation.fromJson(Map<String, dynamic> json) {
-    return PDFAnnotation(
-      id: json['id'],
-      pageNumber: json['pageNumber'],
-      content: json['content'],
-      type: AnnotationType.values.firstWhere(
-        (e) => e.toString().split('.').last == json['type'], 
-        orElse: () => AnnotationType.highlight,
-      ),
-      rect: Rect.fromJson(json['rect']),
-      createdAt: DateTime.parse(json['createdAt']),
-      color: json['color'],
+  /// JSON에서 북마크 생성
+  factory PDFBookmark.fromJson(Map<String, dynamic> json) {
+    return PDFBookmark(
+      id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: json['title'] as String,
+      pageNumber: json['pageNumber'] as int,
+      scrollPosition: (json['scrollPosition'] as num).toDouble(),
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String)
+          : DateTime.now(),
     );
   }
 
+  /// 북마크를 JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'title': title,
       'pageNumber': pageNumber,
-      'content': content,
-      'type': type.toString().split('.').last,
-      'rect': rect.toJson(),
+      'scrollPosition': scrollPosition,
       'createdAt': createdAt.toIso8601String(),
-      'color': color,
     };
   }
+}
 
-  PDFAnnotation copyWith({
-    String? id,
-    int? pageNumber,
-    String? content,
-    AnnotationType? type,
-    Rect? rect,
-    DateTime? createdAt,
-    String? color,
-  }) {
-    return PDFAnnotation(
-      id: id ?? this.id,
-      pageNumber: pageNumber ?? this.pageNumber,
-      content: content ?? this.content,
-      type: type ?? this.type,
-      rect: rect ?? this.rect,
-      createdAt: createdAt ?? this.createdAt,
-      color: color ?? this.color,
+/// PDF 주석 영역을 표현하는 클래스
+class PdfRect {
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  
+  const PdfRect({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+  });
+  
+  // 직렬화를 위한 메소드
+  Map<String, dynamic> toJson() {
+    return {
+      'left': left,
+      'top': top,
+      'width': width,
+      'height': height,
+    };
+  }
+  
+  // JSON에서 생성하는 팩토리 메소드
+  factory PdfRect.fromJson(Map<String, dynamic> json) {
+    return PdfRect(
+      left: (json['left'] as num).toDouble(),
+      top: (json['top'] as num).toDouble(),
+      width: (json['width'] as num).toDouble(),
+      height: (json['height'] as num).toDouble(),
     );
   }
 }
 
-class PDFBookmark {
+/// PDF 주석 모델
+class PDFAnnotation {
+  /// 고유 ID
   final String id;
+  
+  /// 주석 내용
+  final String text;
+  
+  /// 페이지 번호
   final int pageNumber;
-  final String title;
+  
+  /// 사각형 영역
+  final PdfRect rectangle;
+  
+  /// 주석 색상
+  final Color color;
+  
+  /// 생성일
   final DateTime createdAt;
 
-  PDFBookmark({
-    required this.id,
+  /// 주석 생성자
+  PDFAnnotation({
+    String? id,
+    required this.text,
     required this.pageNumber,
-    required this.title,
-    required this.createdAt,
-  });
+    required this.rectangle,
+    required this.color,
+    DateTime? createdAt,
+  }) : 
+    this.id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+    this.createdAt = createdAt ?? DateTime.now();
 
-  /// page getter - pageNumber와 동일한 값을 반환하는 호환성용 getter
-  int get page => pageNumber;
-
-  factory PDFBookmark.fromJson(Map<String, dynamic> json) {
-    return PDFBookmark(
-      id: json['id'],
-      pageNumber: json['pageNumber'],
-      title: json['title'],
-      createdAt: DateTime.parse(json['createdAt']),
+  /// JSON에서 주석 생성
+  factory PDFAnnotation.fromJson(Map<String, dynamic> json) {
+    final rectData = json['rectangle'] as Map<String, dynamic>;
+    final colorData = json['color'] as Map<String, dynamic>;
+    
+    return PDFAnnotation(
+      id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      text: json['text'] as String,
+      pageNumber: json['pageNumber'] as int,
+      rectangle: PdfRect(
+        left: (rectData['left'] as num).toDouble(), 
+        top: (rectData['top'] as num).toDouble(),
+        width: (rectData['width'] as num).toDouble(),
+        height: (rectData['height'] as num).toDouble(),
+      ),
+      color: Color.fromRGBO(
+        colorData['r'] as int,
+        colorData['g'] as int,
+        colorData['b'] as int,
+        (colorData['a'] as num).toDouble(),
+      ),
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String)
+          : DateTime.now(),
     );
   }
 
+  /// 주석을 JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'text': text,
       'pageNumber': pageNumber,
-      'title': title,
+      'rectangle': rectangle.toJson(),
+      'color': {
+        'r': color.red,
+        'g': color.green,
+        'b': color.blue,
+        'a': color.opacity,
+      },
       'createdAt': createdAt.toIso8601String(),
     };
-  }
-
-  PDFBookmark copyWith({
-    String? id,
-    int? pageNumber,
-    String? title,
-    DateTime? createdAt,
-  }) {
-    return PDFBookmark(
-      id: id ?? this.id,
-      pageNumber: pageNumber ?? this.pageNumber,
-      title: title ?? this.title,
-      createdAt: createdAt ?? this.createdAt,
-    );
   }
 }

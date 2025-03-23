@@ -6,6 +6,9 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
   // Firebase 서비스 인스턴스
@@ -278,5 +281,85 @@ class StorageService {
   // PDF가 전체 경로인지 확인
   bool isPdfUrlComplete(String? url) {
     return url != null && url.startsWith('http');
+  }
+  
+  /// 앱 문서 디렉토리 경로 가져오기
+  Future<String> getDocumentsPath() async {
+    if (kIsWeb) {
+      return '/web/documents';
+    } else {
+      final directory = await getApplicationDocumentsDirectory();
+      return directory.path;
+    }
+  }
+  
+  /// 임시 디렉토리 경로 가져오기
+  Future<String> getTemporaryPath() async {
+    if (kIsWeb) {
+      return '/web/temp';
+    } else {
+      final directory = await getTemporaryDirectory();
+      return directory.path;
+    }
+  }
+  
+  /// SharedPreferences에 데이터 저장
+  Future<bool> saveData(String key, dynamic value) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    if (value is String) {
+      return prefs.setString(key, value);
+    } else if (value is int) {
+      return prefs.setInt(key, value);
+    } else if (value is double) {
+      return prefs.setDouble(key, value);
+    } else if (value is bool) {
+      return prefs.setBool(key, value);
+    } else if (value is List<String>) {
+      return prefs.setStringList(key, value);
+    } else {
+      throw Exception('지원하지 않는 데이터 타입');
+    }
+  }
+  
+  /// SharedPreferences에서 데이터 불러오기
+  Future<dynamic> loadData(String key, dynamic defaultValue) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    if (defaultValue is String) {
+      return prefs.getString(key) ?? defaultValue;
+    } else if (defaultValue is int) {
+      return prefs.getInt(key) ?? defaultValue;
+    } else if (defaultValue is double) {
+      return prefs.getDouble(key) ?? defaultValue;
+    } else if (defaultValue is bool) {
+      return prefs.getBool(key) ?? defaultValue;
+    } else if (defaultValue is List<String>) {
+      return prefs.getStringList(key) ?? defaultValue;
+    } else {
+      throw Exception('지원하지 않는 데이터 타입');
+    }
+  }
+  
+  /// 디렉토리 생성 (존재하지 않는 경우)
+  Future<Directory> createDirectoryIfNotExists(String path) async {
+    final directory = Directory(path);
+    if (!(await directory.exists())) {
+      await directory.create(recursive: true);
+    }
+    return directory;
+  }
+  
+  /// 파일 크기 포맷팅
+  String formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
   }
 } 

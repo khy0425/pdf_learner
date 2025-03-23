@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../models/quiz_model.dart';
 import '../services/auth_service.dart';
+import '../services/ad_service.dart';
+import '../widgets/platform_ad_widget.dart';
 import 'quiz_session_page.dart';
 
 class QuizResultPage extends StatelessWidget {
@@ -102,9 +104,30 @@ class QuizResultPage extends StatelessWidget {
                 );
               },
             ),
+            
+            // 무료 퀴즈 추가 기회 버튼 (보상형 광고)
+            const SizedBox(height: 24),
+            FutureBuilder<bool>(
+              future: Provider.of<AdService>(context, listen: false).shouldShowAds(context),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data!) {
+                  return ElevatedButton.icon(
+                    icon: const Icon(Icons.video_library),
+                    label: const Text('광고 시청하고 추가 퀴즈 받기'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                    onPressed: () => _showRewardedAd(context),
+                  );
+                } else {
+                  return const SizedBox.shrink();
+                }
+              },
+            ),
           ],
         ),
       ),
+      bottomNavigationBar: const PlatformAdWidget(),
     );
   }
   
@@ -354,6 +377,25 @@ class QuizResultPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+  
+  // 보상형 광고 표시 메서드
+  void _showRewardedAd(BuildContext context) {
+    final adService = Provider.of<AdService>(context, listen: false);
+    
+    adService.loadAndShowRewardedAd(
+      onRewarded: () {
+        // 광고 시청 완료 후 보상 지급 (퀴즈 카운트 증가 등)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('오늘의 퀴즈 생성 횟수가 1회 추가되었습니다!'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        // TODO: 실제 퀴즈 생성 횟수 증가 로직 추가
+      }
     );
   }
 } 

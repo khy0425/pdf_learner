@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import '../widgets/reward_ad_button.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -169,6 +172,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authService = Provider.of<AuthService>(context);
     
     return Scaffold(
       appBar: AppBar(
@@ -185,6 +189,7 @@ class _SettingsPageState extends State<SettingsPage> {
           : ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
+                if (authService.isLoggedIn) _buildPointsSection(),
                 _buildSectionTitle('앱 설정'),
                 _buildSettingSwitch(
                   title: '다크 모드',
@@ -217,6 +222,56 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildAboutSection(),
               ],
             ),
+    );
+  }
+
+  Widget _buildPointsSection() {
+    final authService = Provider.of<AuthService>(context);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('포인트'),
+        Card(
+          elevation: 2,
+          margin: const EdgeInsets.only(bottom: 16.0),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.stars,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 32,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '내 포인트: ${authService.userPoints}',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '포인트로 PDF 문서 편집, 메모 등 프리미엄 기능을 사용할 수 있습니다.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const RewardAdButton(
+                  text: '광고 보고 5 포인트 받기',
+                  rewardPoints: 5,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

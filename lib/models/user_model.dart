@@ -11,33 +11,37 @@ enum UserRole {
 
 /// 사용자 정보 모델 클래스
 class UserModel {
-  final String? id;
-  final String? email;
-  final String? name;
-  final UserRole role;
-  final DateTime? subscriptionEndDate;
+  final String id;
+  final String email;
+  final String? displayName;
+  final String? photoURL;
   final DateTime createdAt;
-  final DateTime? lastLoginAt;
-  final String? planType; // 'basic' 또는 'premium'
+  final DateTime updatedAt;
+  final String role;
+  final String subscriptionTier;
+  final DateTime? subscriptionEndDate;
+  final int points; // 사용자 포인트 (리워드 광고 등으로 획득)
 
   const UserModel({
-    this.id,
-    this.email,
-    this.name,
-    this.role = UserRole.free,
-    this.subscriptionEndDate,
+    required this.id,
+    required this.email,
+    this.displayName,
+    this.photoURL,
     required this.createdAt,
-    this.lastLoginAt,
-    this.planType,
+    required this.updatedAt,
+    this.role = 'user',
+    this.subscriptionTier = 'free',
+    this.subscriptionEndDate,
+    this.points = 0, // 기본값 0
   });
 
-  bool get isGuest => role == UserRole.guest;
-  bool get isFree => role == UserRole.free;
-  bool get isPremium => role == UserRole.premium && isSubscriptionActive;
-  bool get isBasic => role == UserRole.basic && isSubscriptionActive;
+  bool get isGuest => role == UserRole.guest.toString();
+  bool get isFree => role == UserRole.free.toString();
+  bool get isPremium => role == UserRole.premium.toString() && isSubscriptionActive;
+  bool get isBasic => role == UserRole.basic.toString() && isSubscriptionActive;
   
   bool get isSubscriptionActive {
-    if (role != UserRole.premium && role != UserRole.basic) {
+    if (role != UserRole.premium.toString() && role != UserRole.basic.toString()) {
       return false;
     }
     return subscriptionEndDate?.isAfter(DateTime.now()) ?? false;
@@ -48,28 +52,32 @@ class UserModel {
     return UserModel(
       id: user.uid,
       email: user.email ?? '',
-      name: user.displayName ?? '사용자',
-      role: UserRole.free,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
       createdAt: user.metadata.creationTime ?? DateTime.now(),
-      lastLoginAt: user.metadata.lastSignInTime,
+      updatedAt: user.metadata.lastSignInTime ?? DateTime.now(),
     );
   }
 
   /// Map 객체로부터 UserModel 생성
   factory UserModel.fromMap(Map<String, dynamic> data) {
     return UserModel(
-      id: NullSafetyHelpers.safeStringValue(data['id']),
-      email: NullSafetyHelpers.safeStringValue(data['email']),
-      name: NullSafetyHelpers.safeStringValue(data['name'], '사용자'),
-      role: _roleFromString(NullSafetyHelpers.safeStringValue(data['role'], 'UserRole.guest')),
+      id: NullSafetyHelpers.safeStringValue(data['id']) ?? '',
+      email: NullSafetyHelpers.safeStringValue(data['email']) ?? '',
+      displayName: NullSafetyHelpers.safeStringValue(data['displayName']),
+      photoURL: NullSafetyHelpers.safeStringValue(data['photoURL']),
+      createdAt: data['createdAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(data['createdAt']) 
+          : DateTime.now(),
+      updatedAt: data['updatedAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(data['updatedAt']) 
+          : DateTime.now(),
+      role: NullSafetyHelpers.safeStringValue(data['role'], 'user'),
+      subscriptionTier: NullSafetyHelpers.safeStringValue(data['subscriptionTier'], 'free'),
       subscriptionEndDate: data['subscriptionEndDate'] != null 
           ? DateTime.fromMillisecondsSinceEpoch(data['subscriptionEndDate']) 
           : null,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(data['createdAt']),
-      lastLoginAt: data['lastLoginAt'] != null 
-          ? DateTime.fromMillisecondsSinceEpoch(data['lastLoginAt']) 
-          : null,
-      planType: NullSafetyHelpers.safeStringValue(data['planType']),
+      points: data['points'] ?? 0, // 포인트 추가 (기본값 0)
     );
   }
 
@@ -78,12 +86,14 @@ class UserModel {
     return {
       'id': id,
       'email': email,
-      'name': name,
-      'role': role.toString(),
-      'subscriptionEndDate': subscriptionEndDate?.millisecondsSinceEpoch,
+      'displayName': displayName,
+      'photoURL': photoURL,
       'createdAt': createdAt.millisecondsSinceEpoch,
-      'lastLoginAt': lastLoginAt?.millisecondsSinceEpoch,
-      'planType': planType,
+      'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'role': role,
+      'subscriptionTier': subscriptionTier,
+      'subscriptionEndDate': subscriptionEndDate?.millisecondsSinceEpoch,
+      'points': points, // 포인트 추가
     };
   }
 
@@ -91,22 +101,26 @@ class UserModel {
   UserModel copyWith({
     String? id,
     String? email,
-    String? name,
-    UserRole? role,
-    DateTime? subscriptionEndDate,
+    String? displayName,
+    String? photoURL,
     DateTime? createdAt,
-    DateTime? lastLoginAt,
-    String? planType,
+    DateTime? updatedAt,
+    String? role,
+    String? subscriptionTier,
+    DateTime? subscriptionEndDate,
+    int? points, // 포인트 추가
   }) {
     return UserModel(
       id: id ?? this.id,
       email: email ?? this.email,
-      name: name ?? this.name,
-      role: role ?? this.role,
-      subscriptionEndDate: subscriptionEndDate ?? this.subscriptionEndDate,
+      displayName: displayName ?? this.displayName,
+      photoURL: photoURL ?? this.photoURL,
       createdAt: createdAt ?? this.createdAt,
-      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
-      planType: planType ?? this.planType,
+      updatedAt: updatedAt ?? this.updatedAt,
+      role: role ?? this.role,
+      subscriptionTier: subscriptionTier ?? this.subscriptionTier,
+      subscriptionEndDate: subscriptionEndDate ?? this.subscriptionEndDate,
+      points: points ?? this.points, // 포인트 추가
     );
   }
   
@@ -118,7 +132,7 @@ class UserModel {
   
   @override
   String toString() {
-    return 'UserModel(id: $id, email: $email, name: $name)';
+    return 'UserModel(id: $id, email: $email, displayName: $displayName, points: $points)';
   }
 
   static UserRole _roleFromString(String value) {
@@ -136,19 +150,41 @@ class UserModel {
 
   factory UserModel.guest() {
     return UserModel(
-      id: null,
-      email: null,
-      name: '게스트',
-      role: UserRole.guest,
+      id: '',
+      email: '',
+      displayName: '게스트',
+      photoURL: null,
       createdAt: DateTime.now(),
-      lastLoginAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      role: UserRole.guest.toString(),
+      subscriptionTier: 'free',
+      points: 0, // 포인트 추가
     );
   }
 
-  String get uid => id ?? '';
+  String get uid => id;
 
   int get remainingDays {
     if (subscriptionEndDate == null) return 0;
     return subscriptionEndDate!.difference(DateTime.now()).inDays;
+  }
+  
+  /// 포인트 추가
+  UserModel addPoints(int amount) {
+    return copyWith(
+      points: points + amount,
+      updatedAt: DateTime.now(),
+    );
+  }
+  
+  /// 포인트 사용
+  UserModel usePoints(int amount) {
+    if (points < amount) {
+      throw Exception('포인트가 부족합니다');
+    }
+    return copyWith(
+      points: points - amount,
+      updatedAt: DateTime.now(),
+    );
   }
 } 
