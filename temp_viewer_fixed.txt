@@ -1,0 +1,1425 @@
+﻿import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import '../widgets/platform_ad_widget.dart';
+import '../services/ad_service.dart';
+import '../services/auth_service.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+import 'dart:math';
+import 'dart:convert';
+// dart:html???뱀뿉?쒕쭔 ?꾪룷??import 'dart:html' if (dart.library.io) '../views/web_stub_html.dart' as html;
+// ui ?ㅼ엫?ㅽ럹?댁뒪??議곌굔遺濡??꾪룷??import 'dart:ui' as ui;
+import '../models/pdf_document.dart';
+import '../services/subscription_service.dart';
+import '../viewmodels/pdf_viewer_viewmodel.dart';
+import 'package:flutter/services.dart';
+import 'package:pdf_learner_v2/widgets/app_bar_widget.dart';
+import 'package:pdf_learner_v2/theme/app_theme.dart';
+import 'dart:js_util' as js_util;
+import '../viewmodels/ai_summary_viewmodel.dart';
+import '../views/ai_summary_page.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'dart:typed_data';
+import '../models/ai_summary.dart';
+import '../widgets/loading_indicator.dart';
+
+/// PDF 臾몄꽌 酉곗뼱 ?섏씠吏
+class PdfViewerPage extends StatefulWidget {
+  final PDFDocument document;
+  final String? filePath;
+  final String? title;
+  final bool showAds;
+  final bool showRewardButton;
+  
+  const PdfViewerPage({
+    Key? key,
+    required this.document,
+    this.filePath,
+    this.title,
+    this.showAds = true,
+    this.showRewardButton = false,
+  }) : super(key: key);
+  
+  @override
+  _PdfViewerPageState createState() => _PdfViewerPageState();
+}
+
+class _PdfViewerPageState extends State<PdfViewerPage> {
+  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
+  final PdfViewerController _pdfViewerController = PdfViewerController();
+  final TextEditingController _searchController = TextEditingController();
+  
+  bool _isFullScreen = false;
+  bool _isToolbarVisible = true;
+  bool _isSearching = false;
+  bool _isBottomBarVisible = true;
+  bool _isLoading = true;
+  String? _localPath;
+  int _currentPage = 0;
+  int _totalPages = 0;
+  bool _pdfLoadError = false;
+  String _errorMessage = '';
+  bool _isViewRegistered = false;
+  Timer? _loadingTimer;
+  
+  @override
+  void initState() {
+    super.initState();
+    
+    // ?꾩껜 ?붾㈃ 紐⑤뱶濡??ㅼ젙
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    
+    // ?붾㈃ 諛⑺뼢 怨좎젙 ?댁젣 (媛濡? ?몃줈 紐⑤몢 ?덉슜)
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    
+    // ViewModel 珥덇린??    Future.microtask(() {
+      context.read<PdfViewerViewModel>().initWithDocument(widget.document);
+    });
+    
+    // ???섍꼍?먯꽌 硫붿떆吏 由ъ뒪???ㅼ젙
+    if (kIsWeb) {
+      html.window.addEventListener('message', _handlePdfMessage);
+      
+      // 臾댄븳 濡쒕뵫 諛⑹?瑜??꾪븳 ??꾩븘???ㅼ젙
+      _loadingTimer = Timer(const Duration(seconds: 15), () {
+        if (mounted && _isLoading) {
+          setState(() {
+            _isLoading = false;
+            if (_totalPages == 0) _totalPages = 1;
+            if (_currentPage == 0) _currentPage = 1;
+          });
+        }
+      });
+    }
+    
+    // 臾몄꽌 濡쒕뱶
+    _loadDocument();
+    
+    // ?붾쾭洹??뺣낫 異쒕젰
+    debugPrint('PDF 寃쎈줈: ${widget.document.path}');
+  }
+  
+  Future<void> _loadDocument() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _pdfLoadError = false;
+      });
+      
+      if (!kIsWeb && widget.document.path.startsWith('http')) {
+        // ?ㅼ씠?곕툕 ?섍꼍?먯꽌 URL濡쒕???PDF ?ㅼ슫濡쒕뱶
+        debugPrint('?ㅼ씠?곕툕 ?섍꼍?먯꽌 URL?먯꽌 PDF ?ㅼ슫濡쒕뱶 ?쒖옉: ${widget.document.path}');
+        final response = await http.get(Uri.parse(widget.document.path))
+          .timeout(const Duration(seconds: 30));
+        
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          final dir = await getApplicationDocumentsDirectory();
+          final file = File('${dir.path}/${widget.document.id}.pdf');
+          await file.writeAsBytes(bytes);
+          setState(() {
+            _localPath = file.path;
+            _isLoading = false;
+          });
+          debugPrint('PDF ?ㅼ슫濡쒕뱶 ?꾨즺: $_localPath');
+        } else {
+          debugPrint('PDF ?ㅼ슫濡쒕뱶 ?ㅽ뙣: ${response.statusCode}');
+          setState(() {
+            _isLoading = false;
+            _pdfLoadError = true;
+            _errorMessage = '臾몄꽌瑜??ㅼ슫濡쒕뱶?????놁뒿?덈떎. ?곹깭 肄붾뱶: ${response.statusCode}';
+          });
+        }
+      } else if (!kIsWeb) {
+        // 濡쒖뺄 ?뚯씪??寃쎌슦
+        debugPrint('濡쒖뺄 ?뚯씪 濡쒕뱶: ${widget.document.path}');
+        setState(() {
+          _localPath = widget.document.path;
+          _isLoading = false;
+        });
+      } else {
+        // ???섍꼍?먯꽌??URL??洹몃?濡??ъ슜
+        debugPrint('???섍꼍?먯꽌 PDF 濡쒕뱶: ${widget.document.path}');
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('PDF 濡쒕뱶 ?ㅻ쪟: $e');
+      setState(() {
+        _isLoading = false;
+        _pdfLoadError = true;
+        _errorMessage = '臾몄꽌 濡쒕뱶 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎: $e';
+      });
+    }
+  }
+  
+  @override
+  void dispose() {
+    // 由ъ냼???뺣━
+    if (kIsWeb) {
+      html.window.removeEventListener('message', _handlePdfMessage);
+      
+      // PDF 而⑦뀒?대꼫 ?쒓굅
+      final docIdHash = widget.document.id.hashCode.abs().toString();
+      final containerId = 'pdf-container-$docIdHash';
+      html.Element? container = html.document.getElementById(containerId);
+      if (container != null) {
+        container.remove();
+        debugPrint('PDF 而⑦뀒?대꼫 ?쒓굅: $containerId');
+      }
+      
+      _isViewRegistered = false;
+    }
+    
+    // ?꾩껜 ?붾㈃ 紐⑤뱶 ?댁젣
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    
+    // ?붾㈃ 諛⑺뼢 珥덇린??(?몃줈 諛⑺뼢留??덉슜)
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    
+    // ??대㉧ ?뺣━
+    _loadingTimer?.cancel();
+    
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: SafeArea(
+        // ?꾩껜 ?붾㈃ 紐⑤뱶?먯꽌??SafeArea 臾댁떆
+        left: !_isFullScreen,
+        top: !_isFullScreen,
+        right: !_isFullScreen,
+        bottom: !_isFullScreen,
+        child: Stack(
+          children: [
+            // PDF 酉곗뼱 ?먮뒗 ?먮윭 硫붿떆吏
+            if (_pdfLoadError)
+              _buildErrorWidget()
+            else if (kIsWeb)
+              _buildWebPdfViewer()
+            else if (!kIsWeb && _localPath != null)
+              _buildNativePdfViewer(),
+            
+            // ?꾩껜 ?붾㈃ 濡쒕뵫 ?곹깭 ?쒖떆 (濡쒕뱶 珥덇린 ?④퀎)
+            if ((_isLoading || context.watch<PdfViewerViewModel>().isLoading) && 
+                (!_isViewRegistered || !kIsWeb))
+              _buildFullScreenLoading(context),
+            
+            // ?섎떒 ?쒖뼱諛?            if (_isBottomBarVisible && !_isFullScreen && !_pdfLoadError)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: widget.showAds ? 50 : 0, // 愿묎퀬媛 ?쒖떆?????꾩튂 議곗젙
+                child: _buildBottomBar(),
+              ),
+              
+            // 諛곕꼫 愿묎퀬
+            if (widget.showAds && !_isFullScreen)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildBannerAd(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// ??PDF 酉곗뼱 ?꾩젽
+  Widget _buildWebPdfViewer() {
+    debugPrint('??PDF 酉곗뼱 鍮뚮뱶: ${widget.document.path}');
+    
+    // PDF URL
+    final pdfUrl = widget.document.path;
+    
+    // 濡쒕뱶 吏???쒓컙 理쒖냼?붾? ?꾪빐 iframe??誘몃━ 濡쒕뱶
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isLoading && !_isViewRegistered) {
+        // 15珥??꾩뿉??濡쒕뵫 以묒씠硫???꾩븘??泥섎━
+        _loadingTimer = Timer(const Duration(seconds: 15), () {
+          if (mounted && _isLoading) {
+            setState(() {
+              _isLoading = false;
+              _isViewRegistered = true;
+            });
+          }
+        });
+      }
+    });
+    
+    // 紐⑤뱺 URL??PDF.js ?ъ슜
+    return _buildPdfJsViewer(pdfUrl);
+  }
+  
+  /// PDF.js瑜??ъ슜??PDF 酉곗뼱
+  Widget _buildPdfJsViewer(String pdfUrl) {
+    if (!kIsWeb) {
+      return const Center(child: Text('Web ?섍꼍?먯꽌留?吏?먮맗?덈떎'));
+    }
+
+    // 怨좎쑀??viewId ?앹꽦 - 臾몄꽌 ID 湲곕컲??媛꾨떒???댁떆 ?ъ슜
+    final docIdHash = widget.document.id.hashCode.abs().toString();
+    final iframeId = 'pdf-js-frame-$docIdHash';
+    final containerId = 'pdf-container-$docIdHash';
+    
+    // ?⑥닚??URL ?뺤떇 ?ъ슜 (?댁쟾???묐룞?섎뜕 諛⑹떇)
+    final pdfJsViewerUrl = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
+    
+    debugPrint('PDF 酉곗뼱 鍮뚮뱶: iframeId=$iframeId, docId=${widget.document.id}');
+    
+    if (!_isViewRegistered) {
+      // WidgetsBinding???ъ슜?섏뿬 UI ?몃━媛 鍮뚮뱶?????ㅽ뻾
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // 而⑦뀒?대꼫 ?앹꽦
+        html.DivElement container = html.DivElement()
+          ..id = containerId
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.border = 'none'
+          ..style.backgroundColor = 'white';
+        
+        // iframe ?앹꽦
+        html.IFrameElement iframe = html.IFrameElement()
+          ..id = iframeId
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.border = 'none'
+          ..allowFullscreen = true
+          ..src = pdfJsViewerUrl;
+        
+        // iframe 濡쒕뱶 ?대깽??        iframe.onLoad.listen((_) {
+          debugPrint('PDF iframe 濡쒕뱶 ?꾨즺: $iframeId');
+          if (_isLoading) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _isViewRegistered = true;
+                
+                // ??PDF 酉곗뼱??湲곕낯 ?섏씠吏 媛??ㅼ젙
+                if (_currentPage == 0) _currentPage = 1;
+                if (_totalPages == 0) _totalPages = 14; // 湲곕낯媛??ㅼ젙
+                
+                // ViewModel ?낅뜲?댄듃
+                context.read<PdfViewerViewModel>().updateCurrentPage(_currentPage, _totalPages);
+              });
+            }
+          }
+        });
+        
+        // 而⑦뀒?대꼫??iframe 異붽?
+        container.children.add(iframe);
+        
+        // body??而⑦뀒?대꼫 異붽?
+        html.document.body?.append(container);
+        
+        // ?꾩튂 諛??ㅽ????ㅼ젙
+        container.style.position = 'fixed'; // fixed濡?蹂寃쏀븯???ㅽ겕濡ㅼ뿉 ?곹뼢諛쏆? ?딅룄濡?        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.zIndex = '999'; // ?믪? zIndex濡??ㅼ젙
+        
+        // UI ?곹깭 ?낅뜲?댄듃
+        if (mounted) {
+          setState(() {
+            _isViewRegistered = true;
+          });
+        }
+        
+        debugPrint('PDF 酉곗뼱 DOM??吏곸젒 異붽?: $containerId');
+      });
+    }
+    
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: Stack(
+        key: ValueKey<bool>(_isLoading),
+        children: [
+          // ?щ챸??Container濡??곗튂 ?대깽??罹≪쿂 (PDF??DOM??吏곸젒 異붽???
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            color: Colors.transparent,
+          ),
+          if (_isLoading)
+            _buildLoadingIndicator(),
+        ],
+      ),
+    );
+  }
+  
+  /// PDF 硫붿떆吏 泥섎━
+  void _handlePdfMessage(html.Event event) {
+    if (event is html.MessageEvent) {
+      final message = event.data.toString();
+      debugPrint('PDF 硫붿떆吏 ?섏떊: $message');
+      
+      try {
+        // JSON ?뺤떇 硫붿떆吏 泥섎━
+        if (message.startsWith('{') && message.endsWith('}')) {
+          final data = jsonDecode(message);
+          if (data is Map && data.containsKey('type')) {
+            if (data['type'] == 'pagechange' || data['type'] == 'pageinfo') {
+              final currentPage = data['page'] as int? ?? 1;
+              final totalPages = data['total'] as int? ?? 1;
+              
+              if (mounted) {
+                setState(() {
+                  _currentPage = currentPage;
+                  _totalPages = totalPages;
+                });
+                context.read<PdfViewerViewModel>().updateCurrentPage(currentPage, totalPages);
+              }
+            }
+          }
+        }
+        // 湲곗〈 ?뺤떇 硫붿떆吏 泥섎━
+        else if (message.startsWith('pdfInfo:')) {
+          final parts = message.split(':');
+          if (parts.length == 3) {
+            try {
+              final currentPage = int.parse(parts[1]);
+              final totalPages = int.parse(parts[2]);
+              
+              setState(() {
+                _currentPage = currentPage;
+                _totalPages = totalPages;
+                _isLoading = false;
+              });
+            } catch (e) {
+              debugPrint('PDF ?뺣낫 ?뚯떛 ?ㅻ쪟: $e');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('PDF 硫붿떆吏 泥섎━ ?ㅻ쪟: $e');
+      }
+    }
+  }
+
+  /// PDF iframe??硫붿떆吏 ?꾩넚
+  void _sendPdfMessage(String message) {
+    if (kIsWeb) {
+      try {
+        // ?대떦 臾몄꽌??怨좎쑀 ID瑜??ъ슜?섏뿬 iframe ?붿냼 李얘린
+        final docIdHash = widget.document.id.hashCode.abs().toString();
+        final iframeId = 'pdf-js-frame-$docIdHash';
+        
+        // ID濡?iframe 李얘린
+        final iframe = html.document.getElementById(iframeId);
+        
+        debugPrint('PDF 紐낅졊 ?꾩넚 ?쒕룄: $message, iframe ID: $iframeId');
+        
+        if (iframe != null && iframe is html.IFrameElement) {
+          debugPrint('PDF iframe 李얠쓬, 紐낅졊 ?꾩넚: $message');
+          
+          // 紐낅졊??蹂??          final js = message.startsWith('goToPage:') 
+              ? 'PDFViewerApplication.page = ${message.substring(9)};'
+              : message == 'previousPage' 
+                  ? 'PDFViewerApplication.page--;' 
+                  : message == 'nextPage'
+                      ? 'PDFViewerApplication.page++;'
+                      : message == 'zoomIn'
+                          ? 'PDFViewerApplication.zoomIn();'
+                          : message == 'zoomOut'
+                              ? 'PDFViewerApplication.zoomOut();'
+                              : '';
+          
+          if (js.isNotEmpty && iframe.contentWindow != null) {
+            try {
+              // 吏곸젒 JavaScript ?ㅽ뻾
+              js_util.callMethod(iframe.contentWindow!, 'eval', [js]);
+              debugPrint('PDF 紐낅졊 ?ㅽ뻾 ?깃났: $js');
+              return; // ?깃났?곸쑝濡??ㅽ뻾?섎㈃ 醫낅즺
+            } catch (e) {
+              debugPrint('PDF iframe 吏곸젒 ?ㅽ뻾 ?ㅻ쪟: $e, ?泥?諛⑸쾿 ?쒕룄');
+            }
+          }
+        }
+          
+        // iframe??吏곸젒 李얠쓣 ???녾굅???ㅽ뻾 ?ㅻ쪟媛 ?덈뒗 寃쎌슦 紐⑤뱺 iframe 寃??        debugPrint('紐⑤뱺 iframe?먯꽌 PDF.js 寃??以?..');
+        
+        // 紐⑤뱺 iframe????곸쑝濡?紐낅졊 ?ㅽ뻾 ?쒕룄
+        final jsAllIframes = '''
+          (function() {
+            var iframes = document.getElementsByTagName('iframe');
+            console.log("Total iframes: " + iframes.length);
+            
+            for (var i = 0; i < iframes.length; i++) {
+              var iframe = iframes[i];
+              var iframeSrc = iframe.src || "empty";
+              var shortSrc = iframeSrc.length > 30 ? iframeSrc.substring(0, 30) + '...' : iframeSrc;
+              console.log("iframe[" + i + "] id: " + (iframe.id || "empty") + ", src: " + shortSrc);
+              
+              if (iframe.src && iframe.src.includes("mozilla.github.io/pdf.js")) {
+                console.log("PDF.js iframe found at index: " + i);
+                
+                var command = ${message.startsWith('goToPage:') 
+                    ? '"PDFViewerApplication.page = ' + message.substring(9) + ';"'
+                    : message == 'previousPage' 
+                        ? '"PDFViewerApplication.page--;"' 
+                        : message == 'nextPage'
+                            ? '"PDFViewerApplication.page++;"'
+                            : message == 'zoomIn'
+                                ? '"PDFViewerApplication.zoomIn();"'
+                                : message == 'zoomOut'
+                                    ? '"PDFViewerApplication.zoomOut();"'
+                                    : '""'};
+                
+                if (command) {
+                  try {
+                    if (iframe.contentWindow) {
+                      iframe.contentWindow.eval(command);
+                      console.log("Command successfully sent to iframe[" + i + "]: " + command);
+                      return true;
+                    }
+                  } catch (e) {
+                    console.error("Error executing command on iframe[" + i + "]:", e);
+                  }
+                }
+              }
+            }
+            
+            console.warn("PDF.js iframe not found in any iframe");
+            return false;
+          })();
+        ''';
+        
+        // JavaScript ?ㅽ뻾
+        final result = js_util.callMethod(html.window, 'eval', [jsAllIframes]);
+        debugPrint('iframe 寃??諛?紐낅졊 ?ㅽ뻾 寃곌낵: $result');
+      } catch (e) {
+        debugPrint('PDF 硫붿떆吏 ?꾩넚 ?ㅻ쪟: $e');
+      }
+    }
+  }
+  
+  /// 濡쒕뵫 ?몃뵒耳?댄꽣 ?꾩젽
+  Widget _buildLoadingIndicator() {
+    return Container(
+      color: Colors.black.withOpacity(0.3),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'PDF 臾몄꽌 濡쒕뵫 以?..',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                shadows: [
+                  Shadow(
+                    offset: const Offset(1, 1),
+                    blurRadius: 3,
+                    color: Colors.black.withOpacity(0.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        ),
+      );
+    }
+    
+  /// ?ㅼ씠?곕툕 PDF 酉곗뼱 ?꾩젽
+  /// PDF 硫붿떆吏 由ъ뒪???ㅼ젙
+  void _setupPdfMessageListener() {
+    html.window.removeEventListener('message', _handlePdfMessage);
+    html.window.addEventListener('message', _handlePdfMessage);
+  }
+  
+  /// ?ㅼ씠?곕툕 PDF 酉곗뼱 ?꾩젽
+  Widget _buildNativePdfViewer() {
+    debugPrint('?ㅼ씠?곕툕 PDF 酉곗뼱 鍮뚮뱶: $_localPath');
+    return PDFView(
+      filePath: _localPath,
+      enableSwipe: true,
+      swipeHorizontal: true,
+      autoSpacing: true,
+      pageFling: true,
+      pageSnap: true,
+      fitPolicy: FitPolicy.BOTH,
+      onRender: (pages) {
+        setState(() {
+          _isLoading = false;
+          _totalPages = pages!;
+        });
+        context.read<PdfViewerViewModel>().updatePageCount(_totalPages);
+        debugPrint('PDF ?뚮뜑留??꾨즺: $_totalPages ?섏씠吏');
+      },
+      onPageChanged: (int? page, int? total) {
+        if (page != null && total != null) {
+          setState(() {
+            _currentPage = page + 1;
+            _totalPages = total;
+          });
+          context.read<PdfViewerViewModel>().updateCurrentPage(_currentPage, _totalPages);
+        }
+      },
+      onViewCreated: (PDFViewController controller) {
+        // PDF 而⑦듃濡ㅻ윭 珥덇린?????꾩슂???묒뾽
+      },
+      onError: (error) {
+        debugPrint('PDF 濡쒕뱶 ?ㅻ쪟: $error');
+        setState(() {
+          _pdfLoadError = true;
+          _errorMessage = '臾몄꽌瑜?濡쒕뱶?????놁뒿?덈떎: $error';
+          _isLoading = false;
+        });
+      },
+      onPageError: (page, error) {
+        debugPrint('PDF ?섏씠吏 $page 濡쒕뱶 ?ㅻ쪟: $error');
+      },
+    );
+  }
+  
+  /// ?먮윭 ?쒖떆 ?꾩젽
+  Widget _buildErrorWidget() {
+      return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 60,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '臾몄꽌瑜?遺덈윭?????놁뒿?덈떎',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('?ㅼ떆 ?쒕룄'),
+              onPressed: () {
+                setState(() {
+                  _pdfLoadError = false;
+                  _isLoading = true;
+                });
+                _loadDocument();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// 諛곕꼫 愿묎퀬 ?꾩젽
+  Widget _buildBannerAd() {
+    return Container(
+      height: 50,
+      width: double.infinity,
+      color: Theme.of(context).scaffoldBackgroundColor,
+      constraints: const BoxConstraints(
+        minHeight: 50,
+        maxHeight: 50,
+      ),
+      child: const PlatformAdWidget(
+        adType: AdType.banner,
+        adUnitId: 'pdf_viewer_banner',
+      ),
+    );
+  }
+  
+  /// ?깅컮 鍮뚮뱶
+  PreferredSizeWidget? _buildAppBar() {
+    if (_isFullScreen) {
+      return null;
+    }
+    
+    // 寃??紐⑤뱶?먯꽌??寃???깅컮 ?쒖떆
+    if (_isSearching) {
+      return PDFSearchAppBar(
+        searchController: _searchController,
+        hintText: '臾몄꽌 ??寃??..',
+        onBackPressed: () {
+          setState(() {
+            _isSearching = false;
+            _searchController.clear();
+            // 寃???섏씠?쇱씠???쒓굅
+            if (kIsWeb) {
+              _pdfViewerController.clearSelection();
+            }
+          });
+        },
+        onChanged: (value) {
+          if (value.isNotEmpty && kIsWeb) {
+            _pdfViewerController.searchText(value);
+          }
+        },
+        onClear: () {
+          if (kIsWeb) {
+            _pdfViewerController.clearSelection();
+          }
+        },
+      );
+    }
+    
+    // ?쇰컲 ?깅컮 ?쒖떆
+    return PDFAppBar(
+      title: widget.document.title,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => Navigator.pop(context),
+      ),
+      actions: [
+        // 寃??踰꾪듉
+        if (kIsWeb && !_pdfLoadError) // ?뱀뿉?쒕쭔 寃??吏??          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              setState(() {
+                _isSearching = true;
+              });
+            },
+          ),
+        
+        // 遺곷쭏??踰꾪듉
+        if (!_pdfLoadError)
+          IconButton(
+            icon: const Icon(Icons.bookmark_border),
+            onPressed: _showBookmarks,
+          ),
+        
+        // 利먭꺼李얘린 踰꾪듉
+        IconButton(
+          icon: Icon(
+            context.watch<PdfViewerViewModel>().isFavorite
+                ? Icons.favorite
+                : Icons.favorite_border,
+          ),
+          color: context.watch<PdfViewerViewModel>().isFavorite
+              ? Colors.red
+              : null,
+          onPressed: () {
+            context.read<PdfViewerViewModel>().toggleFavorite();
+          },
+        ),
+        
+        // ?붾낫湲?踰꾪듉
+        IconButton(
+          icon: const Icon(Icons.more_vert),
+          onPressed: _showMoreOptions,
+        ),
+      ],
+    );
+  }
+  
+  /// ?섎떒 ?쒖뼱 諛??꾩젽
+  Widget _buildBottomBar() {
+    final sliderValue = _currentPage.toDouble();
+    final maxValue = _totalPages > 0 ? _totalPages.toDouble() : 1.0;
+    
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        color: AppTheme.bottomBarColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // ?섏씠吏 ?댁쟾 踰꾪듉
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: _currentPage > 1 ? _previousPage : null,
+            color: _currentPage > 1 ? Colors.white : Colors.white.withOpacity(0.5),
+          ),
+          
+          // ?꾩옱 ?섏씠吏 / ?꾩껜 ?섏씠吏
+          SizedBox(
+            width: 60,
+            child: Text(
+              '$_currentPage / $_totalPages',
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          
+          // ?섏씠吏 ?щ씪?대뜑
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withOpacity(0.3),
+                thumbColor: Colors.white,
+                trackHeight: 2.0,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14.0),
+              ),
+              child: Slider(
+                min: 1,
+                max: maxValue,
+                value: sliderValue.clamp(1, maxValue),
+                onChanged: (value) {
+                  final pageNumber = value.round();
+                  setState(() {
+                    _currentPage = pageNumber;
+                  });
+                },
+                onChangeEnd: (value) {
+                  final pageNumber = value.round();
+                  _goToPage(pageNumber);
+                },
+              ),
+            ),
+          ),
+          
+          // ?섏씠吏 ?ㅼ쓬 踰꾪듉
+          IconButton(
+            icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+            onPressed: _currentPage < _totalPages ? _nextPage : null,
+            color: _currentPage < _totalPages ? Colors.white : Colors.white.withOpacity(0.5),
+          ),
+          
+          // 援щ텇??          const SizedBox(
+            height: 30,
+            child: VerticalDivider(
+              color: Colors.white,
+              thickness: 1,
+              width: 20,
+            ),
+          ),
+          
+          // ?뺣? 踰꾪듉
+          IconButton(
+            icon: const Icon(Icons.zoom_in, color: Colors.white),
+            onPressed: _zoomIn,
+          ),
+          
+          // 異뺤냼 踰꾪듉
+          IconButton(
+            icon: const Icon(Icons.zoom_out, color: Colors.white),
+            onPressed: _zoomOut,
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// 遺곷쭏??紐⑤떖 ?쒖떆
+  void _showBookmarks() {
+    final viewModel = context.read<PdfViewerViewModel>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF272727) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Row(
+                  children: [
+                    Text(
+                      '遺곷쭏??,
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _addBookmark();
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              Consumer<PdfViewerViewModel>(
+                builder: (context, model, child) {
+                  if (model.bookmarks.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                        child: Text('??λ맂 遺곷쭏?ш? ?놁뒿?덈떎.'),
+                      ),
+                    );
+                  }
+                  
+                  return Expanded(
+                    child: ListView.builder(
+                      itemCount: model.bookmarks.length,
+                      itemBuilder: (context, index) {
+                        final bookmark = model.bookmarks[index];
+                        return ListTile(
+                          leading: const Icon(Icons.bookmark),
+                          title: Text(bookmark.title),
+                          subtitle: Text('${bookmark.pageNumber}?섏씠吏'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            if (kIsWeb) {
+                              _goToPage(bookmark.pageNumber);
+                            } else {
+                              _pdfViewerController.jumpToPage(bookmark.pageNumber);
+                            }
+                          },
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: () {
+                              model.deleteBookmark(bookmark.id);
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  /// 遺곷쭏??異붽? ?ㅼ씠?쇰줈洹?  void _addBookmark() {
+    final viewModel = context.read<PdfViewerViewModel>();
+    final controller = TextEditingController();
+    final currentPage = viewModel.currentPage;
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('遺곷쭏??異붽?'),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: '遺곷쭏???대쫫',
+              hintText: '${currentPage}?섏씠吏 遺곷쭏??,
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('痍⑥냼'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final title = controller.text.isNotEmpty
+                    ? controller.text
+                    : '${currentPage}?섏씠吏 遺곷쭏??;
+                viewModel.addBookmark(
+                  title: title,
+                  pageNumber: currentPage,
+                  scrollPosition: 0.0,
+                );
+                Navigator.pop(context);
+              },
+              child: const Text('???),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// 異붽? ?듭뀡 硫붾돱 ?쒖떆
+  void _showMoreOptions() {
+    final viewModel = context.read<PdfViewerViewModel>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF272727) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.download),
+                title: Text('?ㅼ슫濡쒕뱶', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  viewModel.downloadDocument();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: Text('怨듭쑀', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  viewModel.shareDocument();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text('臾몄꽌 ?뺣낫', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showDocumentInfo();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.text_fields),
+                title: Text('?띿뒪??異붿텧', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  viewModel.extractText();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  /// 臾몄꽌 ?뺣낫 ?ㅼ씠?쇰줈洹??쒖떆
+  void _showDocumentInfo() {
+    final document = widget.document;
+    final theme = Theme.of(context);
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('臾몄꽌 ?뺣낫', style: theme.textTheme.titleLarge),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('?쒕ぉ', document.title),
+              const SizedBox(height: 8),
+              _buildInfoRow('?섏씠吏 ??, '${context.read<PdfViewerViewModel>().totalPages}?섏씠吏'),
+              const SizedBox(height: 8),
+              _buildInfoRow('?뚯씪 ?ш린', '${(document.fileSize / 1024).toStringAsFixed(2)} KB'),
+              const SizedBox(height: 8),
+              _buildInfoRow('異붽? ?좎쭨', '${document.dateAdded.year}??${document.dateAdded.month}??${document.dateAdded.day}??),
+              const SizedBox(height: 8),
+              _buildInfoRow('留덉?留??대엺', '${document.lastOpened.year}??${document.lastOpened.month}??${document.lastOpened.day}??),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('?뺤씤'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// ?뺣낫 ???꾩젽
+  Widget _buildInfoRow(String label, String value) {
+    final theme = Theme.of(context);
+    
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+  }
+  
+  /// ?섏씠吏 ?대룞
+  void _goToPage(int pageNumber) {
+    _sendPdfMessage('goToPage:$pageNumber');
+  }
+  
+  /// ?뺣?
+  void _zoomIn() {
+    _sendPdfMessage('zoomIn');
+  }
+  
+  /// 異뺤냼
+  void _zoomOut() {
+    _sendPdfMessage('zoomOut');
+  }
+  
+  /// ?댁쟾 ?섏씠吏
+  void _previousPage() {
+    _sendPdfMessage('previousPage');
+  }
+  
+  /// ?ㅼ쓬 ?섏씠吏
+  void _nextPage() {
+    _sendPdfMessage('nextPage');
+  }
+  
+  /// Blob URL???꾪븳 吏곸젒 PDF 酉곗뼱
+  Widget _buildDirectBlobViewer(String blobUrl) {
+    if (!kIsWeb) {
+      return const Center(child: Text('Web ?섍꼍?먯꽌留?吏?먮맗?덈떎'));
+    }
+
+    final viewId = 'blob-pdf-${DateTime.now().millisecondsSinceEpoch}';
+    
+    // Blob URL??PDF.js濡??닿린 ?꾪븳 URL ?앹꽦
+    // PDF.js 酉곗뼱??Blob URL ?꾨떖
+    final pdfJsViewerUrl = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=${Uri.encodeComponent(blobUrl)}';
+    
+    // 硫붿떆吏 ?대깽??由ъ뒪???깅줉
+    html.window.addEventListener('message', (event) {
+      if (event is html.MessageEvent) {
+        final message = event.data.toString();
+        if (message.startsWith('pdfInfo:')) {
+          // ?섏씠吏 ?뺣낫 ?섏떊 (?? pdfInfo:1:10)
+          final parts = message.split(':');
+          if (parts.length == 3) {
+            try {
+              final currentPage = int.parse(parts[1]);
+              final totalPages = int.parse(parts[2]);
+              
+              setState(() {
+                _currentPage = currentPage;
+                _totalPages = totalPages;
+                _isLoading = false;
+              });
+            } catch (e) {
+              debugPrint('PDF ?뺣낫 ?뚯떛 ?ㅻ쪟: $e');
+            }
+          }
+        }
+      }
+    });
+    
+    // iframe ?깅줉
+    ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+      final iframe = html.IFrameElement()
+        ..id = 'pdf-js-frame'
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..style.border = 'none'
+        ..allowFullscreen = true
+        ..src = pdfJsViewerUrl;
+      
+      // iframe 濡쒕뱶 ?대깽??由ъ뒪???깅줉
+      iframe.onLoad.listen((_) {
+        debugPrint('PDF iframe 濡쒕뱶 ?꾨즺');
+        _injectPdfJsControlScript(iframe);
+        
+        // 濡쒕뱶 ???섏씠吏 ?뺣낫 ?붿껌
+        Future.delayed(const Duration(seconds: 2), () {
+          _requestPdfInfo();
+        });
+      });
+        
+      return iframe;
+    });
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isToolbarVisible = !_isToolbarVisible;
+        });
+      },
+      child: Stack(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: double.infinity,
+            child: HtmlElementView(viewType: viewId),
+          ),
+          if (_isLoading)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  /// PDF.js iframe???쒖뼱 ?ㅽ겕由쏀듃 二쇱엯
+  void _injectPdfJsControlScript(html.IFrameElement iframe) {
+    try {
+      final contentWindow = iframe.contentWindow;
+      if (contentWindow == null) return;
+      
+      // PDF.js ?쒖뼱 紐낅졊留??꾩넚?섍퀬 硫붿떆吏 由ъ뒪???ъ슜
+      try {
+        // 湲곕낯 紐낅졊?쇰줈 ?섏씠吏 ?뺣낫 ?붿껌
+        contentWindow.postMessage('getInfo', '*');
+        
+        debugPrint('PDF.js??湲곕낯 紐낅졊 ?꾩넚');
+      } catch (e) {
+        debugPrint('PDF.js 硫붿떆吏 ?꾩넚 ?ㅻ쪟: $e');
+      }
+    } catch (e) {
+      debugPrint('PDF.js ?ㅽ겕由쏀듃 二쇱엯 ?ㅻ쪟: $e');
+    }
+  }
+  
+  /// PDF ?뺣낫 ?붿껌 - ?뱀뿉?쒕뒗 ?ъ슜?섏? ?딆쓬
+  void _requestPdfInfo() {
+    // ?뺤쟻 媛??ъ슜 (PDF.js?먯꽌 ?숈쟻?쇰줈 ?섏씠吏 ?뺣낫瑜?媛?몄삤湲??대젮?) 
+    setState(() {
+      if (_totalPages == 0) {
+        _totalPages = 1;
+      }
+    });
+  }
+  
+  /// ???꾩껜 濡쒕뵫 ?붾㈃ ?쒖떆 ?꾩젽
+  Widget _buildFullScreenLoading(BuildContext context) {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 60,
+              height: 60,
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                strokeWidth: 5,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'PDF 臾몄꽌 以鍮?以?..',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '?좎떆留?湲곕떎?ㅼ＜?몄슂',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// iframe ?곹깭 ?뺤씤 諛?由ы룷??  void _findAndReportIframeStatus(String iframeId) {
+    if (kIsWeb) {
+      try {
+        final js = '''
+          (function() {
+            var allIframes = document.getElementsByTagName('iframe');
+            console.log("Total iframes in document: " + allIframes.length);
+            
+            for (var i = 0; i < allIframes.length; i++) {
+              var iframe = allIframes[i];
+              var srcAttrib = iframe.src ? (iframe.src.length > 30 ? iframe.src.substring(0, 30) + '...' : iframe.src) : 'empty';
+              console.log("iframe[" + i + "] id: " + (iframe.id || 'empty') + ", src: " + srcAttrib);
+            }
+            
+            var targetIframe = document.getElementById('$iframeId');
+            console.log("Target iframe '$iframeId' found: " + (targetIframe != null));
+            
+            return allIframes.length;
+          })();
+        ''';
+        
+        final result = js_util.callMethod(html.window, 'eval', [js]);
+        debugPrint('iframe ?곹깭 ?뺤씤 寃곌낵: $result');
+      } catch (e) {
+        debugPrint('iframe ?곹깭 ?뺤씤 ?ㅻ쪟: $e');
+      }
+    }
+  }
+
+  /// ?꾧뎄 紐⑥쓬 UI
+  Widget _buildToolbar() {
+    return Container(
+      color: Color(0xFF333333).withOpacity(0.9),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.zoom_out),
+            onPressed: () => _sendPdfMessage('zoomOut'),
+            tooltip: '異뺤냼',
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_in),
+            onPressed: () => _sendPdfMessage('zoomIn'),
+            tooltip: '?뺣?',
+          ),
+          IconButton(
+            icon: const Icon(Icons.navigate_before),
+            onPressed: _currentPage > 1 ? _previousPage : null,
+            tooltip: '?댁쟾 ?섏씠吏',
+          ),
+          _buildPageIndicator(),
+          IconButton(
+            icon: const Icon(Icons.navigate_next),
+            onPressed: _currentPage < _totalPages ? _nextPage : null,
+            tooltip: '?ㅼ쓬 ?섏씠吏',
+          ),
+          IconButton(
+            icon: const Icon(Icons.summarize),
+            onPressed: _openAiSummary,
+            tooltip: 'AI ?붿빟',
+          ),
+          IconButton(
+            icon: const Icon(Icons.fullscreen),
+            onPressed: _toggleFullscreenMode,
+            tooltip: '?꾩껜 ?붾㈃',
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// ?섏씠吏 ?쒖떆湲??꾩젽
+  Widget _buildPageIndicator() {
+    return Text(
+      '$_currentPage / $_totalPages',
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+  
+  /// ?꾩껜 ?붾㈃ 紐⑤뱶 ?좉?
+  void _toggleFullscreenMode() {
+    setState(() {
+      _isFullScreen = !_isFullScreen;
+    });
+    
+    if (_isFullScreen) {
+      // ?꾩껜 ?붾㈃ 紐⑤뱶 ?쒖꽦??濡쒖쭅
+    } else {
+      // ?꾩껜 ?붾㈃ 紐⑤뱶 鍮꾪솢?깊솕 濡쒖쭅
+    }
+  }
+  
+  /// AI ?붿빟 踰꾪듉 ?대┃ ???ㅽ뻾
+  void _openAiSummary() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (context) => AiSummaryViewModel()),
+          ],
+          child: AiSummaryPage(
+            documentPath: widget.filePath ?? '',
+            documentId: widget.document.id,
+            pageCount: _totalPages,
+            extractTextFromPages: _extractTextFromPages,
+          ),
+        ),
+      ),
+    );
+  }
+  
+  /// ?섏씠吏?먯꽌 ?띿뒪??異붿텧
+  Future<String> _extractTextFromPages(String path, int startPage, int endPage) async {
+    try {
+      // PDF 濡쒕뱶
+      final bytes = await _loadPdfBytes(path);
+      final document = PdfDocument(inputBytes: bytes);
+      
+      // ?띿뒪??異붿텧
+      final StringBuffer sb = StringBuffer();
+      for (int i = startPage; i <= endPage; i++) {
+        if (i > 0 && i <= document.pages.count) {
+          final page = document.pages[i - 1];
+          final text = PdfTextExtractor(document).extractText(startPageIndex: i - 1, endPageIndex: i - 1);
+          sb.writeln(text);
+        }
+      }
+      
+      document.dispose();
+      return sb.toString();
+    } catch (e) {
+      debugPrint('?띿뒪??異붿텧 ?ㅻ쪟: $e');
+      return '';
+    }
+  }
+  
+  /// PDF ?뚯씪 諛붿씠??濡쒕뱶
+  Future<Uint8List> _loadPdfBytes(String path) async {
+    try {
+      final file = File(path);
+      return await file.readAsBytes();
+    } catch (e) {
+      // ?ㅽ듃?뚰겕 URL??寃쎌슦
+      if (path.startsWith('http')) {
+        final response = await http.get(Uri.parse(path));
+        return response.bodyBytes;
+      }
+      rethrow;
+    }
+  }
+} 

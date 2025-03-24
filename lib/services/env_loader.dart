@@ -129,10 +129,10 @@ class EnvLoader {
     return dotenv.env['FIREBASE_IOS_CLIENT_ID'];
   }
   
-  /// OpenAI API 키
-  Future<String?> get openAiApiKey async {
+  /// Gemini API 키
+  Future<String?> get geminiApiKey async {
     await _ensureInitialized();
-    return dotenv.env['OPENAI_API_KEY'];
+    return dotenv.env['GEMINI_API_KEY'];
   }
   
   /// Google API 키

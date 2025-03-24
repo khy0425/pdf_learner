@@ -1,0 +1,1424 @@
+﻿import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import '../widgets/platform_ad_widget.dart';
+import '../services/ad_service.dart';
+import '../services/auth_service.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
+import 'dart:math';
+import 'dart:convert';
+// dart:html???????? ?????import 'dart:html' if (dart.library.io) '../views/web_stub_html.dart' as html;
+// ui ???????????????????????import 'dart:ui' as ui;
+import '../models/pdf_document.dart';
+import '../services/subscription_service.dart';
+import '../viewmodels/pdf_viewer_viewmodel.dart';
+import 'package:flutter/services.dart';
+import 'package:pdf_learner_v2/widgets/app_bar_widget.dart';
+import 'dart:js_util' as js_util;
+import '../viewmodels/ai_summary_viewmodel.dart';
+import '../views/ai_summary_page.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'dart:typed_data';
+import '../models/ai_summary.dart';
+import '../widgets/loading_indicator.dart';
+
+/// PDF ??? ??? ?????
+class PdfViewerPage extends StatefulWidget {
+  final PDFDocument document;
+  final String? filePath;
+  final String? title;
+  final bool showAds;
+  final bool showRewardButton;
+  
+  const PdfViewerPage({
+    Key? key,
+    required this.document,
+    this.filePath,
+    this.title,
+    this.showAds = true,
+    this.showRewardButton = false,
+  }) : super(key: key);
+  
+  @override
+  _PdfViewerPageState createState() => _PdfViewerPageState();
+}
+
+class _PdfViewerPageState extends State<PdfViewerPage> {
+  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
+  final PdfViewerController _pdfViewerController = PdfViewerController();
+  final TextEditingController _searchController = TextEditingController();
+  
+  bool _isFullScreen = false;
+  bool _isToolbarVisible = true;
+  bool _isSearching = false;
+  bool _isBottomBarVisible = true;
+  bool _isLoading = true;
+  String? _localPath;
+  int _currentPage = 0;
+  int _totalPages = 0;
+  bool _pdfLoadError = false;
+  String _errorMessage = '';
+  bool _isViewRegistered = false;
+  Timer? _loadingTimer;
+  
+  @override
+  void initState() {
+    super.initState();
+    
+    // ??? ??? ????????
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    
+    // ??? ??? ??? ??? (???? ??? ??? ???)
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    
+    // ViewModel ?????    Future.microtask(() {
+      context.read<PdfViewerViewModel>().initWithDocument(widget.document);
+    });
+    
+    // ???????? ????? ????????
+    if (kIsWeb) {
+      html.window.addEventListener('message', _handlePdfMessage);
+      
+      // ??? ??? ???????? ??????????
+      _loadingTimer = Timer(const Duration(seconds: 15), () {
+        if (mounted && _isLoading) {
+          setState(() {
+            _isLoading = false;
+            if (_totalPages == 0) _totalPages = 1;
+            if (_currentPage == 0) _currentPage = 1;
+          });
+        }
+      });
+    }
+    
+    // ??? ???
+    _loadDocument();
+    
+    // ???????? ???
+    debugPrint('PDF ???: ${widget.document.path}');
+  }
+  
+  Future<void> _loadDocument() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _pdfLoadError = false;
+      });
+      
+      if (!kIsWeb && widget.document.path.startsWith('http')) {
+        // ?????? ?????? URL?????PDF ??????
+        debugPrint('?????? ?????? URL??? PDF ?????? ???: ${widget.document.path}');
+        final response = await http.get(Uri.parse(widget.document.path))
+          .timeout(const Duration(seconds: 30));
+        
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          final dir = await getApplicationDocumentsDirectory();
+          final file = File('${dir.path}/${widget.document.id}.pdf');
+          await file.writeAsBytes(bytes);
+          setState(() {
+            _localPath = file.path;
+            _isLoading = false;
+          });
+          debugPrint('PDF ?????? ???: $_localPath');
+        } else {
+          debugPrint('PDF ?????? ???: ${response.statusCode}');
+          setState(() {
+            _isLoading = false;
+            _pdfLoadError = true;
+            _errorMessage = '?????????????????????. ??? ???: ${response.statusCode}';
+          });
+        }
+      } else if (!kIsWeb) {
+        // ??? ????????
+        debugPrint('??? ??? ???: ${widget.document.path}');
+        setState(() {
+          _localPath = widget.document.path;
+          _isLoading = false;
+        });
+      } else {
+        // ??????????URL??????????
+        debugPrint('???????? PDF ???: ${widget.document.path}');
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('PDF ??? ???: $e');
+      setState(() {
+        _isLoading = false;
+        _pdfLoadError = true;
+        _errorMessage = '??? ??? ??????? ?????????: $e';
+      });
+    }
+  }
+  
+  @override
+  void dispose() {
+    // ????????
+    if (kIsWeb) {
+      html.window.removeEventListener('message', _handlePdfMessage);
+      
+      // PDF ?????? ???
+      final docIdHash = widget.document.id.hashCode.abs().toString();
+      final containerId = 'pdf-container-$docIdHash';
+      html.Element? container = html.document.getElementById(containerId);
+      if (container != null) {
+        container.remove();
+        debugPrint('PDF ?????? ???: $containerId');
+      }
+      
+      _isViewRegistered = false;
+    }
+    
+    // ??? ??? ??? ???
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    
+    // ??? ??? ?????(??? ????????)
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    
+    // ????? ???
+    _loadingTimer?.cancel();
+    
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: SafeArea(
+        // ??? ??? ????????SafeArea ???
+        left: !_isFullScreen,
+        top: !_isFullScreen,
+        right: !_isFullScreen,
+        bottom: !_isFullScreen,
+        child: Stack(
+          children: [
+            // PDF ??? ??? ??? ?????
+            if (_pdfLoadError)
+              _buildErrorWidget()
+            else if (kIsWeb)
+              _buildWebPdfViewer()
+            else if (!kIsWeb && _localPath != null)
+              _buildNativePdfViewer(),
+            
+            // ??? ??? ??? ??? ??? (??? ??? ???)
+            if ((_isLoading || context.watch<PdfViewerViewModel>().isLoading) && 
+                (!_isViewRegistered || !kIsWeb))
+              _buildFullScreenLoading(context),
+            
+            // ??? ?????            if (_isBottomBarVisible && !_isFullScreen && !_pdfLoadError)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: widget.showAds ? 50 : 0, // ????? ?????????? ???
+                child: _buildBottomBar(),
+              ),
+              
+            // ??? ???
+            if (widget.showAds && !_isFullScreen)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildBannerAd(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// ??PDF ??? ???
+  Widget _buildWebPdfViewer() {
+    debugPrint('??PDF ??? ???: ${widget.document.path}');
+    
+    // PDF URL
+    final pdfUrl = widget.document.path;
+    
+    // ??? ??????? ?????? ??? iframe????? ???
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isLoading && !_isViewRegistered) {
+        // 15?????????? ???????????????
+        _loadingTimer = Timer(const Duration(seconds: 15), () {
+          if (mounted && _isLoading) {
+            setState(() {
+              _isLoading = false;
+              _isViewRegistered = true;
+            });
+          }
+        });
+      }
+    });
+    
+    // ??? URL??PDF.js ???
+    return _buildPdfJsViewer(pdfUrl);
+  }
+  
+  /// PDF.js???????PDF ???
+  Widget _buildPdfJsViewer(String pdfUrl) {
+    if (!kIsWeb) {
+      return const Center(child: Text('Web ????????????????'));
+    }
+
+    // ?????viewId ??? - ??? ID ????????????? ???
+    final docIdHash = widget.document.id.hashCode.abs().toString();
+    final iframeId = 'pdf-js-frame-$docIdHash';
+    final containerId = 'pdf-container-$docIdHash';
+    
+    // ?????URL ??? ??? (??????????? ???)
+    final pdfJsViewerUrl = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=${Uri.encodeComponent(pdfUrl)}';
+    
+    debugPrint('PDF ??? ???: iframeId=$iframeId, docId=${widget.document.id}');
+    
+    if (!_isViewRegistered) {
+      // WidgetsBinding???????? UI ????? ??????????
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // ?????? ???
+        html.DivElement container = html.DivElement()
+          ..id = containerId
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.border = 'none'
+          ..style.backgroundColor = 'white';
+        
+        // iframe ???
+        html.IFrameElement iframe = html.IFrameElement()
+          ..id = iframeId
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..style.border = 'none'
+          ..allowFullscreen = true
+          ..src = pdfJsViewerUrl;
+        
+        // iframe ??? ?????        iframe.onLoad.listen((_) {
+          debugPrint('PDF iframe ??? ???: $iframeId');
+          if (_isLoading) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _isViewRegistered = true;
+                
+                // ??PDF ???????? ????? ?????
+                if (_currentPage == 0) _currentPage = 1;
+                if (_totalPages == 0) _totalPages = 14; // ????????
+                
+                // ViewModel ??????
+                context.read<PdfViewerViewModel>().updateCurrentPage(_currentPage, _totalPages);
+              });
+            }
+          }
+        });
+        
+        // ????????iframe ???
+        container.children.add(iframe);
+        
+        // body???????? ???
+        html.document.body?.append(container);
+        
+        // ??? ??????????
+        container.style.position = 'fixed'; // fixed??????????????? ?????? ?????        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.zIndex = '999'; // ??? zIndex?????
+        
+        // UI ??? ??????
+        if (mounted) {
+          setState(() {
+            _isViewRegistered = true;
+          });
+        }
+        
+        debugPrint('PDF ??? DOM????? ???: $containerId');
+      });
+    }
+    
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: Stack(
+        key: ValueKey<bool>(_isLoading),
+        children: [
+          // ?????Container????? ???????? (PDF??DOM????? ?????
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            color: Colors.transparent,
+          ),
+          if (_isLoading)
+            _buildLoadingIndicator(),
+        ],
+      ),
+    );
+  }
+  
+  /// PDF ????? ???
+  void _handlePdfMessage(html.Event event) {
+    if (event is html.MessageEvent) {
+      final message = event.data.toString();
+      debugPrint('PDF ????? ???: $message');
+      
+      try {
+        // JSON ??? ????? ???
+        if (message.startsWith('{') && message.endsWith('}')) {
+          final data = jsonDecode(message);
+          if (data is Map && data.containsKey('type')) {
+            if (data['type'] == 'pagechange' || data['type'] == 'pageinfo') {
+              final currentPage = data['page'] as int? ?? 1;
+              final totalPages = data['total'] as int? ?? 1;
+              
+              if (mounted) {
+                setState(() {
+                  _currentPage = currentPage;
+                  _totalPages = totalPages;
+                });
+                context.read<PdfViewerViewModel>().updateCurrentPage(currentPage, totalPages);
+              }
+            }
+          }
+        }
+        // ??? ??? ????? ???
+        else if (message.startsWith('pdfInfo:')) {
+          final parts = message.split(':');
+          if (parts.length == 3) {
+            try {
+              final currentPage = int.parse(parts[1]);
+              final totalPages = int.parse(parts[2]);
+              
+              setState(() {
+                _currentPage = currentPage;
+                _totalPages = totalPages;
+                _isLoading = false;
+              });
+            } catch (e) {
+              debugPrint('PDF ??? ??? ???: $e');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('PDF ????? ??? ???: $e');
+      }
+    }
+  }
+
+  /// PDF iframe??????? ???
+  void _sendPdfMessage(String message) {
+    if (kIsWeb) {
+      try {
+        // ??? ???????? ID???????? iframe ??? ???
+        final docIdHash = widget.document.id.hashCode.abs().toString();
+        final iframeId = 'pdf-js-frame-$docIdHash';
+        
+        // ID??iframe ???
+        final iframe = html.document.getElementById(iframeId);
+        
+        debugPrint('PDF ??? ??? ???: $message, iframe ID: $iframeId');
+        
+        if (iframe != null && iframe is html.IFrameElement) {
+          debugPrint('PDF iframe ???, ??? ???: $message');
+          
+          // ?????????          final js = message.startsWith('goToPage:') 
+              ? 'PDFViewerApplication.page = ${message.substring(9)};'
+              : message == 'previousPage' 
+                  ? 'PDFViewerApplication.page--;' 
+                  : message == 'nextPage'
+                      ? 'PDFViewerApplication.page++;'
+                      : message == 'zoomIn'
+                          ? 'PDFViewerApplication.zoomIn();'
+                          : message == 'zoomOut'
+                              ? 'PDFViewerApplication.zoomOut();'
+                              : '';
+          
+          if (js.isNotEmpty && iframe.contentWindow != null) {
+            try {
+              // ??? JavaScript ???
+              js_util.callMethod(iframe.contentWindow!, 'eval', [js]);
+              debugPrint('PDF ??? ??? ???: $js');
+              return; // ?????????????? ???
+            } catch (e) {
+              debugPrint('PDF iframe ??? ??? ???: $e, ??????? ???');
+            }
+          }
+        }
+          
+        // iframe????? ??? ?????????? ????? ??? ??? ??? iframe ????        debugPrint('??? iframe??? PDF.js ??????..');
+        
+        // ??? iframe???????????? ??? ???
+        final jsAllIframes = '''
+          (function() {
+            var iframes = document.getElementsByTagName('iframe');
+            console.log("Total iframes: " + iframes.length);
+            
+            for (var i = 0; i < iframes.length; i++) {
+              var iframe = iframes[i];
+              var iframeSrc = iframe.src || "empty";
+              var shortSrc = iframeSrc.length > 30 ? iframeSrc.substring(0, 30) + '...' : iframeSrc;
+              console.log("iframe[" + i + "] id: " + (iframe.id || "empty") + ", src: " + shortSrc);
+              
+              if (iframe.src && iframe.src.includes("mozilla.github.io/pdf.js")) {
+                console.log("PDF.js iframe found at index: " + i);
+                
+                var command = ${message.startsWith('goToPage:') 
+                    ? '"PDFViewerApplication.page = ' + message.substring(9) + ';"'
+                    : message == 'previousPage' 
+                        ? '"PDFViewerApplication.page--;"' 
+                        : message == 'nextPage'
+                            ? '"PDFViewerApplication.page++;"'
+                            : message == 'zoomIn'
+                                ? '"PDFViewerApplication.zoomIn();"'
+                                : message == 'zoomOut'
+                                    ? '"PDFViewerApplication.zoomOut();"'
+                                    : '""'};
+                
+                if (command) {
+                  try {
+                    if (iframe.contentWindow) {
+                      iframe.contentWindow.eval(command);
+                      console.log("Command successfully sent to iframe[" + i + "]: " + command);
+                      return true;
+                    }
+                  } catch (e) {
+                    console.error("Error executing command on iframe[" + i + "]:", e);
+                  }
+                }
+              }
+            }
+            
+            console.warn("PDF.js iframe not found in any iframe");
+            return false;
+          })();
+        ''';
+        
+        // JavaScript ???
+        final result = js_util.callMethod(html.window, 'eval', [jsAllIframes]);
+        debugPrint('iframe ????????? ??? ???: $result');
+      } catch (e) {
+        debugPrint('PDF ????? ??? ???: $e');
+      }
+    }
+  }
+  
+  /// ??? ???????? ???
+  Widget _buildLoadingIndicator() {
+    return Container(
+      color: Colors.black.withOpacity(0.3),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'PDF ??? ??? ??..',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                shadows: [
+                  Shadow(
+                    offset: const Offset(1, 1),
+                    blurRadius: 3,
+                    color: Colors.black.withOpacity(0.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        ),
+      );
+    }
+    
+  /// ?????? PDF ??? ???
+  /// PDF ????? ????????
+  void _setupPdfMessageListener() {
+    html.window.removeEventListener('message', _handlePdfMessage);
+    html.window.addEventListener('message', _handlePdfMessage);
+  }
+  
+  /// ?????? PDF ??? ???
+  Widget _buildNativePdfViewer() {
+    debugPrint('?????? PDF ??? ???: $_localPath');
+    return PDFView(
+      filePath: _localPath,
+      enableSwipe: true,
+      swipeHorizontal: true,
+      autoSpacing: true,
+      pageFling: true,
+      pageSnap: true,
+      fitPolicy: FitPolicy.BOTH,
+      onRender: (pages) {
+        setState(() {
+          _isLoading = false;
+          _totalPages = pages!;
+        });
+        context.read<PdfViewerViewModel>().updatePageCount(_totalPages);
+        debugPrint('PDF ????????: $_totalPages ?????');
+      },
+      onPageChanged: (int? page, int? total) {
+        if (page != null && total != null) {
+          setState(() {
+            _currentPage = page + 1;
+            _totalPages = total;
+          });
+          context.read<PdfViewerViewModel>().updateCurrentPage(_currentPage, _totalPages);
+        }
+      },
+      onViewCreated: (PDFViewController controller) {
+        // PDF ?????? ???????????????
+      },
+      onError: (error) {
+        debugPrint('PDF ??? ???: $error');
+        setState(() {
+          _pdfLoadError = true;
+          _errorMessage = '??????????????????: $error';
+          _isLoading = false;
+        });
+      },
+      onPageError: (page, error) {
+        debugPrint('PDF ????? $page ??? ???: $error');
+      },
+    );
+  }
+  
+  /// ??? ??? ???
+  Widget _buildErrorWidget() {
+      return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 60,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '??????????????????',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('??? ???'),
+              onPressed: () {
+                setState(() {
+                  _pdfLoadError = false;
+                  _isLoading = true;
+                });
+                _loadDocument();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// ??? ??? ???
+  Widget _buildBannerAd() {
+    return Container(
+      height: 50,
+      width: double.infinity,
+      color: Theme.of(context).scaffoldBackgroundColor,
+      constraints: const BoxConstraints(
+        minHeight: 50,
+        maxHeight: 50,
+      ),
+      child: const PlatformAdWidget(
+        adType: AdType.banner,
+        adUnitId: 'pdf_viewer_banner',
+      ),
+    );
+  }
+  
+  /// ??? ???
+  PreferredSizeWidget? _buildAppBar() {
+    if (_isFullScreen) {
+      return null;
+    }
+    
+    // ??????????????????? ???
+    if (_isSearching) {
+      return PDFSearchAppBar(
+        searchController: _searchController,
+        hintText: '??? ??????..',
+        onBackPressed: () {
+          setState(() {
+            _isSearching = false;
+            _searchController.clear();
+            // ???????????????
+            if (kIsWeb) {
+              _pdfViewerController.clearSelection();
+            }
+          });
+        },
+        onChanged: (value) {
+          if (value.isNotEmpty && kIsWeb) {
+            _pdfViewerController.searchText(value);
+          }
+        },
+        onClear: () {
+          if (kIsWeb) {
+            _pdfViewerController.clearSelection();
+          }
+        },
+      );
+    }
+    
+    // ??? ??? ???
+    return PDFAppBar(
+      title: widget.document.title,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => Navigator.pop(context),
+      ),
+      actions: [
+        // ???????
+        if (kIsWeb && !_pdfLoadError) // ?????? ????????          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              setState(() {
+                _isSearching = true;
+              });
+            },
+          ),
+        
+        // ????????
+        if (!_pdfLoadError)
+          IconButton(
+            icon: const Icon(Icons.bookmark_border),
+            onPressed: _showBookmarks,
+          ),
+        
+        // ?????? ???
+        IconButton(
+          icon: Icon(
+            context.watch<PdfViewerViewModel>().isFavorite
+                ? Icons.favorite
+                : Icons.favorite_border,
+          ),
+          color: context.watch<PdfViewerViewModel>().isFavorite
+              ? Colors.red
+              : null,
+          onPressed: () {
+            context.read<PdfViewerViewModel>().toggleFavorite();
+          },
+        ),
+        
+        // ????????
+        IconButton(
+          icon: const Icon(Icons.more_vert),
+          onPressed: _showMoreOptions,
+        ),
+      ],
+    );
+  }
+  
+  /// ??? ??? ?????
+  Widget _buildBottomBar() {
+    final sliderValue = _currentPage.toDouble();
+    final maxValue = _totalPages > 0 ? _totalPages.toDouble() : 1.0;
+    
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        color: AppTheme.bottomBarColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // ????? ??? ???
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: _currentPage > 1 ? _previousPage : null,
+            color: _currentPage > 1 ? Colors.white : Colors.white.withOpacity(0.5),
+          ),
+          
+          // ??? ????? / ??? ?????
+          SizedBox(
+            width: 60,
+            child: Text(
+              '$_currentPage / $_totalPages',
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          
+          // ????? ??????
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withOpacity(0.3),
+                thumbColor: Colors.white,
+                trackHeight: 2.0,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14.0),
+              ),
+              child: Slider(
+                min: 1,
+                max: maxValue,
+                value: sliderValue.clamp(1, maxValue),
+                onChanged: (value) {
+                  final pageNumber = value.round();
+                  setState(() {
+                    _currentPage = pageNumber;
+                  });
+                },
+                onChangeEnd: (value) {
+                  final pageNumber = value.round();
+                  _goToPage(pageNumber);
+                },
+              ),
+            ),
+          ),
+          
+          // ????? ??? ???
+          IconButton(
+            icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+            onPressed: _currentPage < _totalPages ? _nextPage : null,
+            color: _currentPage < _totalPages ? Colors.white : Colors.white.withOpacity(0.5),
+          ),
+          
+          // ?????          const SizedBox(
+            height: 30,
+            child: VerticalDivider(
+              color: Colors.white,
+              thickness: 1,
+              width: 20,
+            ),
+          ),
+          
+          // ??? ???
+          IconButton(
+            icon: const Icon(Icons.zoom_in, color: Colors.white),
+            onPressed: _zoomIn,
+          ),
+          
+          // ??? ???
+          IconButton(
+            icon: const Icon(Icons.zoom_out, color: Colors.white),
+            onPressed: _zoomOut,
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// ???????? ???
+  void _showBookmarks() {
+    final viewModel = context.read<PdfViewerViewModel>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF272727) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Row(
+                  children: [
+                    Text(
+                      '?????,
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _addBookmark();
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              Consumer<PdfViewerViewModel>(
+                builder: (context, model, child) {
+                  if (model.bookmarks.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                        child: Text('????? ?????? ??????.'),
+                      ),
+                    );
+                  }
+                  
+                  return Expanded(
+                    child: ListView.builder(
+                      itemCount: model.bookmarks.length,
+                      itemBuilder: (context, index) {
+                        final bookmark = model.bookmarks[index];
+                        return ListTile(
+                          leading: const Icon(Icons.bookmark),
+                          title: Text(bookmark.title),
+                          subtitle: Text('${bookmark.pageNumber}?????'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            if (kIsWeb) {
+                              _goToPage(bookmark.pageNumber);
+                            } else {
+                              _pdfViewerController.jumpToPage(bookmark.pageNumber);
+                            }
+                          },
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: () {
+                              model.deleteBookmark(bookmark.id);
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  /// ???????? ????????  void _addBookmark() {
+    final viewModel = context.read<PdfViewerViewModel>();
+    final controller = TextEditingController();
+    final currentPage = viewModel.currentPage;
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('????????'),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: '????????',
+              hintText: '${currentPage}????? ?????,
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('???'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final title = controller.text.isNotEmpty
+                    ? controller.text
+                    : '${currentPage}????? ?????;
+                viewModel.addBookmark(
+                  title: title,
+                  pageNumber: currentPage,
+                  scrollPosition: 0.0,
+                );
+                Navigator.pop(context);
+              },
+              child: const Text('????),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// ??? ??? ??? ???
+  void _showMoreOptions() {
+    final viewModel = context.read<PdfViewerViewModel>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF272727) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.download),
+                title: Text('??????', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  viewModel.downloadDocument();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: Text('???', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  viewModel.shareDocument();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text('??? ???', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showDocumentInfo();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.text_fields),
+                title: Text('????????', style: theme.textTheme.titleMedium),
+                onTap: () {
+                  Navigator.pop(context);
+                  viewModel.extractText();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  /// ??? ??? ???????????
+  void _showDocumentInfo() {
+    final document = widget.document;
+    final theme = Theme.of(context);
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('??? ???', style: theme.textTheme.titleLarge),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('???', document.title),
+              const SizedBox(height: 8),
+              _buildInfoRow('????? ??, '${context.read<PdfViewerViewModel>().totalPages}?????'),
+              const SizedBox(height: 8),
+              _buildInfoRow('??? ???', '${(document.fileSize / 1024).toStringAsFixed(2)} KB'),
+              const SizedBox(height: 8),
+              _buildInfoRow('??? ???', '${document.dateAdded.year}??${document.dateAdded.month}??${document.dateAdded.day}??),
+              const SizedBox(height: 8),
+              _buildInfoRow('????????', '${document.lastOpened.year}??${document.lastOpened.month}??${document.lastOpened.day}??),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('???'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// ??? ?????
+  Widget _buildInfoRow(String label, String value) {
+    final theme = Theme.of(context);
+    
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+  }
+  
+  /// ????? ???
+  void _goToPage(int pageNumber) {
+    _sendPdfMessage('goToPage:$pageNumber');
+  }
+  
+  /// ???
+  void _zoomIn() {
+    _sendPdfMessage('zoomIn');
+  }
+  
+  /// ???
+  void _zoomOut() {
+    _sendPdfMessage('zoomOut');
+  }
+  
+  /// ??? ?????
+  void _previousPage() {
+    _sendPdfMessage('previousPage');
+  }
+  
+  /// ??? ?????
+  void _nextPage() {
+    _sendPdfMessage('nextPage');
+  }
+  
+  /// Blob URL????? ??? PDF ???
+  Widget _buildDirectBlobViewer(String blobUrl) {
+    if (!kIsWeb) {
+      return const Center(child: Text('Web ????????????????'));
+    }
+
+    final viewId = 'blob-pdf-${DateTime.now().millisecondsSinceEpoch}';
+    
+    // Blob URL??PDF.js????? ??? URL ???
+    // PDF.js ?????Blob URL ???
+    final pdfJsViewerUrl = 'https://mozilla.github.io/pdf.js/web/viewer.html?file=${Uri.encodeComponent(blobUrl)}';
+    
+    // ????? ?????????????
+    html.window.addEventListener('message', (event) {
+      if (event is html.MessageEvent) {
+        final message = event.data.toString();
+        if (message.startsWith('pdfInfo:')) {
+          // ????? ??? ??? (?? pdfInfo:1:10)
+          final parts = message.split(':');
+          if (parts.length == 3) {
+            try {
+              final currentPage = int.parse(parts[1]);
+              final totalPages = int.parse(parts[2]);
+              
+              setState(() {
+                _currentPage = currentPage;
+                _totalPages = totalPages;
+                _isLoading = false;
+              });
+            } catch (e) {
+              debugPrint('PDF ??? ??? ???: $e');
+            }
+          }
+        }
+      }
+    });
+    
+    // iframe ???
+    ui.platformViewRegistry.registerViewFactory(viewId, (int viewId) {
+      final iframe = html.IFrameElement()
+        ..id = 'pdf-js-frame'
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..style.border = 'none'
+        ..allowFullscreen = true
+        ..src = pdfJsViewerUrl;
+      
+      // iframe ??? ?????????????
+      iframe.onLoad.listen((_) {
+        debugPrint('PDF iframe ??? ???');
+        _injectPdfJsControlScript(iframe);
+        
+        // ??? ??????? ??? ???
+        Future.delayed(const Duration(seconds: 2), () {
+          _requestPdfInfo();
+        });
+      });
+        
+      return iframe;
+    });
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isToolbarVisible = !_isToolbarVisible;
+        });
+      },
+      child: Stack(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: double.infinity,
+            child: HtmlElementView(viewType: viewId),
+          ),
+          if (_isLoading)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  /// PDF.js iframe????? ?????? ???
+  void _injectPdfJsControlScript(html.IFrameElement iframe) {
+    try {
+      final contentWindow = iframe.contentWindow;
+      if (contentWindow == null) return;
+      
+      // PDF.js ??? ??????????? ????? ????????
+      try {
+        // ??? ?????? ????? ??? ???
+        contentWindow.postMessage('getInfo', '*');
+        
+        debugPrint('PDF.js????? ??? ???');
+      } catch (e) {
+        debugPrint('PDF.js ????? ??? ???: $e');
+      }
+    } catch (e) {
+      debugPrint('PDF.js ?????? ??? ???: $e');
+    }
+  }
+  
+  /// PDF ??? ??? - ?????? ?????? ???
+  void _requestPdfInfo() {
+    // ??? ????? (PDF.js??? ?????? ????? ?????????????????) 
+    setState(() {
+      if (_totalPages == 0) {
+        _totalPages = 1;
+      }
+    });
+  }
+  
+  /// ????? ??? ??? ??? ???
+  Widget _buildFullScreenLoading(BuildContext context) {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 60,
+              height: 60,
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                strokeWidth: 5,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'PDF ??? ??????..',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '??????????????',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// iframe ??? ??? ???????  void _findAndReportIframeStatus(String iframeId) {
+    if (kIsWeb) {
+      try {
+        final js = '''
+          (function() {
+            var allIframes = document.getElementsByTagName('iframe');
+            console.log("Total iframes in document: " + allIframes.length);
+            
+            for (var i = 0; i < allIframes.length; i++) {
+              var iframe = allIframes[i];
+              var srcAttrib = iframe.src ? (iframe.src.length > 30 ? iframe.src.substring(0, 30) + '...' : iframe.src) : 'empty';
+              console.log("iframe[" + i + "] id: " + (iframe.id || 'empty') + ", src: " + srcAttrib);
+            }
+            
+            var targetIframe = document.getElementById('$iframeId');
+            console.log("Target iframe '$iframeId' found: " + (targetIframe != null));
+            
+            return allIframes.length;
+          })();
+        ''';
+        
+        final result = js_util.callMethod(html.window, 'eval', [js]);
+        debugPrint('iframe ??? ??? ???: $result');
+      } catch (e) {
+        debugPrint('iframe ??? ??? ???: $e');
+      }
+    }
+  }
+
+  /// ??? ??? UI
+  Widget _buildToolbar() {
+    return Container(
+      color: AppTheme.toolbarBackgroundColor.withOpacity(0.9),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.zoom_out),
+            onPressed: () => _sendPdfMessage('zoomOut'),
+            tooltip: '???',
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_in),
+            onPressed: () => _sendPdfMessage('zoomIn'),
+            tooltip: '???',
+          ),
+          IconButton(
+            icon: const Icon(Icons.navigate_before),
+            onPressed: _currentPage > 1 ? _previousPage : null,
+            tooltip: '??? ?????',
+          ),
+          _buildPageIndicator(),
+          IconButton(
+            icon: const Icon(Icons.navigate_next),
+            onPressed: _currentPage < _totalPages ? _nextPage : null,
+            tooltip: '??? ?????',
+          ),
+          IconButton(
+            icon: const Icon(Icons.summarize),
+            onPressed: _openAiSummary,
+            tooltip: 'AI ???',
+          ),
+          IconButton(
+            icon: const Icon(Icons.fullscreen),
+            onPressed: _toggleFullscreenMode,
+            tooltip: '??? ???',
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// ????? ????????
+  Widget _buildPageIndicator() {
+    return Text(
+      '$_currentPage / $_totalPages',
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+  
+  /// ??? ??? ??? ???
+  void _toggleFullscreenMode() {
+    setState(() {
+      _isFullScreen = !_isFullScreen;
+    });
+    
+    if (_isFullScreen) {
+      // ??? ??? ??? ????????
+    } else {
+      // ??? ??? ??? ?????? ???
+    }
+  }
+  
+  /// AI ??? ??? ??? ?????
+  void _openAiSummary() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (context) => AiSummaryViewModel()),
+          ],
+          child: AiSummaryPage(
+            documentPath: widget.filePath ?? '',
+            documentId: widget.document.id,
+            pageCount: _totalPages,
+            extractTextFromPages: _extractTextFromPages,
+          ),
+        ),
+      ),
+    );
+  }
+  
+  /// ???????? ????????
+  Future<String> _extractTextFromPages(String path, int startPage, int endPage) async {
+    try {
+      // PDF ???
+      final bytes = await _loadPdfBytes(path);
+      final document = PdfDocument(inputBytes: bytes);
+      
+      // ????????
+      final StringBuffer sb = StringBuffer();
+      for (int i = startPage; i <= endPage; i++) {
+        if (i > 0 && i <= document.pages.count) {
+          final page = document.pages[i - 1];
+          final text = PdfTextExtractor(document).extractText(startPageIndex: i - 1, endPageIndex: i - 1);
+          sb.writeln(text);
+        }
+      }
+      
+      document.dispose();
+      return sb.toString();
+    } catch (e) {
+      debugPrint('???????? ???: $e');
+      return '';
+    }
+  }
+  
+  /// PDF ??? ????????
+  Future<Uint8List> _loadPdfBytes(String path) async {
+    try {
+      final file = File(path);
+      return await file.readAsBytes();
+    } catch (e) {
+      // ?????? URL?????
+      if (path.startsWith('http')) {
+        final response = await http.get(Uri.parse(path));
+        return response.bodyBytes;
+      }
+      rethrow;
+    }
+  }
+} 

@@ -8,6 +8,9 @@ import '../utils/secure_storage.dart';
 import '../services/api_key_service.dart';
 import '../utils/security_logger.dart';
 import '../utils/input_validator.dart';
+import '../models/ai_summary.dart';
+import '../models/pdf_document.dart';
+import '../services/pdf_repository.dart';
 
 class AIService {
   static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
@@ -18,6 +21,12 @@ class AIService {
   static final ApiKeyService _apiKeyService = ApiKeyService();
   static final SecurityLogger _securityLogger = SecurityLogger();
   
+  final PDFRepository _pdfRepository;
+
+  AIService({
+    PDFRepository? pdfRepository,
+  })  : _pdfRepository = pdfRepository ?? PDFRepository();
+
   // 서비스 초기화
   static Future<void> _initializeServices() async {
     await _secureStorage.initialize();
@@ -940,6 +949,225 @@ class AIService {
     } catch (e) {
       debugPrint('비정상 사용 감지 오류: $e');
       return false;
+    }
+  }
+
+  Future<AiSummary?> generateSummary({
+    required String text,
+    required String documentId,
+  }) async {
+    try {
+      // API 키 가져오기
+      final apiKey = await getApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('API 키를 찾을 수 없습니다');
+      }
+      
+      // 요약 프롬프트 생성
+      final prompt = _createSummaryPrompt(text);
+      
+      // Gemini API 호출
+      final response = await http.post(
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              'role': 'user',
+              'parts': [
+                {
+                  'text': prompt
+                }
+              ]
+            }
+          ],
+          'generationConfig': {
+            'temperature': 0.7,
+            'maxOutputTokens': 4000,
+          },
+        }),
+      );
+      
+      // 응답 처리
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final summaryText = responseData['candidates'][0]['content']['parts'][0]['text'];
+        
+        // 응답 텍스트 파싱
+        final parsedResult = _parseSummaryResponse(summaryText);
+        
+        // 요약 객체 생성
+        return AiSummary(
+          documentId: documentId,
+          summary: parsedResult['summary'] ?? summaryText,
+          keywords: parsedResult['keywords'] ?? '',
+          keyPoints: parsedResult['keyPoints'] ?? '',
+          startPage: 1, // 페이지 정보는 ViewModel에서 관리
+          endPage: 1,
+        );
+      } else {
+        // API 오류 처리
+        final errorData = jsonDecode(response.body);
+        final errorMessage = errorData['error']?['message'] ?? '알 수 없는 오류가 발생했습니다';
+        
+        // 할당량 초과 오류 확인
+        if (errorMessage.contains('quota') || 
+            errorMessage.contains('limit') || 
+            errorMessage.contains('rate') ||
+            response.statusCode == 429) {
+          throw Exception('API 할당량이 초과되었습니다');
+        } else {
+          throw Exception('API 오류: $errorMessage');
+        }
+      }
+    } catch (e) {
+      throw Exception('요약 생성 중 오류 발생: $e');
+    }
+  }
+  
+  /// 요약 프롬프트 생성
+  String _createSummaryPrompt(String text) {
+    return '''
+다음 PDF 문서의 내용을 분석하여 아래와 같은 형식으로 요약해주세요:
+
+1. 주요 내용: 문서의 핵심 내용을 3~5문장으로 간결하게 요약
+2. 핵심 키워드: 문서에서 중요한 키워드나 용어를 10개 내외로 추출
+3. 중요 개념: 문서에서 다루는 주요 개념이나 아이디어를 3~5개 정리
+
+문서 내용:
+$text
+''';
+  }
+  
+  /// API 응답 파싱
+  Map<String, String> _parseSummaryResponse(String response) {
+    Map<String, String> result = {
+      'summary': '',
+      'keywords': '',
+      'keyPoints': '',
+    };
+    
+    try {
+      // 섹션 분리
+      RegExp summaryRegex = RegExp(r'요약|Summary|주요 내용|개요', caseSensitive: false);
+      RegExp keywordsRegex = RegExp(r'키워드|Keywords|핵심 용어|중요 단어', caseSensitive: false);
+      RegExp keyPointsRegex = RegExp(r'핵심 포인트|Key Points|주요 개념|중요 개념', caseSensitive: false);
+      
+      List<String> sections = response.split(RegExp(r'\n#+\s*|\n\*\*|\n\-{3,}'));
+      
+      for (String section in sections) {
+        section = section.trim();
+        if (section.isEmpty) continue;
+        
+        // 섹션 제목 확인
+        String title = '';
+        String content = section;
+        
+        if (section.contains(':')) {
+          final parts = section.split(':');
+          title = parts[0].trim();
+          content = parts.sublist(1).join(':').trim();
+        } else if (section.contains('\n')) {
+          final lines = section.split('\n');
+          title = lines[0].trim();
+          content = lines.sublist(1).join('\n').trim();
+        }
+        
+        // 섹션 분류
+        if (summaryRegex.hasMatch(title)) {
+          result['summary'] = content;
+        } else if (keywordsRegex.hasMatch(title)) {
+          result['keywords'] = content;
+        } else if (keyPointsRegex.hasMatch(title)) {
+          result['keyPoints'] = content;
+        } else if (result['summary']!.isEmpty) {
+          // 식별된 섹션이 없으면 첫 번째 섹션을 요약으로 간주
+          result['summary'] = content;
+        }
+      }
+      
+      // 아무 섹션도 식별되지 않았으면 전체 응답을 요약으로 간주
+      if (result['summary']!.isEmpty) {
+        result['summary'] = response;
+      }
+      
+      return result;
+    } catch (e) {
+      // 파싱 오류 시 전체 응답을 요약으로 반환
+      return {
+        'summary': response,
+        'keywords': '',
+        'keyPoints': '',
+      };
+    }
+  }
+
+  Future<String> chatWithDocument({
+    required String documentId,
+    required String message,
+  }) async {
+    final apiKey = await getApiKey();
+    if (apiKey == null) {
+      throw Exception('API 키를 찾을 수 없습니다.');
+    }
+
+    final document = await _pdfRepository.getDocument(documentId);
+    if (document == null) {
+      throw Exception('문서를 찾을 수 없습니다.');
+    }
+
+    final prompt = _createChatPrompt(document, message);
+    final response = await http.post(
+      Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=$apiKey',
+      ),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'contents': [
+          {
+            'parts': [
+              {'text': prompt}
+            ]
+          }
+        ]
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw _handleApiError(response);
+    }
+
+    final data = jsonDecode(response.body);
+    return data['candidates'][0]['content']['parts'][0]['text'];
+  }
+
+  String _createChatPrompt(PDFDocument document, String message) {
+    return '''
+다음은 PDF 문서의 내용입니다:
+
+${document.content}
+
+사용자의 질문: $message
+
+위 문서의 내용을 바탕으로 사용자의 질문에 답변해주세요. 
+답변은 문서의 내용에 기반하여 정확하고 명확하게 해주세요.
+''';
+  }
+
+  Exception _handleApiError(http.Response response) {
+    final data = jsonDecode(response.body);
+    final error = data['error'] as Map<String, dynamic>;
+    final message = error['message'] as String;
+
+    if (message.contains('quota')) {
+      return Exception('API 할당량이 초과되었습니다.');
+    } else if (message.contains('rate limit')) {
+      return Exception('요청 제한에 도달했습니다. 잠시 후 다시 시도해주세요.');
+    } else {
+      return Exception('API 오류가 발생했습니다: $message');
     }
   }
 } 

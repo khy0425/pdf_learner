@@ -1,25 +1,18 @@
-// Firebase 옵션 스텁 파일
-// 웹이 아닌 환경에서 Firebase 없이 테스트할 수 있도록 함
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class DefaultFirebaseOptions {
-  static final currentPlatform = FirebaseOptions(
-    apiKey: 'test-api-key',
-    appId: 'test-app-id',
-    messagingSenderId: 'test-messaging-sender-id',
-    projectId: 'test-project-id',
-  );
-}
-
-class FirebaseOptions {
-  final String apiKey;
-  final String appId;
-  final String messagingSenderId;
-  final String projectId;
-  
-  FirebaseOptions({
-    required this.apiKey,
-    required this.appId,
-    required this.messagingSenderId,
-    required this.projectId,
-  });
+  static Future<FirebaseOptions> get currentPlatform async {
+    await dotenv.load();
+    
+    return FirebaseOptions(
+      apiKey: dotenv.env['FIREBASE_API_KEY'] ?? '',
+      appId: dotenv.env['FIREBASE_APP_ID'] ?? '',
+      messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '',
+      projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? '',
+      storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? '',
+      authDomain: dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? '',
+      measurementId: dotenv.env['FIREBASE_MEASUREMENT_ID'] ?? '',
+    );
+  }
 } 

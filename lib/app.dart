@@ -8,9 +8,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 // 아직 다국어 지원 파일이 생성되지 않았으므로 주석 처리
 // import 'l10n/app_localizations.dart';
-import 'view_models/auth_view_model.dart';
-import 'view_models/theme_view_model.dart';
-import 'view_models/settings_view_model.dart';
+import 'viewmodels/auth_viewmodel.dart';
+import 'viewmodels/theme_viewmodel.dart';
+import 'viewmodels/settings_viewmodel.dart';
 import 'views/screens/loading_screen.dart';
 import 'views/screens/login_screen.dart';
 import 'views/screens/desktop_home_screen.dart';
