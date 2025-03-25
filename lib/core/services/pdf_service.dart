@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
 import 'package:pdf_learner_v2/domain/models/pdf_document.dart';
 import 'package:pdf_learner_v2/domain/models/pdf_bookmark.dart';
 import 'package:pdf_learner_v2/domain/repositories/pdf_repository.dart';
 import 'package:pdf_learner_v2/core/services/storage_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// PDF 서비스 인터페이스
 /// 
@@ -42,24 +45,23 @@ abstract class PDFService {
   // PDF 문서 관련 메서드
   Future<List<PDFDocument>> getDocuments();
   Future<PDFDocument?> getDocument(String id);
-  Future<PDFDocument> addDocument(PDFDocument document);
-  Future<PDFDocument> updateDocument(PDFDocument document);
-  Future<bool> deleteDocument(String id);
+  Future<void> createDocument(PDFDocument document);
+  Future<void> updateDocument(PDFDocument document);
+  Future<void> deleteDocument(String id);
   Future<PDFDocument> importPDF(File file);
   Future<void> saveDocument(PDFDocument document);
 
   // 북마크 관련 메서드
   Future<List<PDFBookmark>> getBookmarks(String documentId);
-  Future<List<PDFBookmark>> getAllBookmarks();
-  Future<PDFBookmark> addBookmark(PDFBookmark bookmark);
-  Future<PDFBookmark> updateBookmark(PDFBookmark bookmark);
-  Future<bool> deleteBookmark(String bookmarkId);
+  Future<PDFBookmark?> getBookmark(String documentId, String bookmarkId);
+  Future<void> createBookmark(PDFBookmark bookmark);
+  Future<void> updateBookmark(PDFBookmark bookmark);
+  Future<void> deleteBookmark(String documentId, String bookmarkId);
   Future<void> saveBookmark(PDFBookmark bookmark);
 
   // 파일 관련 메서드
-  Future<String> uploadFile(String filePath);
-  Future<String?> downloadFile(String remoteUrl);
-  Future<bool> deleteFile(String filePath);
+  Future<String> uploadPDFFile(Uint8List file);
+  Future<void> deletePDFFile(String filePath);
 
   // 검색 및 필터링 메서드
   Future<List<PDFDocument>> searchDocuments(String query);
@@ -74,18 +76,23 @@ abstract class PDFService {
 
   // 동기화 메서드
   Future<void> syncWithRemote();
+
+  // PDF 파일 처리 관련 메서드
+  Future<int> getPageCount(String filePath);
+  Future<String> extractText(String filePath, int pageNumber);
 }
 
-@injectable
+@LazySingleton(as: PDFService)
 class PDFServiceImpl implements PDFService {
   final PDFRepository _pdfRepository;
   final StorageService _storageService;
+  final SharedPreferences _prefs;
   File? _currentFile;
   int _currentPage = 0;
   int _totalPages = 0;
   Map<String, dynamic>? _metadata;
 
-  PDFServiceImpl(this._pdfRepository, this._storageService);
+  PDFServiceImpl(this._pdfRepository, this._storageService, this._prefs);
 
   // PDF 문서 관련 메서드
   @override
@@ -99,18 +106,18 @@ class PDFServiceImpl implements PDFService {
   }
 
   @override
-  Future<PDFDocument> addDocument(PDFDocument document) async {
-    return await _pdfRepository.addDocument(document);
+  Future<void> createDocument(PDFDocument document) async {
+    await _pdfRepository.createDocument(document);
   }
 
   @override
-  Future<PDFDocument> updateDocument(PDFDocument document) async {
-    return await _pdfRepository.updateDocument(document);
+  Future<void> updateDocument(PDFDocument document) async {
+    await _pdfRepository.updateDocument(document);
   }
 
   @override
-  Future<bool> deleteDocument(String id) async {
-    return await _pdfRepository.deleteDocument(id);
+  Future<void> deleteDocument(String id) async {
+    await _pdfRepository.deleteDocument(id);
   }
 
   @override
@@ -130,23 +137,23 @@ class PDFServiceImpl implements PDFService {
   }
 
   @override
-  Future<List<PDFBookmark>> getAllBookmarks() async {
-    return await _pdfRepository.getAllBookmarks();
+  Future<PDFBookmark?> getBookmark(String documentId, String bookmarkId) async {
+    return await _pdfRepository.getBookmark(documentId, bookmarkId);
   }
 
   @override
-  Future<PDFBookmark> addBookmark(PDFBookmark bookmark) async {
-    return await _pdfRepository.addBookmark(bookmark);
+  Future<void> createBookmark(PDFBookmark bookmark) async {
+    await _pdfRepository.createBookmark(bookmark);
   }
 
   @override
-  Future<PDFBookmark> updateBookmark(PDFBookmark bookmark) async {
-    return await _pdfRepository.updateBookmark(bookmark);
+  Future<void> updateBookmark(PDFBookmark bookmark) async {
+    await _pdfRepository.updateBookmark(bookmark);
   }
 
   @override
-  Future<bool> deleteBookmark(String bookmarkId) async {
-    return await _pdfRepository.deleteBookmark(bookmarkId);
+  Future<void> deleteBookmark(String documentId, String bookmarkId) async {
+    await _pdfRepository.deleteBookmark(documentId, bookmarkId);
   }
 
   @override
@@ -156,18 +163,13 @@ class PDFServiceImpl implements PDFService {
 
   // 파일 관련 메서드
   @override
-  Future<String> uploadFile(String filePath) async {
-    return await _pdfRepository.uploadFile(filePath);
+  Future<String> uploadPDFFile(Uint8List file) async {
+    return await _pdfRepository.uploadPDFFile(file);
   }
 
   @override
-  Future<String?> downloadFile(String remoteUrl) async {
-    return await _pdfRepository.downloadFile(remoteUrl);
-  }
-
-  @override
-  Future<bool> deleteFile(String filePath) async {
-    return await _pdfRepository.deleteFile(filePath);
+  Future<void> deletePDFFile(String filePath) async {
+    await _pdfRepository.deletePDFFile(filePath);
   }
 
   // 검색 및 필터링 메서드
@@ -213,28 +215,25 @@ class PDFServiceImpl implements PDFService {
     await _pdfRepository.syncWithRemote();
   }
 
-  // PDF 처리 관련 메서드
+  // PDF 파일 처리 관련 메서드
+  @override
   Future<int> getPageCount(String filePath) async {
-    return await _pdfRepository.getPageCount(filePath);
+    if (kIsWeb) {
+      return 1; // 웹에서는 기본값
+    } else if (filePath.isNotEmpty && File(filePath).existsSync()) {
+      return await _pdfRepository.getPageCount(filePath);
+    }
+    return 1; // 기본값
   }
 
-  Future<int> getFileSize(String filePath) async {
-    final file = File(filePath);
-    return await file.length();
-  }
-
+  @override
   Future<String> extractText(String filePath, int pageNumber) async {
-    return await _pdfRepository.extractText(filePath, pageNumber);
-  }
-
-  Future<List<String>> searchText(String filePath, String query) async {
-    // TODO: PDF 텍스트 검색 로직 구현
-    return [];
-  }
-
-  Future<Map<String, dynamic>> getMetadata(String filePath) async {
-    // TODO: PDF 메타데이터 추출 로직 구현
-    return {};
+    if (kIsWeb) {
+      return '웹 환경에서 텍스트 추출은 아직 구현되지 않았습니다.';
+    } else if (filePath.isNotEmpty && File(filePath).existsSync()) {
+      return await _pdfRepository.extractText(filePath, pageNumber);
+    }
+    return '텍스트를 추출할 수 없습니다.';
   }
 
   @override
@@ -243,7 +242,7 @@ class PDFServiceImpl implements PDFService {
       _currentFile = file;
       _currentPage = 0;
       _totalPages = await getPageCount(file.path);
-      _metadata = await getMetadata(file.path);
+      _metadata = await getMetadata();
       
       // 마지막으로 열었던 페이지 복원
       final lastPage = await _storageService.getLastOpenedPage(file.path);
@@ -300,7 +299,7 @@ class PDFServiceImpl implements PDFService {
   @override
   Future<Map<String, dynamic>> getMetadata() async {
     if (_currentFile == null) return {};
-    return await getMetadata(_currentFile!.path);
+    return await _pdfRepository.getMetadata(_currentFile!.path);
   }
 
   @override

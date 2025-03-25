@@ -9,64 +9,60 @@ class UserModel {
   final String email;
   
   /// 사용자 이름
-  final String? displayName;
+  final String displayName;
   
   /// 사용자 프로필 이미지 URL
-  final String? photoURL;
+  final String photoURL;
   
   /// 생성일시
-  final DateTime createdAt;
-  
-  /// 수정일시
-  final DateTime? updatedAt;
-  
-  /// 마지막 로그인 시간
-  final DateTime? lastLoginAt;
+  final DateTime? createdAt;
   
   /// 사용자 설정
   final UserSettings settings;
+  
+  /// 프리미엄 사용자 여부
+  final bool isPremium;
 
   const UserModel({
     required this.id,
     required this.email,
-    this.displayName,
-    this.photoURL,
-    required this.createdAt,
-    this.updatedAt,
-    this.lastLoginAt,
+    required this.displayName,
+    required this.photoURL,
+    this.createdAt,
     required this.settings,
+    this.isPremium = false,
   });
 
   /// JSON에서 UserModel 객체 생성
-  factory UserModel.fromJson(Map<String, dynamic> json) {
-    return UserModel(
-      id: json['id'] as String,
-      email: json['email'] as String,
-      displayName: json['displayName'] as String?,
-      photoURL: json['photoURL'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] != null 
-          ? DateTime.parse(json['updatedAt'] as String) 
-          : null,
-      lastLoginAt: json['lastLoginAt'] != null 
-          ? DateTime.parse(json['lastLoginAt'] as String) 
-          : null,
-      settings: UserSettings.fromJson(json['settings'] as Map<String, dynamic>),
-    );
-  }
+  factory UserModel.fromJson(String source) => 
+      UserModel.fromMap(json.decode(source) as Map<String, dynamic>);
 
   /// UserModel 객체를 JSON으로 변환
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'email': email,
       'displayName': displayName,
       'photoURL': photoURL,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
-      'lastLoginAt': lastLoginAt?.toIso8601String(),
-      'settings': settings.toJson(),
+      'createdAt': createdAt?.toIso8601String(),
+      'settings': settings.toMap(),
+      'isPremium': isPremium,
     };
+  }
+
+  String toJson() => json.encode(toMap());
+
+  /// 게스트 모드 유저 생성
+  factory UserModel.guest() {
+    return UserModel(
+      id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
+      email: 'guest@example.com',
+      displayName: '게스트',
+      photoURL: '',
+      createdAt: DateTime.now(),
+      settings: UserSettings.createDefault(),
+      isPremium: false,
+    );
   }
 
   /// 새로운 UserModel 생성
@@ -74,8 +70,11 @@ class UserModel {
     return UserModel(
       id: '',
       email: '',
+      displayName: '사용자',
+      photoURL: '',
       createdAt: DateTime.now(),
       settings: UserSettings.createDefault(),
+      isPremium: false,
     );
   }
   
@@ -86,9 +85,8 @@ class UserModel {
     String? displayName,
     String? photoURL,
     DateTime? createdAt,
-    DateTime? updatedAt,
-    DateTime? lastLoginAt,
     UserSettings? settings,
+    bool? isPremium,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -96,9 +94,52 @@ class UserModel {
       displayName: displayName ?? this.displayName,
       photoURL: photoURL ?? this.photoURL,
       createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       settings: settings ?? this.settings,
+      isPremium: isPremium ?? this.isPremium,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'UserModel(id: $id, email: $email, displayName: $displayName, isPremium: $isPremium)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+  
+    return other is UserModel &&
+      other.id == id &&
+      other.email == email &&
+      other.displayName == displayName &&
+      other.photoURL == photoURL &&
+      other.createdAt == createdAt &&
+      other.settings == settings &&
+      other.isPremium == isPremium;
+  }
+
+  @override
+  int get hashCode {
+    return id.hashCode ^
+      email.hashCode ^
+      displayName.hashCode ^
+      photoURL.hashCode ^
+      createdAt.hashCode ^
+      settings.hashCode ^
+      isPremium.hashCode;
+  }
+
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    return UserModel(
+      id: map['id'] as String,
+      email: map['email'] as String,
+      displayName: map['displayName'] as String,
+      photoURL: map['photoURL'] as String,
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : null,
+      settings: map['settings'] != null 
+          ? UserSettings.fromMap(map['settings'] as Map<String, dynamic>)
+          : UserSettings.createDefault(),
+      isPremium: map['isPremium'] as bool? ?? false,
     );
   }
 }
@@ -121,22 +162,19 @@ class UserSettings {
   });
 
   /// JSON에서 UserSettings 객체 생성
-  factory UserSettings.fromJson(Map<String, dynamic> json) {
-    return UserSettings(
-      theme: json['theme'] as String,
-      language: json['language'] as String,
-      notificationsEnabled: json['notificationsEnabled'] as bool,
-    );
-  }
+  factory UserSettings.fromJson(String source) => 
+      UserSettings.fromMap(json.decode(source) as Map<String, dynamic>);
 
   /// UserSettings 객체를 JSON으로 변환
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toMap() {
     return {
       'theme': theme,
       'language': language,
       'notificationsEnabled': notificationsEnabled,
     };
   }
+
+  String toJson() => json.encode(toMap());
 
   /// 기본 설정 생성
   factory UserSettings.createDefault() {
@@ -157,6 +195,36 @@ class UserSettings {
       theme: theme ?? this.theme,
       language: language ?? this.language,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+    );
+  }
+
+  @override
+  String toString() => 
+      'UserSettings(theme: $theme, language: $language, notificationsEnabled: $notificationsEnabled)';
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+  
+    return other is UserSettings &&
+      other.theme == theme &&
+      other.language == language &&
+      other.notificationsEnabled == notificationsEnabled;
+  }
+
+  @override
+  int get hashCode => 
+      theme.hashCode ^ language.hashCode ^ notificationsEnabled.hashCode;
+
+  factory UserSettings.fromMap(Map<String, dynamic>? map) {
+    if (map == null || map.isEmpty) {
+      return UserSettings.createDefault();
+    }
+    
+    return UserSettings(
+      theme: map['theme'] as String? ?? 'light',
+      language: map['language'] as String? ?? 'ko',
+      notificationsEnabled: map['notificationsEnabled'] as bool? ?? true,
     );
   }
 } 

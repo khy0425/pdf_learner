@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:get_it/get_it.dart';
 import 'viewmodels/auth_view_model.dart';
 import 'viewmodels/pdf_viewmodel.dart';
-import 'views/login_page.dart';
+import 'pages/login_page.dart';
+import 'pages/home_page.dart';
+import 'pages/signup_page.dart';
+import 'pages/reset_password_page.dart';
 import 'screens/splash_screen.dart';
 
 class App extends StatelessWidget {
@@ -23,12 +26,18 @@ class App extends StatelessWidget {
       child: MaterialApp(
         title: 'PDF Learner',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF5D5FEF),
+            brightness: Brightness.light,
+          ),
           useMaterial3: true,
         ),
         home: const SplashScreen(),
         routes: {
           '/login': (context) => const LoginPage(),
+          '/home': (context) => const HomePage(),
+          '/signup': (context) => const SignUpPage(),
+          '/reset-password': (context) => const ResetPasswordPage(),
         },
       ),
     );

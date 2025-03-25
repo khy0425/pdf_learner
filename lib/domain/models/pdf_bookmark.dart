@@ -60,7 +60,7 @@ class PDFBookmark {
   });
 
   /// JSON 직렬화/역직렬화를 위한 팩토리 생성자
-  factory PDFBookmark.fromJson(Map<String, dynamic> json) {
+  factory PDFBookmark.fromMap(Map<String, dynamic> json) {
     return PDFBookmark(
       id: json['id'] as String,
       documentId: json['documentId'] as String,
@@ -81,8 +81,20 @@ class PDFBookmark {
       isSelected: json['isSelected'] as bool,
     );
   }
+  
+  /// JSON에서 북마크 객체를 생성합니다.
+  factory PDFBookmark.fromJson(dynamic source) {
+    if (source is String) {
+      return PDFBookmark.fromMap(json.decode(source) as Map<String, dynamic>);
+    } else if (source is Map<String, dynamic>) {
+      return PDFBookmark.fromMap(source);
+    } else {
+      throw ArgumentError('Invalid JSON type: ${source.runtimeType}');
+    }
+  }
 
-  Map<String, dynamic> toJson() {
+  /// 객체를 Map으로 변환
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'documentId': documentId,
@@ -99,16 +111,21 @@ class PDFBookmark {
       'isSelected': isSelected,
     };
   }
+  
+  /// 객체를 JSON 문자열로 변환
+  String toJson() => json.encode(toMap());
 
   /// 기본 북마크 생성
   factory PDFBookmark.createDefault() {
     return PDFBookmark(
-      id: '',
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       documentId: '',
       pageNumber: 0,
-      title: '',
+      title: '새 북마크',
       description: '',
       createdAt: DateTime.now(),
+      lastAccessedAt: null,
+      lastModifiedAt: null,
       tags: [],
       note: '',
       metadata: {},
@@ -148,6 +165,42 @@ class PDFBookmark {
       isFavorite: isFavorite ?? this.isFavorite,
       isSelected: isSelected ?? this.isSelected,
     );
+  }
+
+  @override
+  String toString() {
+    return 'PDFBookmark(id: $id, documentId: $documentId, pageNumber: $pageNumber, title: $title, createdAt: $createdAt, tags: $tags, note: $note, metadata: $metadata, isFavorite: $isFavorite, isSelected: $isSelected)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+  
+    return other is PDFBookmark &&
+      other.id == id &&
+      other.documentId == documentId &&
+      other.pageNumber == pageNumber &&
+      other.title == title &&
+      other.createdAt == createdAt &&
+      other.tags.length == tags.length &&
+      other.tags.every((item) => tags.contains(item)) &&
+      other.note == note &&
+      other.isFavorite == isFavorite &&
+      other.isSelected == isSelected;
+  }
+
+  @override
+  int get hashCode {
+    return id.hashCode ^
+      documentId.hashCode ^
+      pageNumber.hashCode ^
+      title.hashCode ^
+      createdAt.hashCode ^
+      tags.hashCode ^
+      note.hashCode ^
+      metadata.hashCode ^
+      isFavorite.hashCode ^
+      isSelected.hashCode;
   }
 }
 

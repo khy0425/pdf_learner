@@ -11,174 +11,158 @@ import 'package:pdf_learner_v2/core/services/firebase_service.dart';
 class AuthRepositoryImpl implements AuthRepository {
   final FirebaseService _firebaseService;
   final GoogleSignIn _googleSignIn;
-  final FirebaseAuth _auth;
-  UserModel? _currentUser;
 
-  AuthRepositoryImpl(this._firebaseService, this._googleSignIn) 
-      : _auth = FirebaseAuth.instance {
-    _init();
-  }
+  AuthRepositoryImpl(this._firebaseService, this._googleSignIn);
 
-  void _init() {
-    _firebaseService.authStateChanges.listen((user) {
-      if (user != null) {
-        _currentUser = UserModel(
-          id: user.uid,
-          email: user.email ?? '',
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          lastLoginAt: DateTime.now(),
-          settings: UserSettings(
-            theme: 'light',
-            language: 'ko',
-            notificationsEnabled: true,
-          ),
-        );
-      } else {
-        _currentUser = null;
-      }
-    });
+  @override
+  Stream<User?> authStateChanges() {
+    return _firebaseService.authStateChanges;
   }
 
   @override
-  Stream<UserModel?> get authStateChanges => _firebaseService.authStateChanges.map((user) {
-    if (user == null) return null;
-    
-    return UserModel(
-      id: user.uid,
-      email: user.email ?? '',
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      lastLoginAt: DateTime.now(),
-      settings: UserSettings.createDefault(),
-    );
-  });
+  User? getCurrentUser() {
+    return _firebaseService.currentUser;
+  }
 
   @override
-  Future<UserModel?> signInWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential> signIn(String email, String password) async {
     try {
-      final credential = await _firebaseService.signInWithEmailAndPassword(email, password);
-      final user = credential?.user;
-      
-      if (user == null) return null;
-      
-      return UserModel(
-        id: user.uid,
-        email: user.email ?? '',
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        lastLoginAt: DateTime.now(),
-        settings: UserSettings.createDefault(),
+      return await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'user-not-found':
+          throw Exception('이메일에 해당하는 사용자가 없습니다.');
+        case 'wrong-password':
+          throw Exception('비밀번호가 잘못되었습니다.');
+        case 'invalid-email':
+          throw Exception('유효하지 않은 이메일 형식입니다.');
+        case 'user-disabled':
+          throw Exception('이 계정은 비활성화되었습니다. 관리자에게 문의하세요.');
+        case 'too-many-requests':
+          throw Exception('너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.');
+        default:
+          throw Exception('로그인 중 오류가 발생했습니다: ${e.message}');
+      }
     } catch (e) {
-      rethrow;
+      throw Exception('로그인 중 예상치 못한 오류가 발생했습니다.');
     }
   }
 
   @override
-  Future<UserModel?> signUpWithEmailAndPassword(String email, String password) async {
+  Future<UserCredential> signUp(String email, String password) async {
     try {
-      final credential = await _firebaseService.createUserWithEmailAndPassword(email, password);
-      final user = credential?.user;
-      
-      if (user == null) return null;
-      
-      return UserModel(
-        id: user.uid,
-        email: user.email ?? '',
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        lastLoginAt: DateTime.now(),
-        settings: UserSettings.createDefault(),
+      return await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'email-already-in-use':
+          throw Exception('이미 사용 중인 이메일입니다. 다른 이메일을 사용하거나 로그인하세요.');
+        case 'invalid-email':
+          throw Exception('유효하지 않은 이메일 형식입니다.');
+        case 'operation-not-allowed':
+          throw Exception('이메일/비밀번호 계정이 비활성화되어 있습니다. 관리자에게 문의하세요.');
+        case 'weak-password':
+          throw Exception('비밀번호가 너무 약합니다. 보다 강력한 비밀번호를 사용하세요.');
+        default:
+          throw Exception('회원가입 중 오류가 발생했습니다: ${e.message}');
+      }
     } catch (e) {
-      rethrow;
+      throw Exception('회원가입 중 예상치 못한 오류가 발생했습니다.');
+    }
+  }
+
+  @override
+  Future<UserCredential> signInAnonymously() async {
+    try {
+      return await FirebaseAuth.instance.signInAnonymously();
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'operation-not-allowed':
+          throw Exception('익명 로그인이 비활성화되어 있습니다. 관리자에게 문의하세요.');
+        default:
+          throw Exception('익명 로그인 중 오류가 발생했습니다: ${e.message}');
+      }
+    } catch (e) {
+      throw Exception('익명 로그인 중 예상치 못한 오류가 발생했습니다.');
+    }
+  }
+
+  @override
+  Future<UserCredential> signInWithGoogle() async {
+    try {
+      // 구글 로그인 진행
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        throw Exception('구글 로그인이 취소되었습니다.');
+      }
+
+      // 구글 인증 정보 얻기
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // 파이어베이스에 구글 인증 정보 전달
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 파이어베이스에 로그인
+      return await FirebaseAuth.instance.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'account-exists-with-different-credential':
+          throw Exception('이미 다른 방식으로 가입된 이메일입니다. 다른 로그인 방법을 시도해보세요.');
+        case 'invalid-credential':
+          throw Exception('인증 정보가 잘못되었습니다. 다시 시도해주세요.');
+        case 'operation-not-allowed':
+          throw Exception('구글 로그인이 비활성화되어 있습니다. 관리자에게 문의하세요.');
+        case 'user-disabled':
+          throw Exception('이 계정은 비활성화되었습니다. 관리자에게 문의하세요.');
+        default:
+          throw Exception('구글 로그인 중 오류가 발생했습니다: ${e.message}');
+      }
+    } catch (e) {
+      throw Exception('구글 로그인 중 예상치 못한 오류가 발생했습니다: ${e.toString()}');
     }
   }
 
   @override
   Future<void> signOut() async {
-    await _firebaseService.signOut();
-  }
-
-  @override
-  Future<UserModel?> getCurrentUser() async {
-    final user = _firebaseService.currentUser;
-    if (user == null) return null;
-    
-    return UserModel(
-      id: user.uid,
-      email: user.email ?? '',
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      lastLoginAt: DateTime.now(),
-      settings: UserSettings.createDefault(),
-    );
-  }
-
-  @override
-  Future<void> updateUser(UserModel user) async {
-    await _firebaseService.updateUser(user);
-  }
-
-  @override
-  Future<void> deleteUser() async {
-    final user = _firebaseService.currentUser;
-    if (user == null) return;
-    
-    await user.delete();
+    try {
+      if (await _googleSignIn.isSignedIn()) {
+        await _googleSignIn.signOut();
+      }
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      rethrow;
+    }
   }
 
   @override
   Future<void> resetPassword(String email) async {
-    await _firebaseService.sendPasswordResetEmail(email);
-  }
-
-  @override
-  Future<void> updatePassword(String newPassword) async {
-    final user = _firebaseService.currentUser;
-    if (user == null) throw Exception('사용자를 찾을 수 없습니다');
-    
-    await user.updatePassword(newPassword);
-  }
-
-  @override
-  Future<UserModel?> signInWithGoogle() async {
     try {
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null;
-      
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
-      
-      if (user == null) return null;
-      
-      return UserModel(
-        id: user.uid,
-        email: user.email ?? '',
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        lastLoginAt: DateTime.now(),
-        settings: UserSettings.createDefault(),
-      );
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> updateProfile({String? displayName, String? photoURL}) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('로그인이 필요합니다.');
+      }
+
+      await user.updateDisplayName(displayName);
+      if (photoURL != null) {
+        await user.updatePhotoURL(photoURL);
+      }
     } catch (e) {
       rethrow;
     }
@@ -223,20 +207,6 @@ class AuthRepositoryImpl implements AuthRepository {
     if (user == null) throw Exception('사용자를 찾을 수 없습니다');
     
     await user.updateEmail(newEmail);
-  }
-
-  @override
-  Future<void> updateProfile({String? displayName, String? photoURL}) async {
-    final user = _firebaseService.currentUser;
-    if (user == null) throw Exception('사용자를 찾을 수 없습니다');
-    
-    if (displayName != null) {
-      await user.updateDisplayName(displayName);
-    }
-    
-    if (photoURL != null) {
-      await user.updatePhotoURL(photoURL);
-    }
   }
 
   @override

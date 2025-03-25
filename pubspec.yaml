@@ -1,10 +1,10 @@
 name: pdf_learner_v2
-description: A new Flutter project.
+description: "AI 기반의 PDF 관리 및 학습 플랫폼"
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.2.4 <4.0.0'
 
 dependencies:
   flutter:
@@ -13,53 +13,69 @@ dependencies:
   # Firebase
   firebase_core: ^3.12.1
   firebase_auth: ^5.5.1
-  cloud_firestore: ^5.6.0
-  firebase_storage: ^12.3.7
+  cloud_firestore: ^5.6.5
+  firebase_storage: ^12.4.4
   # State Management
-  flutter_bloc: ^9.1.0
   provider: ^6.1.1
   # Dependency Injection
   get_it: ^8.0.3
   injectable: ^2.3.2
   # Social Login
-  google_sign_in: ^6.1.6
-  flutter_facebook_auth: ^6.0.3
-  sign_in_with_apple: ^6.1.4
+  google_sign_in: ^6.1.5
   # UI
-  flutter_svg: ^2.0.9
-  responsive_framework: ^1.1.1
-  window_manager: ^0.4.3
+  font_awesome_flutter: ^10.5.0
   # Utils
-  freezed_annotation: ^3.0.0
-  json_annotation: ^4.9.0
-  equatable: ^2.0.5
-  logger: ^2.0.2+1
-  flutter_dotenv: ^5.1.0
-  shared_preferences: ^2.2.2
-  path_provider: ^2.1.2
   intl: ^0.20.2
-  flutter_secure_storage: ^9.0.0
-  file_picker: ^6.2.0
-  # PDF
-  pdf: ^3.10.7
+  http: ^1.1.2
+  url_launcher: ^6.2.2
+  shared_preferences: ^2.2.2
+  flutter_dotenv: ^5.1.0
+  path_provider: ^2.1.1
   path: ^1.8.3
+  uuid: ^4.2.1
+  # PDF
+  syncfusion_flutter_pdfviewer: ^29.1.33
+  pdf: ^3.10.7
   # Web
   universal_html: ^2.2.4
-  js: ^0.6.7
-  uuid: ^4.3.3
+  file_picker: ^9.2.1
+  sign_in_with_apple: ^6.1.4
+  flutter_facebook_auth: ^6.0.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
-  build_runner: ^2.4.7
-  freezed: ^3.0.4
-  json_serializable: ^6.7.1
   injectable_generator: ^2.4.1
+  build_runner: ^2.4.7
+  mockito: ^5.4.3
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/icons/
+    - .env
     - assets/images/
-    - .env 
+    - assets/icons/
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/assets-and-images/#resolution-aware
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/assets-and-images/#from-packages
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/custom-fonts/#from-packages 

@@ -11,8 +11,16 @@ import '../services/api_key_service.dart';
 import '../services/rate_limiter.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:flutter/material.dart';
 
 part 'auth_viewmodel.freezed.dart';
+
+enum AuthStatus {
+  unknown,
+  authenticated,
+  anonymousAuthenticated,
+  unauthenticated,
+}
 
 @freezed
 class AuthState with _$AuthState {
@@ -28,13 +36,14 @@ class AuthState with _$AuthState {
 
 /// 인증 관련 비즈니스 로직을 담당하는 ViewModel 클래스
 @injectable
-class AuthViewModel extends Cubit<AuthState> {
+class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
   final ApiKeyService _apiKeyService;
   final RateLimiter _rateLimiter;
   final GoogleSignIn _googleSignIn;
   
+  AuthStatus _status = AuthStatus.unknown;
   UserModel? _user;
   bool _isLoading = false;
   String? _error;
@@ -75,220 +84,177 @@ class AuthViewModel extends Cubit<AuthState> {
     this._apiKeyService,
     this._rateLimiter,
     this._googleSignIn,
-  ) : super(const AuthState.initial()) {
+  ) {
     _init();
   }
   
   /// ViewModel 초기화
-  Future<void> _init() async {
-    if (_isInitialized) return;
-    
-    emit(const AuthState.loading());
-    
-    try {
-      final currentUser = await _authRepository.getCurrentUser();
-      
-      if (currentUser != null) {
-        _user = currentUser;
-        emit(const AuthState.authenticated(user: currentUser));
+  void _init() {
+    _authRepository.authStateChanges().listen((User? user) {
+      _user = user;
+      if (user == null) {
+        _status = AuthStatus.unauthenticated;
+      } else if (user.isAnonymous) {
+        _status = AuthStatus.anonymousAuthenticated;
       } else {
-        emit(const AuthState.unauthenticated());
+        _status = AuthStatus.authenticated;
       }
-      
-      _isInitialized = true;
-    } catch (e) {
-      _setError('초기화 중 오류 발생: $e');
-      debugPrint('AuthViewModel 초기화 오류: $e');
-      emit(AuthState.error(e.toString()));
-    }
+      notifyListeners();
+    });
   }
   
   /// 이메일과 비밀번호로 로그인
   Future<void> signIn(String email, String password) async {
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('signIn')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    _setError(null);
-    
     try {
-      final user = await _authRepository.signIn(email, password);
-      
-      if (user != null) {
-        _user = user;
-        emit(AuthState.authenticated(user: user));
-      } else {
-        emit(const AuthState.error('로그인 실패'));
-      }
-    } catch (e) {
+      _setLoading(true);
+      await _authRepository.signIn(email, password);
+      _setError(null);
+    } on FirebaseAuthException catch (e) {
       _handleAuthError(e);
+    } catch (e) {
+      _setError('로그인 중 오류가 발생했습니다: $e');
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// 이메일과 비밀번호로 회원가입
   Future<void> signUp(String email, String password, String name) async {
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('signUp')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    _setError(null);
-    
     try {
+      _setLoading(true);
       final user = await _authRepository.signUp(email, password, name);
       
       if (user != null) {
         _user = user;
-        emit(const AuthState.authenticated(user: user));
+        _status = AuthStatus.authenticated;
+        notifyListeners();
       } else {
-        emit(const AuthState.error('회원가입 실패'));
+        _setError('회원가입 실패');
       }
     } catch (e) {
       _handleAuthError(e);
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// Google 로그인
   Future<void> signInWithGoogle() async {
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('signInWithGoogle')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    _setError(null);
-    
     try {
-      final userCredential = await _authRepository.signInWithGoogle();
-      
-      if (userCredential != null) {
-        final user = userCredential.user;
-        if (user != null) {
-          final newUser = UserModel(
-            id: user.uid,
-            email: user.email ?? '',
-            name: user.displayName ?? '',
-            photoUrl: user.photoURL,
-            uid: user.uid,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          
-          await _userRepository.createUser(newUser);
-          _user = newUser;
-          emit(AuthState.authenticated(user: newUser));
-        }
-      }
-    } catch (e) {
+      _setLoading(true);
+      await _authRepository.signInWithGoogle();
+      _setError(null);
+    } on FirebaseAuthException catch (e) {
       _handleAuthError(e);
+    } catch (e) {
+      _setError('Google 로그인 중 오류가 발생했습니다: $e');
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// Facebook 로그인
   Future<void> signInWithFacebook() async {
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('signInWithFacebook')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    _setError(null);
-    
     try {
-      final userCredential = await _authRepository.signInWithFacebook();
-      
-      if (userCredential != null) {
-        final user = userCredential.user;
-        if (user != null) {
-          final newUser = UserModel(
-            id: user.uid,
-            email: user.email ?? '',
-            name: user.displayName ?? '',
-            photoUrl: user.photoURL,
-            uid: user.uid,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          
-          await _userRepository.createUser(newUser);
-          _user = newUser;
-          emit(AuthState.authenticated(user: newUser));
-        }
-      }
-    } catch (e) {
+      _setLoading(true);
+      await _authRepository.signInWithFacebook();
+      _setError(null);
+    } on FirebaseAuthException catch (e) {
       _handleAuthError(e);
+    } catch (e) {
+      _setError('Facebook 로그인 중 오류가 발생했습니다: $e');
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// 애플 로그인
   Future<void> signInWithApple() async {
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('signInWithApple')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    _setError(null);
-    
     try {
-      final userCredential = await _authRepository.signInWithApple();
-      
-      if (userCredential != null) {
-        final user = userCredential.user;
-        if (user != null) {
-          final newUser = UserModel(
-            id: user.uid,
-            email: user.email ?? '',
-            name: user.displayName ?? '',
-            photoUrl: user.photoURL,
-            uid: user.uid,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          
-          await _userRepository.createUser(newUser);
-          _user = newUser;
-          emit(AuthState.authenticated(newUser));
-        }
-      }
-    } catch (e) {
+      _setLoading(true);
+      await _authRepository.signInWithApple();
+      _setError(null);
+    } on FirebaseAuthException catch (e) {
       _handleAuthError(e);
+    } catch (e) {
+      _setError('Apple 로그인 중 오류가 발생했습니다: $e');
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// 로그아웃
   Future<void> signOut() async {
-    emit(const AuthState.loading());
+    if (_isLoading) return;
     
     try {
+      _setLoading(true);
       await _authRepository.signOut();
       _user = null;
-      emit(const AuthState.unauthenticated());
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
+      _setError(null);
     } catch (e) {
       _setError('로그아웃 중 오류가 발생했습니다: $e');
-      debugPrint('로그아웃 오류: $e');
-      emit(AuthState.error(e.toString()));
+    } finally {
+      _setLoading(false);
     }
   }
   
   /// 비밀번호 재설정 이메일 발송
   Future<void> resetPassword(String email) async {
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('resetPassword')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    _setError(null);
-    
     try {
+      _setLoading(true);
       await _authRepository.resetPassword(email);
-      emit(const AuthState.passwordResetSent());
-    } catch (e) {
+      _setError(null);
+    } on FirebaseAuthException catch (e) {
       _handleAuthError(e);
+    } catch (e) {
+      _setError('비밀번호 재설정 중 오류가 발생했습니다: $e');
+    } finally {
+      _setLoading(false);
     }
   }
   
@@ -299,16 +265,14 @@ class AuthViewModel extends Cubit<AuthState> {
       return;
     }
     
-    emit(const AuthState.loading());
-    
     try {
       await _authRepository.updateProfile(user);
       _user = user;
-      emit(const AuthState.profileUpdated());
+      _status = AuthStatus.authenticated;
+      notifyListeners();
     } catch (e) {
       _setError('프로필 업데이트 중 오류가 발생했습니다: $e');
       debugPrint('프로필 업데이트 오류: $e');
-      emit(AuthState.error(e.toString()));
     }
   }
   
@@ -319,18 +283,21 @@ class AuthViewModel extends Cubit<AuthState> {
       return;
     }
     
+    if (_isLoading) return;
+    
     if (!_rateLimiter.checkRequest('changePassword')) {
       _setError('잠시 후 다시 시도해주세요.');
       return;
     }
     
-    emit(const AuthState.loading());
-    
     try {
+      _setLoading(true);
       await _authRepository.changePassword(currentPassword, newPassword);
-      emit(const AuthState.passwordChanged());
+      _setError(null);
     } catch (e) {
       _handleAuthError(e);
+    } finally {
+      _setLoading(false);
     }
   }
   
@@ -341,15 +308,14 @@ class AuthViewModel extends Cubit<AuthState> {
       return;
     }
     
-    emit(const AuthState.loading());
-    
     try {
       if (_user != null && _user!.uid != null) {
         await _userRepository.deleteUser(_user!.uid!);
       }
       await _authRepository.deleteAccount();
       _user = null;
-      emit(const AuthState.unauthenticated());
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
     } catch (e) {
       _handleAuthError(e);
     }
@@ -374,11 +340,13 @@ class AuthViewModel extends Cubit<AuthState> {
   /// 로딩 상태 설정
   void _setLoading(bool isLoading) {
     _isLoading = isLoading;
+    notifyListeners();
   }
   
   /// 오류 메시지 설정
   void _setError(String? error) {
     _error = error;
+    notifyListeners();
   }
   
   /// 인증 오류 처리
@@ -417,6 +385,9 @@ class AuthViewModel extends Cubit<AuthState> {
         case 'too-many-requests':
           errorMessage = '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도하세요.';
           break;
+        case 'network-request-failed':
+          errorMessage = '네트워크 연결이 불안정합니다.';
+          break;
         default:
           errorMessage = '인증 오류: ${e.message}';
       }
@@ -427,8 +398,8 @@ class AuthViewModel extends Cubit<AuthState> {
   }
   
   @override
-  Future<void> close() async {
+  void dispose() {
     _mounted = false;
-    await super.close();
+    super.dispose();
   }
 } 

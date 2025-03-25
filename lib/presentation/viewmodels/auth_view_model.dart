@@ -1,199 +1,231 @@
 import 'package:flutter/foundation.dart';
-import 'package:injectable/injectable.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/models/user_model.dart';
-import '../../core/services/firebase_service.dart';
+import '../../domain/repositories/auth_repository.dart';
 
-/// 인증 상태
+/// 인증 상태 열거형
 enum AuthStatus {
-  initial,
-  loading,
-  authenticated,
-  unauthenticated,
-  error
+  initial,       // 초기 상태
+  loading,       // 로딩 중
+  authenticated, // 인증됨
+  guest,         // 게스트 모드
+  unauthenticated, // 인증되지 않음
+  error,         // 오류 발생
 }
 
 /// 인증 뷰모델
-@injectable
 class AuthViewModel extends ChangeNotifier {
-  final FirebaseService _firebaseService;
+  final AuthRepository _authRepository;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   
   AuthStatus _status = AuthStatus.initial;
+  User? _user;
   UserModel? _currentUser;
   String? _error;
+  bool _isGuestMode = false;
+  bool _isLoading = false;
 
-  AuthViewModel(this._firebaseService) {
+  AuthViewModel(this._authRepository) {
     _init();
   }
-
-  // 게터
-  AuthStatus get status => _status;
+  
+  /// 현재 로그인된 사용자
   UserModel? get currentUser => _currentUser;
+  
+  /// 인증 오류 메시지
   String? get error => _error;
-  bool get isLoading => _status == AuthStatus.loading;
-  bool get isAuthenticated => _status == AuthStatus.authenticated;
+  
+  /// 게스트 모드 상태
+  bool get isGuestMode => _status == AuthStatus.guest;
+  
+  /// 로그인된 상태 (일반 또는 게스트)
+  bool get isAuthenticated => _status == AuthStatus.authenticated || _status == AuthStatus.guest;
+  
+  /// 로그인되지 않은 상태
   bool get isUnauthenticated => _status == AuthStatus.unauthenticated;
+  
+  /// 로딩 상태
+  bool get isLoading => _status == AuthStatus.loading;
+  
+  /// 오류 상태
   bool get hasError => _status == AuthStatus.error;
-
+  
+  /// 오류 상태
+  bool get isError => _status == AuthStatus.error;
+  
   void _init() {
-    _firebaseService.authStateChanges.listen((user) {
+    _auth.authStateChanges().listen((User? user) {
       if (user != null) {
         _currentUser = UserModel(
           id: user.uid,
           email: user.email ?? '',
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          lastLoginAt: DateTime.now(),
+          displayName: user.displayName ?? '사용자',
+          photoURL: user.photoURL ?? '',
           settings: UserSettings.createDefault(),
         );
+        
+        _isGuestMode = user.isAnonymous;
+        
         _status = AuthStatus.authenticated;
+      } else if (_isGuestMode) {
+        _currentUser = UserModel.guest();
+        _status = AuthStatus.guest;
       } else {
         _currentUser = null;
         _status = AuthStatus.unauthenticated;
       }
+      
+      _error = null;
+      _isLoading = false;
       notifyListeners();
     });
   }
-
+  
   Future<void> signInWithEmailAndPassword(String email, String password) async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
     try {
-      _status = AuthStatus.loading;
-      _error = null;
-      notifyListeners();
-
-      final credential = await _firebaseService.signInWithEmailAndPassword(email, password);
-      if (credential?.user == null) {
-        _error = '로그인에 실패했습니다.';
-        _status = AuthStatus.error;
-      } else {
-        _status = AuthStatus.authenticated;
-      }
+      await _authRepository.signIn(email, password);
+      _status = AuthStatus.authenticated;
     } catch (e) {
       _error = e.toString();
       _status = AuthStatus.error;
-    } finally {
-      notifyListeners();
     }
+    
+    notifyListeners();
   }
-
+  
   Future<void> signUpWithEmailAndPassword(String email, String password, String displayName) async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
     try {
-      _status = AuthStatus.loading;
+      await _authRepository.signUp(email, password);
+      await updateProfile(displayName: displayName);
+      _status = AuthStatus.authenticated;
+    } catch (e) {
+      _error = e.toString();
+      _status = AuthStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> signInAnonymously() async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _authRepository.signInAnonymously();
+      
+      _status = AuthStatus.guest;
+      _currentUser = UserModel.guest();
       _error = null;
       notifyListeners();
-
-      final credential = await _firebaseService.createUserWithEmailAndPassword(email, password);
-      if (credential?.user == null) {
-        _error = '회원가입에 실패했습니다.';
-        _status = AuthStatus.error;
+    } catch (e) {
+      _status = AuthStatus.error;
+      
+      if (e.toString().contains('operation-not-allowed')) {
+        _error = '익명 로그인이 비활성화되어 있습니다. Firebase 콘솔에서 익명 로그인을 활성화해주세요.';
       } else {
-        await credential!.user!.updateDisplayName(displayName);
-        _status = AuthStatus.authenticated;
+        _error = e.toString();
       }
-    } catch (e) {
-      _error = e.toString();
-      _status = AuthStatus.error;
-    } finally {
+      
       notifyListeners();
-    }
-  }
-
-  Future<void> signOut() async {
-    try {
-      _status = AuthStatus.loading;
-      _error = null;
-      notifyListeners();
-
-      await _firebaseService.signOut();
-      _currentUser = null;
-      _status = AuthStatus.unauthenticated;
-    } catch (e) {
-      _error = e.toString();
-      _status = AuthStatus.error;
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  Future<void> resetPassword(String email) async {
-    try {
-      _status = AuthStatus.loading;
-      _error = null;
-      notifyListeners();
-
-      await _firebaseService.sendPasswordResetEmail(email);
-      _status = AuthStatus.unauthenticated;
-    } catch (e) {
-      _error = e.toString();
-      _status = AuthStatus.error;
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  Future<void> updateProfile({
-    String? displayName,
-    String? photoURL,
-  }) async {
-    try {
-      _status = AuthStatus.loading;
-      _error = null;
-      notifyListeners();
-
-      if (_currentUser != null) {
-        final user = _firebaseService.currentUser;
-        if (user != null) {
-          if (displayName != null) {
-            await user.updateDisplayName(displayName);
-          }
-          if (photoURL != null) {
-            await user.updatePhotoURL(photoURL);
-          }
-          
-          _currentUser = _currentUser!.copyWith(
-            displayName: displayName ?? _currentUser!.displayName,
-            photoURL: photoURL ?? _currentUser!.photoURL,
-            updatedAt: DateTime.now(),
-          );
+      
+      debugPrint('익명 로그인 에러: $e');
+      
+      Future.delayed(const Duration(seconds: 3), () {
+        if (_error != null) {
+          _status = AuthStatus.unauthenticated;
+          _error = null;
+          notifyListeners();
         }
-        _status = AuthStatus.authenticated;
-      }
-    } catch (e) {
-      _error = e.toString();
-      _status = AuthStatus.error;
-    } finally {
-      notifyListeners();
+      });
     }
   }
-
-  Future<void> deleteAccount() async {
+  
+  Future<void> signInWithGoogle() async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
     try {
-      _status = AuthStatus.loading;
-      _error = null;
-      notifyListeners();
-
-      final user = _firebaseService.currentUser;
-      if (user != null) {
-        await user.delete();
-        _currentUser = null;
-        _status = AuthStatus.unauthenticated;
-      }
+      await _authRepository.signInWithGoogle();
+      _status = AuthStatus.authenticated;
     } catch (e) {
       _error = e.toString();
       _status = AuthStatus.error;
-    } finally {
-      notifyListeners();
     }
+    
+    notifyListeners();
   }
-
+  
+  Future<void> resetPassword(String email) async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _authRepository.resetPassword(email);
+      _status = _user != null 
+          ? AuthStatus.authenticated 
+          : AuthStatus.unauthenticated;
+    } catch (e) {
+      _error = e.toString();
+      _status = AuthStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> signOut() async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _authRepository.signOut();
+      _status = AuthStatus.unauthenticated;
+    } catch (e) {
+      _error = e.toString();
+      _status = AuthStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> updateProfile({String? displayName, String? photoURL}) async {
+    _status = AuthStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _authRepository.updateProfile(
+        displayName: displayName,
+        photoURL: photoURL,
+      );
+      _status = AuthStatus.authenticated;
+    } catch (e) {
+      _error = e.toString();
+      _status = AuthStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
   void clearError() {
     _error = null;
     if (_status == AuthStatus.error) {
-      _status = _currentUser != null 
-        ? AuthStatus.authenticated 
-        : AuthStatus.unauthenticated;
+      _status = _user != null 
+          ? AuthStatus.authenticated 
+          : AuthStatus.unauthenticated;
     }
     notifyListeners();
   }
-} 
+}

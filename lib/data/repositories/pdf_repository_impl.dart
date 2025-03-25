@@ -1,96 +1,202 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:injectable/injectable.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/models/pdf_document.dart';
 import '../../domain/models/pdf_bookmark.dart';
 import '../../domain/repositories/pdf_repository.dart';
 import '../../core/services/firebase_service.dart';
-import '../../core/services/storage_service.dart';
 
 /// PDF 저장소 구현체
-@Injectable()
+@Injectable(as: PDFRepository)
 class PDFRepositoryImpl implements PDFRepository {
   final FirebaseService _firebaseService;
-  final StorageService _storageService;
+  final SharedPreferences _prefs;
 
-  PDFRepositoryImpl(this._firebaseService, this._storageService);
+  PDFRepositoryImpl(this._firebaseService, this._prefs);
 
   @override
   Future<List<PDFDocument>> getDocuments() async {
-    // Stream을 Future로 변환
-    return await _firebaseService.getDocuments().first;
+    if (_firebaseService.isAnonymous) {
+      // 익명 사용자는 로컬 스토리지에서만 조회
+      final documentsJson = _prefs.getStringList('documents') ?? [];
+      return documentsJson
+          .map((json) => PDFDocument.fromJson(json))
+          .toList();
+    } else {
+      // 로그인 사용자는 Firebase에서 조회
+      return await _firebaseService.getPDFDocuments();
+    }
   }
 
   @override
-  Future<PDFDocument?> getDocument(String documentId) async {
-    return await _firebaseService.getDocument(documentId);
+  Future<PDFDocument?> getDocument(String id) async {
+    if (_firebaseService.isAnonymous) {
+      final documentsJson = _prefs.getStringList('documents') ?? [];
+      final documentJson = documentsJson.firstWhere(
+        (json) => PDFDocument.fromJson(json).id == id,
+        orElse: () => '',
+      );
+      return documentJson.isNotEmpty ? PDFDocument.fromJson(documentJson) : null;
+    } else {
+      return await _firebaseService.getPDFDocument(id);
+    }
   }
 
   @override
   Future<void> createDocument(PDFDocument document) async {
-    await _firebaseService.createDocument(document);
+    if (_firebaseService.isAnonymous) {
+      final documentsJson = _prefs.getStringList('documents') ?? [];
+      documentsJson.add(document.toJson());
+      await _prefs.setStringList('documents', documentsJson);
+    } else {
+      await _firebaseService.addPDFDocument(document);
+    }
   }
 
   @override
   Future<void> updateDocument(PDFDocument document) async {
-    await _firebaseService.updateDocument(document);
+    if (_firebaseService.isAnonymous) {
+      final documentsJson = _prefs.getStringList('documents') ?? [];
+      final index = documentsJson.indexWhere(
+        (json) => PDFDocument.fromJson(json).id == document.id,
+      );
+      if (index != -1) {
+        documentsJson[index] = document.toJson();
+        await _prefs.setStringList('documents', documentsJson);
+      }
+    } else {
+      await _firebaseService.updatePDFDocument(document);
+    }
   }
 
   @override
-  Future<void> deleteDocument(String documentId) async {
-    await _firebaseService.deleteDocument(documentId);
+  Future<void> deleteDocument(String id) async {
+    if (_firebaseService.isAnonymous) {
+      final documentsJson = _prefs.getStringList('documents') ?? [];
+      documentsJson.removeWhere(
+        (json) => PDFDocument.fromJson(json).id == id,
+      );
+      await _prefs.setStringList('documents', documentsJson);
+    } else {
+      await _firebaseService.deletePDFDocument(id);
+    }
   }
 
   @override
   Future<List<PDFBookmark>> getBookmarks(String documentId) async {
-    // Stream을 Future로 변환
-    return await _firebaseService.getBookmarks(documentId).first;
+    if (_firebaseService.isAnonymous) {
+      final bookmarksJson = _prefs.getStringList('bookmarks_$documentId') ?? [];
+      return bookmarksJson
+          .map((json) => PDFBookmark.fromJson(json))
+          .toList();
+    } else {
+      return await _firebaseService.getBookmarks(documentId);
+    }
   }
 
   @override
-  Future<PDFBookmark?> getBookmark(String bookmarkId) async {
-    return await _firebaseService.getBookmark(bookmarkId);
+  Future<PDFBookmark?> getBookmark(String documentId, String bookmarkId) async {
+    if (_firebaseService.isAnonymous) {
+      final bookmarksJson = _prefs.getStringList('bookmarks_$documentId') ?? [];
+      final bookmarkJson = bookmarksJson.firstWhere(
+        (json) => PDFBookmark.fromJson(json).id == bookmarkId,
+        orElse: () => '',
+      );
+      return bookmarkJson.isNotEmpty ? PDFBookmark.fromJson(bookmarkJson) : null;
+    } else {
+      return await _firebaseService.getBookmark(documentId, bookmarkId);
+    }
   }
 
   @override
   Future<void> createBookmark(PDFBookmark bookmark) async {
-    await _firebaseService.createBookmark(bookmark);
+    if (_firebaseService.isAnonymous) {
+      final documentId = bookmark.documentId;
+      final bookmarksJson = _prefs.getStringList('bookmarks_$documentId') ?? [];
+      bookmarksJson.add(bookmark.toJson());
+      await _prefs.setStringList('bookmarks_$documentId', bookmarksJson);
+    } else {
+      await _firebaseService.addBookmark(bookmark);
+    }
   }
 
   @override
   Future<void> updateBookmark(PDFBookmark bookmark) async {
-    await _firebaseService.updateBookmark(bookmark);
+    if (_firebaseService.isAnonymous) {
+      final documentId = bookmark.documentId;
+      final bookmarksJson = _prefs.getStringList('bookmarks_$documentId') ?? [];
+      final index = bookmarksJson.indexWhere(
+        (json) => PDFBookmark.fromJson(json).id == bookmark.id,
+      );
+      if (index != -1) {
+        bookmarksJson[index] = bookmark.toJson();
+        await _prefs.setStringList('bookmarks_$documentId', bookmarksJson);
+      }
+    } else {
+      await _firebaseService.updateBookmark(bookmark);
+    }
   }
 
   @override
-  Future<void> deleteBookmark(String bookmarkId) async {
-    await _firebaseService.deleteBookmark(bookmarkId);
+  Future<void> deleteBookmark(String documentId, String bookmarkId) async {
+    if (_firebaseService.isAnonymous) {
+      final bookmarksJson = _prefs.getStringList('bookmarks_$documentId') ?? [];
+      bookmarksJson.removeWhere(
+        (json) => PDFBookmark.fromJson(json).id == bookmarkId,
+      );
+      await _prefs.setStringList('bookmarks_$documentId', bookmarksJson);
+    } else {
+      await _firebaseService.deleteBookmark(documentId, bookmarkId);
+    }
   }
 
   @override
-  Future<String> uploadPDFFile(String filePath, String fileName, {Uint8List? bytes}) async {
-    return await _firebaseService.uploadPDFFile(filePath, fileName, bytes: bytes);
+  Future<String> uploadPDFFile(Uint8List file) async {
+    if (_firebaseService.isAnonymous) {
+      // 익명 사용자는 로컬에 저장
+      final fileId = DateTime.now().millisecondsSinceEpoch.toString();
+      await _prefs.setString('pdf_file_$fileId', file.toString());
+      return fileId;
+    } else {
+      // 로그인 사용자는 Firebase Storage에 업로드
+      return await _firebaseService.uploadPDFFile(file);
+    }
   }
 
   @override
-  Future<void> deletePDFFile(String fileUrl) async {
-    await _firebaseService.deletePDFFile(fileUrl);
+  Future<void> deletePDFFile(String filePath) async {
+    if (_firebaseService.isAnonymous) {
+      // 익명 사용자는 로컬 스토리지에서 삭제
+      await _prefs.remove(filePath);
+    } else {
+      // 로그인 사용자는 Firebase Storage에서 삭제
+      await _firebaseService.deletePDFFile(filePath);
+    }
   }
 
   @override
   Future<int> getPageCount(String filePath) async {
-    // TODO: PDF 페이지 수 계산 로직 구현
-    return 0;
+    // TODO: 실제 PDF 파일의 페이지 수를 구하는 로직 구현
+    // 웹에서는 다른 방식으로 처리해야 할 수 있음
+    return 1;
   }
 
   @override
   Future<String> extractText(String filePath, int pageNumber) async {
-    // TODO: PDF 텍스트 추출 로직 구현
+    // TODO: 실제 PDF 파일에서 텍스트 추출 로직 구현
+    // 웹에서는 다른 방식으로 처리해야 할 수 있음
     return '';
+  }
+  
+  @override
+  Future<Map<String, dynamic>> getMetadata(String filePath) async {
+    // TODO: 실제 PDF 메타데이터 추출 로직 구현
+    return {};
   }
 
   @override
   void dispose() {
-    // 리소스 정리 로직
+    // 필요한 리소스 정리
   }
 } 

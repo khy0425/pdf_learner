@@ -8,7 +8,8 @@ enum PDFDocumentStatus {
   loaded,
   error,
   processing,
-  completed
+  completed,
+  created
 }
 
 /// PDF 문서의 중요도를 나타내는 열거형
@@ -16,7 +17,8 @@ enum PDFDocumentImportance {
   low,
   medium,
   high,
-  critical
+  critical,
+  normal
 }
 
 /// PDF 문서의 보안 수준을 나타내는 열거형
@@ -24,7 +26,8 @@ enum PDFDocumentSecurityLevel {
   none,
   basic,
   advanced,
-  encrypted
+  encrypted,
+  normal
 }
 
 /// PDF 문서 모델
@@ -177,58 +180,72 @@ class PDFDocument {
   });
 
   /// JSON 직렬화/역직렬화를 위한 팩토리 생성자
-  factory PDFDocument.fromJson(Map<String, dynamic> json) {
+  factory PDFDocument.fromJson(dynamic json) {
+    if (json is String) {
+      return PDFDocument.fromMap(jsonDecode(json));
+    } else if (json is Map<String, dynamic>) {
+      return PDFDocument.fromMap(json);
+    } else {
+      throw ArgumentError('Invalid JSON type: ${json.runtimeType}');
+    }
+  }
+
+  /// Map으로부터 PDFDocument 객체를 생성합니다.
+  factory PDFDocument.fromMap(Map<String, dynamic> map) {
     return PDFDocument(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      filePath: json['filePath'] as String,
-      fileSize: json['fileSize'] as int,
-      pageCount: json['pageCount'] as int,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
-      lastAccessedAt: json['lastAccessedAt'] != null 
-          ? DateTime.parse(json['lastAccessedAt'] as String) 
+      id: map['id'] as String,
+      title: map['title'] as String,
+      description: map['description'] as String,
+      filePath: map['filePath'] as String,
+      fileSize: map['fileSize'] as int,
+      pageCount: map['pageCount'] as int,
+      createdAt: DateTime.parse(map['createdAt']),
+      updatedAt: DateTime.parse(map['updatedAt']),
+      lastAccessedAt: map['lastAccessedAt'] != null 
+          ? DateTime.parse(map['lastAccessedAt'] as String) 
           : null,
-      lastModifiedAt: json['lastModifiedAt'] != null 
-          ? DateTime.parse(json['lastModifiedAt'] as String) 
+      lastModifiedAt: map['lastModifiedAt'] != null 
+          ? DateTime.parse(map['lastModifiedAt'] as String) 
           : null,
-      version: json['version'] as int,
-      isEncrypted: json['isEncrypted'] as bool,
-      encryptionKey: json['encryptionKey'] as String?,
-      isShared: json['isShared'] as bool,
-      shareId: json['shareId'] as String?,
-      shareUrl: json['shareUrl'] as String?,
-      shareExpiresAt: json['shareExpiresAt'] != null 
-          ? DateTime.parse(json['shareExpiresAt'] as String) 
+      version: map['version'] as int,
+      isEncrypted: map['isEncrypted'] as bool,
+      encryptionKey: map['encryptionKey'] as String?,
+      isShared: map['isShared'] as bool,
+      shareId: map['shareId'] as String?,
+      shareUrl: map['shareUrl'] as String?,
+      shareExpiresAt: map['shareExpiresAt'] != null 
+          ? DateTime.parse(map['shareExpiresAt'] as String) 
           : null,
-      readingProgress: json['readingProgress'] as double,
-      lastReadPage: json['lastReadPage'] as int,
-      totalReadingTime: json['totalReadingTime'] as int,
-      lastReadingTime: json['lastReadingTime'] as int,
-      thumbnailUrl: json['thumbnailUrl'] as String?,
-      isOcrEnabled: json['isOcrEnabled'] as bool,
-      ocrLanguage: json['ocrLanguage'] as String?,
-      ocrStatus: json['ocrStatus'] != null 
-          ? PDFDocumentStatus.values[json['ocrStatus'] as int]
+      readingProgress: map['readingProgress'] as double,
+      lastReadPage: map['lastReadPage'] as int,
+      totalReadingTime: map['totalReadingTime'] as int,
+      lastReadingTime: map['lastReadingTime'] as int,
+      thumbnailUrl: map['thumbnailUrl'] as String?,
+      isOcrEnabled: map['isOcrEnabled'] as bool,
+      ocrLanguage: map['ocrLanguage'] as String?,
+      ocrStatus: map['ocrStatus'] != null 
+          ? PDFDocumentStatus.values[map['ocrStatus'] as int]
           : null,
-      isSummarized: json['isSummarized'] as bool,
-      currentPage: json['currentPage'] as int,
-      isFavorite: json['isFavorite'] as bool,
-      isSelected: json['isSelected'] as bool,
-      readingTime: json['readingTime'] as int,
-      status: PDFDocumentStatus.values[json['status'] as int],
-      importance: PDFDocumentImportance.values[json['importance'] as int],
-      securityLevel: PDFDocumentSecurityLevel.values[json['securityLevel'] as int],
-      tags: (json['tags'] as List<dynamic>).map((e) => e as String).toList(),
-      bookmarks: (json['bookmarks'] as List<dynamic>)
-          .map((e) => PDFBookmark.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      metadata: json['metadata'] as Map<String, dynamic>,
+      isSummarized: map['isSummarized'] as bool,
+      currentPage: map['currentPage'] as int,
+      isFavorite: map['isFavorite'] as bool,
+      isSelected: map['isSelected'] as bool,
+      readingTime: map['readingTime'] as int,
+      status: PDFDocumentStatus.values[map['status'] as int],
+      importance: PDFDocumentImportance.values[map['importance'] as int],
+      securityLevel: PDFDocumentSecurityLevel.values[map['securityLevel'] as int],
+      tags: List<String>.from(map['tags']),
+      bookmarks: map['bookmarks'] != null
+          ? (map['bookmarks'] as List<dynamic>)
+              .map((e) => PDFBookmark.fromMap(e as Map<String, dynamic>))
+              .toList()
+          : [],
+      metadata: map['metadata'] as Map<String, dynamic>,
     );
   }
 
-  Map<String, dynamic> toJson() {
+  /// PDFDocument 객체를 Map으로 변환합니다.
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'title': title,
@@ -269,9 +286,12 @@ class PDFDocument {
     };
   }
 
+  /// PDFDocument 객체를 JSON 문자열로 변환합니다.
+  String toJson() => jsonEncode(toMap());
+
   static List<PDFDocument> listFromJson(String jsonString) {
     final List<dynamic> jsonList = json.decode(jsonString);
-    return jsonList.map((json) => PDFDocument.fromJson(json)).toList();
+    return jsonList.map((item) => PDFDocument.fromJson(item)).toList();
   }
 
   static String listToJson(List<PDFDocument> documents) {
