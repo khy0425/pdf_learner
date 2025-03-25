@@ -1,57 +1,154 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
-
-part 'pdf_bookmark.freezed.dart';
-part 'pdf_bookmark.g.dart';
+import 'dart:convert';
 
 /// PDF 북마크 모델
 /// 
 /// PDF 문서의 특정 페이지에 대한 북마크 정보를 관리합니다.
-@freezed
-class PDFBookmark with _$PDFBookmark {
-  const factory PDFBookmark({
-    /// 북마크 고유 ID
-    required String id,
-    
-    /// 문서 ID
-    required String documentId,
-    
-    /// 페이지 번호
-    required int pageNumber,
-    
-    /// 북마크 제목
-    required String title,
-    
-    /// 북마크 설명
-    String? description,
-    
-    /// 생성일시
-    required DateTime createdAt,
-    
-    /// 마지막 접근일시
-    DateTime? lastAccessedAt,
-    
-    /// 북마크 태그 목록
-    @Default([]) List<String> tags,
-    
-    /// 북마크 색상
-    @Default('#FFEB3B') String color,
-    
-    /// 북마크 위치 (페이지 내 Y 좌표)
-    @Default(0.0) double position,
-    
-    /// 북마크 텍스트 선택 영역
-    String? selectedText,
-    
-    /// 북마크 노트
-    String? note,
-    
-    /// 북마크 중요도 (1-5)
-    @Default(3) int importance,
-  }) = _PDFBookmark;
+class PDFBookmark {
+  /// 북마크 고유 ID
+  final String id;
+  
+  /// 문서 ID
+  final String documentId;
+  
+  /// 페이지 번호
+  final int pageNumber;
+  
+  /// 북마크 제목
+  final String title;
+  
+  /// 북마크 설명
+  final String description;
+  
+  /// 생성일시
+  final DateTime createdAt;
+  
+  /// 마지막 접근일시
+  final DateTime? lastAccessedAt;
+  
+  /// 마지막 수정일시
+  final DateTime? lastModifiedAt;
+  
+  /// 북마크 태그 목록
+  final List<String> tags;
+  
+  /// 북마크 메모
+  final String note;
+  
+  /// 북마크 메타데이터
+  final Map<String, dynamic> metadata;
+  
+  /// 북마크가 즐겨찾기인지 여부
+  final bool isFavorite;
+  
+  /// 북마크가 선택된 상태인지 여부
+  final bool isSelected;
+
+  const PDFBookmark({
+    required this.id,
+    required this.documentId,
+    required this.pageNumber,
+    required this.title,
+    required this.description,
+    required this.createdAt,
+    this.lastAccessedAt,
+    this.lastModifiedAt,
+    required this.tags,
+    required this.note,
+    required this.metadata,
+    required this.isFavorite,
+    required this.isSelected,
+  });
 
   /// JSON 직렬화/역직렬화를 위한 팩토리 생성자
-  factory PDFBookmark.fromJson(Map<String, dynamic> json) =>
-      _$PDFBookmarkFromJson(json);
+  factory PDFBookmark.fromJson(Map<String, dynamic> json) {
+    return PDFBookmark(
+      id: json['id'] as String,
+      documentId: json['documentId'] as String,
+      pageNumber: json['pageNumber'] as int,
+      title: json['title'] as String,
+      description: json['description'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      lastAccessedAt: json['lastAccessedAt'] != null 
+          ? DateTime.parse(json['lastAccessedAt'] as String) 
+          : null,
+      lastModifiedAt: json['lastModifiedAt'] != null 
+          ? DateTime.parse(json['lastModifiedAt'] as String) 
+          : null,
+      tags: (json['tags'] as List<dynamic>).map((e) => e as String).toList(),
+      note: json['note'] as String,
+      metadata: json['metadata'] as Map<String, dynamic>,
+      isFavorite: json['isFavorite'] as bool,
+      isSelected: json['isSelected'] as bool,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'documentId': documentId,
+      'pageNumber': pageNumber,
+      'title': title,
+      'description': description,
+      'createdAt': createdAt.toIso8601String(),
+      'lastAccessedAt': lastAccessedAt?.toIso8601String(),
+      'lastModifiedAt': lastModifiedAt?.toIso8601String(),
+      'tags': tags,
+      'note': note,
+      'metadata': metadata,
+      'isFavorite': isFavorite,
+      'isSelected': isSelected,
+    };
+  }
+
+  /// 기본 북마크 생성
+  factory PDFBookmark.createDefault() {
+    return PDFBookmark(
+      id: '',
+      documentId: '',
+      pageNumber: 0,
+      title: '',
+      description: '',
+      createdAt: DateTime.now(),
+      tags: [],
+      note: '',
+      metadata: {},
+      isFavorite: false,
+      isSelected: false,
+    );
+  }
+  
+  /// 복사본 생성
+  PDFBookmark copyWith({
+    String? id,
+    String? documentId,
+    int? pageNumber,
+    String? title,
+    String? description,
+    DateTime? createdAt,
+    DateTime? lastAccessedAt,
+    DateTime? lastModifiedAt,
+    List<String>? tags,
+    String? note,
+    Map<String, dynamic>? metadata,
+    bool? isFavorite,
+    bool? isSelected,
+  }) {
+    return PDFBookmark(
+      id: id ?? this.id,
+      documentId: documentId ?? this.documentId,
+      pageNumber: pageNumber ?? this.pageNumber,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      createdAt: createdAt ?? this.createdAt,
+      lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
+      tags: tags ?? this.tags,
+      note: note ?? this.note,
+      metadata: metadata ?? this.metadata,
+      isFavorite: isFavorite ?? this.isFavorite,
+      isSelected: isSelected ?? this.isSelected,
+    );
+  }
 }
 
 /// PDF 북마크 확장 메서드
@@ -62,8 +159,8 @@ extension PDFBookmarkX on PDFBookmark {
            documentId.isNotEmpty &&
            pageNumber > 0 &&
            createdAt.isBefore(DateTime.now()) &&
-           createdAt.isBefore(lastAccessedAt) &&
-           (DateTime.now().difference(lastAccessedAt ?? DateTime.now())).inMinutes <= 5;
+           (lastAccessedAt == null || createdAt.isBefore(lastAccessedAt!)) &&
+           (DateTime.now().difference(lastAccessedAt ?? createdAt)).inMinutes <= 5;
   }
   
   /// 북마크가 활성 상태인지 검사합니다.
@@ -83,14 +180,14 @@ extension PDFBookmarkX on PDFBookmark {
   
   /// 북마크의 색상을 ARGB 형식의 문자열로 반환합니다.
   String get colorString {
-    if (color.isEmpty) return '#FF000000';
-    return color;
+    if (metadata.isEmpty) return '#FF0000';
+    return metadata['color'] ?? '#FF0000';
   }
   
   /// 북마크의 마지막 접근 시간을 상대적 시간 문자열로 반환합니다.
   String get lastAccessedTimeAgo {
     final now = DateTime.now();
-    final difference = now.difference(lastAccessedAt ?? DateTime.now());
+    final difference = now.difference(lastAccessedAt ?? createdAt);
     
     if (difference.inDays > 365) {
       return '${(difference.inDays / 365).floor()}년 전';
@@ -110,7 +207,7 @@ extension PDFBookmarkX on PDFBookmark {
   /// 북마크의 메타데이터를 업데이트합니다.
   PDFBookmark updateMetadata(Map<String, dynamic> newMetadata) {
     return copyWith(
-      updatedAt: DateTime.now(),
+      metadata: newMetadata,
     );
   }
   
@@ -118,23 +215,23 @@ extension PDFBookmarkX on PDFBookmark {
   PDFBookmark updateTags(List<String> newTags) {
     return copyWith(
       tags: newTags,
-      updatedAt: DateTime.now(),
     );
   }
   
   /// 북마크의 색상을 업데이트합니다.
   PDFBookmark updateColor(String newColor) {
     return copyWith(
-      color: newColor,
-      updatedAt: DateTime.now(),
+      metadata: {
+        ...metadata,
+        'color': newColor,
+      },
     );
   }
   
   /// 북마크의 메모를 업데이트합니다.
-  PDFBookmark updateNote(String? newNote) {
+  PDFBookmark updateNote(String newNote) {
     return copyWith(
       note: newNote,
-      updatedAt: DateTime.now(),
     );
   }
   
@@ -142,7 +239,6 @@ extension PDFBookmarkX on PDFBookmark {
   PDFBookmark updatePageNumber(int newPageNumber) {
     return copyWith(
       pageNumber: newPageNumber,
-      updatedAt: DateTime.now(),
     );
   }
 } 

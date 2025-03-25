@@ -1,116 +1,263 @@
 import 'package:flutter/foundation.dart';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
+import 'package:injectable/injectable.dart';
 import 'package:file_picker/file_picker.dart';
-import '../models/pdf_document.dart';
+import 'package:path/path.dart' as path;
+import '../../domain/repositories/pdf_repository.dart';
+import '../../domain/models/pdf_document.dart';
+import '../../domain/models/pdf_bookmark.dart';
 
-/// PDF 문서 관리를 위한 뷰모델
-class PdfViewModel extends ChangeNotifier {
-  /// 현재 로드된 PDF 문서 목록
-  List<PdfDocument> _documents = [];
+/// PDF 상태
+enum PDFStatus {
+  initial,
+  loading,
+  loaded,
+  error
+}
+
+/// PDF 뷰모델
+@injectable
+class PDFViewModel extends ChangeNotifier {
+  final PDFRepository _repository;
   
-  /// 현재 선택된 PDF 문서
-  PdfDocument? _selectedDocument;
-  
-  /// 문서 열기 상태 추적
-  bool _isLoading = false;
+  PDFStatus _status = PDFStatus.initial;
+  List<PDFDocument> _documents = [];
+  PDFDocument? _currentDocument;
   String? _error;
   
-  /// 게터
-  List<PdfDocument> get documents => _documents;
-  PdfDocument? get selectedDocument => _selectedDocument;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  bool get hasDocuments => _documents.isNotEmpty;
+  PDFViewModel(this._repository);
   
-  /// 로컬 스토리지에서 모든 PDF 불러오기
+  // 게터
+  PDFStatus get status => _status;
+  List<PDFDocument> get documents => _documents;
+  PDFDocument? get currentDocument => _currentDocument;
+  List<PDFBookmark> get bookmarks => _currentDocument?.bookmarks ?? [];
+  String? get error => _error;
+  bool get isLoading => _status == PDFStatus.loading;
+  
   Future<void> loadDocuments() async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
-      
-      final directory = await getApplicationDocumentsDirectory();
-      final documentsDir = Directory('${directory.path}/pdfs');
-      
-      if (!await documentsDir.exists()) {
-        await documentsDir.create(recursive: true);
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-      
-      final files = await documentsDir.list().where((file) => file.path.endsWith('.pdf')).toList();
-      final metadataFiles = await documentsDir.list().where((file) => file.path.endsWith('.metadata')).toList();
-      
-      _documents = [];
-      
-      for (var file in files) {
-        final fileName = file.path.split('/').last;
-        final id = fileName.replaceAll('.pdf', '');
-        
-        // 메타데이터 파일 찾기
-        final metadataFile = metadataFiles.firstWhere(
-          (f) => f.path.contains(id) && f.path.endsWith('.metadata'),
-          orElse: () => File(''),
-        );
-        
-        if (metadataFile.path.isNotEmpty) {
-          final metadataString = await File(metadataFile.path).readAsString();
-          final metadata = jsonDecode(metadataString);
-          
-          _documents.add(PdfDocument(
-            id: id,
-            title: metadata['title'] ?? fileName,
-            path: file.path,
-            size: await File(file.path).length(),
-            pageCount: metadata['pageCount'] ?? 0,
-            lastOpened: DateTime.parse(metadata['lastOpened'] ?? DateTime.now().toIso8601String()),
-            createdAt: DateTime.parse(metadata['createdAt'] ?? DateTime.now().toIso8601String()),
-          ));
-        } else {
-          // 메타데이터 없는 경우 기본값으로 생성
-          _documents.add(PdfDocument(
-            id: id,
-            title: fileName,
-            path: file.path,
-            size: await File(file.path).length(),
-            pageCount: 0,
-            lastOpened: DateTime.now(),
-            createdAt: DateTime.now(),
-          ));
-        }
-      }
-      
-      // 최근에 열어본 순으로 정렬
-      _documents.sort((a, b) => b.lastOpened.compareTo(a.lastOpened));
+      final docs = await _repository.getDocuments();
+      _documents = docs;
+      _status = PDFStatus.loaded;
     } catch (e) {
-      _error = '문서를 불러오는 중 오류가 발생했습니다: $e';
-    } finally {
-      _isLoading = false;
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> loadDocument(String id) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      final document = await _repository.getDocument(id);
+      if (document != null) {
+        _currentDocument = document;
+        _status = PDFStatus.loaded;
+      } else {
+        _error = '문서를 찾을 수 없습니다.';
+        _status = PDFStatus.error;
+      }
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> createDocument(PDFDocument document) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _repository.createDocument(document);
+      await loadDocuments();
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
       notifyListeners();
     }
   }
   
-  /// PDF 문서 선택
-  void selectDocument(String id) {
-    _selectedDocument = _documents.firstWhere((doc) => doc.id == id);
-    // 마지막 열람 시간 업데이트
-    _selectedDocument = _selectedDocument!.copyWith(lastOpened: DateTime.now());
-    _updateDocumentMetadata(_selectedDocument!);
+  Future<void> updateDocument(PDFDocument document) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _repository.updateDocument(document);
+      
+      // 현재 문서 업데이트
+      if (_currentDocument?.id == document.id) {
+        _currentDocument = document;
+      }
+      
+      // 문서 목록 업데이트
+      final index = _documents.indexWhere((doc) => doc.id == document.id);
+      if (index != -1) {
+        _documents[index] = document;
+      }
+      
+      _status = PDFStatus.loaded;
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
     notifyListeners();
   }
   
-  /// PDF 문서 추가 (파일 선택 다이얼로그 통해)
-  Future<void> addDocumentFromPicker() async {
+  Future<void> deleteDocument(String id) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
     try {
-      _isLoading = true;
+      await _repository.deleteDocument(id);
+      
+      // 현재 문서인 경우 초기화
+      if (_currentDocument?.id == id) {
+        _currentDocument = null;
+      }
+      
+      // 문서 목록에서 제거
+      _documents.removeWhere((doc) => doc.id == id);
+      
+      _status = PDFStatus.loaded;
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> createBookmark(PDFBookmark bookmark) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _repository.createBookmark(bookmark);
+      
+      // 현재 문서의 북마크 업데이트
+      if (_currentDocument != null && _currentDocument!.id == bookmark.documentId) {
+        final updatedBookmarks = [...(_currentDocument!.bookmarks), bookmark];
+        _currentDocument = _currentDocument!.copyWith(bookmarks: updatedBookmarks);
+      }
+      
+      _status = PDFStatus.loaded;
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> updateBookmark(PDFBookmark bookmark) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _repository.updateBookmark(bookmark);
+      
+      // 현재 문서의 북마크 업데이트
+      if (_currentDocument != null) {
+        final updatedBookmarks = _currentDocument!.bookmarks.map((b) => 
+          b.id == bookmark.id ? bookmark : b
+        ).toList();
+        
+        _currentDocument = _currentDocument!.copyWith(bookmarks: updatedBookmarks);
+      }
+      
+      _status = PDFStatus.loaded;
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<void> deleteBookmark(String bookmarkId) async {
+    _status = PDFStatus.loading;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      await _repository.deleteBookmark(bookmarkId);
+      
+      // 현재 문서의 북마크 업데이트
+      if (_currentDocument != null) {
+        final updatedBookmarks = _currentDocument!.bookmarks
+            .where((b) => b.id != bookmarkId)
+            .toList();
+        
+        _currentDocument = _currentDocument!.copyWith(bookmarks: updatedBookmarks);
+      }
+      
+      _status = PDFStatus.loaded;
+    } catch (e) {
+      _error = e.toString();
+      _status = PDFStatus.error;
+    }
+    
+    notifyListeners();
+  }
+  
+  Future<int> getPageCount(String filePath) async {
+    try {
+      return await _repository.getPageCount(filePath);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return 0;
+    }
+  }
+  
+  Future<String> extractText(String filePath, int pageNumber) async {
+    try {
+      return await _repository.extractText(filePath, pageNumber);
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return '';
+    }
+  }
+  
+  void setCurrentDocument(PDFDocument document) {
+    _currentDocument = document;
+    notifyListeners();
+  }
+  
+  void clearError() {
+    _error = null;
+    if (_status == PDFStatus.error) {
+      _status = _documents.isNotEmpty ? PDFStatus.loaded : PDFStatus.initial;
+    }
+    notifyListeners();
+  }
+  
+  // PDF 파일 선택 및 추가
+  Future<void> pickAndAddPDF() async {
+    try {
+      _status = PDFStatus.loading;
       _error = null;
       notifyListeners();
       
+      // 파일 피커 열기
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
@@ -119,107 +266,118 @@ class PdfViewModel extends ChangeNotifier {
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         
+        // 웹 환경인 경우
         if (kIsWeb) {
-          // 웹에서는 bytes로 처리
           if (file.bytes != null) {
-            await _saveDocument(file.name, file.bytes!);
+            final fileName = file.name;
+            final fileUrl = await _repository.uploadPDFFile('', fileName, bytes: file.bytes);
+            
+            // 새 문서 생성
+            final newDocument = PDFDocument(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              title: path.basenameWithoutExtension(fileName),
+              description: '',
+              filePath: fileUrl,
+              fileSize: file.size,
+              pageCount: 0, // 나중에 업데이트
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              version: 1,
+              isEncrypted: false,
+              isShared: false,
+              isFavorite: false,
+              isSelected: false,
+              isOcrEnabled: false,
+              isSummarized: false,
+              readingProgress: 0.0,
+              lastReadPage: 0,
+              totalReadingTime: 0,
+              lastReadingTime: 0,
+              readingTime: 0,
+              currentPage: 0,
+              bookmarks: [],
+              tags: [],
+              metadata: {},
+              status: PDFDocumentStatus.initial,
+              importance: PDFDocumentImportance.medium,
+              securityLevel: PDFDocumentSecurityLevel.none,
+            );
+            
+            await createDocument(newDocument);
           }
-        } else {
-          // 모바일/데스크톱에서는 path로 처리
-          if (file.path != null) {
-            final fileBytes = await File(file.path!).readAsBytes();
-            await _saveDocument(file.name, fileBytes);
-          }
+        } 
+        // 네이티브 환경인 경우
+        else if (file.path != null) {
+          final filePath = file.path!;
+          final fileName = file.name;
+          final fileUrl = await _repository.uploadPDFFile(filePath, fileName);
+          
+          // 새 문서 생성
+          final newDocument = PDFDocument(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: path.basenameWithoutExtension(fileName),
+            description: '',
+            filePath: fileUrl,
+            fileSize: file.size,
+            pageCount: await getPageCount(filePath),
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            version: 1,
+            isEncrypted: false,
+            isShared: false,
+            isFavorite: false,
+            isSelected: false,
+            isOcrEnabled: false,
+            isSummarized: false,
+            readingProgress: 0.0,
+            lastReadPage: 0,
+            totalReadingTime: 0,
+            lastReadingTime: 0,
+            readingTime: 0,
+            currentPage: 0,
+            bookmarks: [],
+            tags: [],
+            metadata: {},
+            status: PDFDocumentStatus.initial,
+            importance: PDFDocumentImportance.medium,
+            securityLevel: PDFDocumentSecurityLevel.none,
+          );
+          
+          await createDocument(newDocument);
         }
       }
+      
+      _status = PDFStatus.loaded;
     } catch (e) {
-      _error = '문서 추가 중 오류가 발생했습니다: $e';
+      _error = e.toString();
+      _status = PDFStatus.error;
     } finally {
-      _isLoading = false;
       notifyListeners();
     }
   }
   
-  /// PDF 문서 저장
-  Future<void> _saveDocument(String fileName, Uint8List bytes) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final documentsDir = Directory('${directory.path}/pdfs');
-    
-    if (!await documentsDir.exists()) {
-      await documentsDir.create(recursive: true);
-    }
-    
-    final id = const Uuid().v4();
-    final filePath = '${documentsDir.path}/$id.pdf';
-    final metadataPath = '${documentsDir.path}/$id.metadata';
-    
-    // PDF 파일 저장
-    await File(filePath).writeAsBytes(bytes);
-    
-    // 메타데이터 생성 및 저장
-    final document = PdfDocument(
-      id: id,
-      title: fileName,
-      path: filePath,
-      size: bytes.length,
-      pageCount: 0, // TODO: PDF 페이지 수 계산 로직 추가
-      lastOpened: DateTime.now(),
-      createdAt: DateTime.now(),
-    );
-    
-    await _updateDocumentMetadata(document);
-    
-    _documents.add(document);
-    _selectedDocument = document;
-    notifyListeners();
-  }
-  
-  /// 문서 메타데이터 업데이트
-  Future<void> _updateDocumentMetadata(PdfDocument document) async {
-    final metadataPath = document.path.replaceAll('.pdf', '.metadata');
-    
-    final metadata = {
-      'title': document.title,
-      'pageCount': document.pageCount,
-      'lastOpened': document.lastOpened.toIso8601String(),
-      'createdAt': document.createdAt.toIso8601String(),
-    };
-    
-    await File(metadataPath).writeAsString(jsonEncode(metadata));
-    
-    // 문서 목록에서 해당 문서 업데이트
-    final index = _documents.indexWhere((doc) => doc.id == document.id);
-    if (index >= 0) {
-      _documents[index] = document;
-    }
-  }
-  
-  /// 문서 삭제
-  Future<void> deleteDocument(String id) async {
+  // 즐겨찾기 토글
+  Future<void> toggleFavorite(String documentId) async {
     try {
-      final document = _documents.firstWhere((doc) => doc.id == id);
-      
-      // PDF 파일 삭제
-      await File(document.path).delete();
-      
-      // 메타데이터 파일 삭제
-      final metadataPath = document.path.replaceAll('.pdf', '.metadata');
-      final metadataFile = File(metadataPath);
-      if (await metadataFile.exists()) {
-        await metadataFile.delete();
+      // 문서 찾기
+      final docIndex = _documents.indexWhere((doc) => doc.id == documentId);
+      if (docIndex == -1) {
+        _error = '문서를 찾을 수 없습니다.';
+        notifyListeners();
+        return;
       }
       
-      // 목록에서 제거
-      _documents.removeWhere((doc) => doc.id == id);
+      // 업데이트할 문서
+      final document = _documents[docIndex];
+      final updatedDocument = document.copyWith(
+        isFavorite: !document.isFavorite,
+        updatedAt: DateTime.now(),
+      );
       
-      // 선택된 문서가 삭제된 경우 null로 설정
-      if (_selectedDocument?.id == id) {
-        _selectedDocument = null;
-      }
-      
-      notifyListeners();
+      // 문서 업데이트
+      await updateDocument(updatedDocument);
     } catch (e) {
-      _error = '문서 삭제 중 오류가 발생했습니다: $e';
+      _error = e.toString();
       notifyListeners();
     }
   }

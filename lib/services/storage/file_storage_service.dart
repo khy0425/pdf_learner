@@ -9,10 +9,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/pdf_document.dart';
 import 'dart:convert';
 import '../utils/web_utils.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
-/// 파일 스토리지 서비스
-/// 파일의 저장, 로드, 삭제 등 파일 관련 작업 처리
+/// 파일 저장소 서비스
+/// 
+/// PDF 파일을 로컬 또는 원격 저장소에 저장하고 관리합니다.
 class FileStorageService {
+  final FirebaseStorage _storage;
+
+  FileStorageService(this._storage);
+
   static const String _documentsKey = 'pdf_documents';
   static const String _documentsDir = 'documents';
   static const String _thumbnailsDir = 'thumbnails';
@@ -312,13 +318,11 @@ class FileStorageService {
         final base64Data = WebUtils.bytesToBase64(bytes);
         WebUtils.saveToLocalStorage('file_$fileName', base64Data);
         return 'file_$fileName';
-      } else {
-        // 네이티브에서는 파일로 저장
-        final dir = await _documentsDirectory;
-        final file = File('${dir.path}/$fileName');
-        await file.writeAsBytes(bytes);
-        return file.path;
       }
+
+      final ref = _storage.ref().child('pdfs/$fileName');
+      await ref.putData(bytes);
+      return await ref.getDownloadURL();
     } catch (e) {
       debugPrint('파일 저장 중 오류 발생: $e');
       return null;
@@ -330,14 +334,14 @@ class FileStorageService {
       if (WebUtils.isWeb()) {
         // Web에서는 base64에서 로드
         final base64Data = WebUtils.loadFromLocalStorage(filePath);
-        if (base64Data == null) return null;
-        return WebUtils.base64ToBytes(base64Data);
-      } else {
-        // 네이티브에서는 파일에서 로드
-        final file = File(filePath);
-        if (!await file.exists()) return null;
-        return await file.readAsBytes();
+        if (base64Data != null) {
+          return WebUtils.base64ToBytes(base64Data);
+        }
+        return null;
       }
+
+      final ref = _storage.refFromURL(filePath);
+      return await ref.getData();
     } catch (e) {
       debugPrint('파일 로드 중 오류 발생: $e');
       return null;

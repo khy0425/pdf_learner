@@ -4,6 +4,49 @@
 /// html 네임스페이스의 스텁 파일
 /// 웹이 아닌 환경에서 dart:html을 import할 때 사용됩니다.
 
+/// PromiseJsImpl 스텁
+import 'dart:async';
+
+class PromiseJsImpl<T> {
+  final Future<T> _future;
+
+  PromiseJsImpl([Future<T>? future]) : _future = future ?? Future.value();
+
+  static PromiseJsImpl<T> resolve<T>(T value) {
+    return PromiseJsImpl<T>(Future.value(value));
+  }
+
+  static PromiseJsImpl<T> reject<T>(dynamic error) {
+    return PromiseJsImpl<T>(Future.error(error));
+  }
+
+  PromiseJsImpl<R> then<R>(Function(T) onFulfilled, [Function? onRejected]) {
+    return PromiseJsImpl<R>(
+      _future.then(
+        (value) => onFulfilled(value),
+        onError: onRejected != null ? (error) => onRejected(error) : null,
+      ),
+    );
+  }
+
+  PromiseJsImpl<T> catchError(Function onError) {
+    return PromiseJsImpl<T>(
+      _future.catchError((error) => onError(error)),
+    );
+  }
+
+  PromiseJsImpl<T> whenComplete(Function action) {
+    return PromiseJsImpl<T>(
+      _future.whenComplete(() => action()),
+    );
+  }
+
+  Future<T> toFuture() => _future;
+
+  static Future<T> resolveToFuture<T>(PromiseJsImpl<T> promise) => promise.toFuture();
+  static Future<T> rejectToFuture<T>(PromiseJsImpl<T> promise) => promise.toFuture();
+}
+
 /// html의 window 스텁
 class Window {
   Location location = Location();
@@ -287,4 +330,9 @@ class Storage {
   void setItem(String key, String value) {}
   void removeItem(String key) {}
   void clear() {}
-} 
+}
+
+// 유틸리티 함수들
+dynamic jsify(dynamic dartObject) => dartObject;
+dynamic dartify(dynamic jsObject) => jsObject;
+dynamic handleThenable(dynamic jsPromise) => jsPromise; 

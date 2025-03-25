@@ -18,7 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="PDF 학습 애플리케이션">
+  <meta name="description" content="PDF Learner - AI-powered PDF learning platform">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   
   <!-- CORS 및 Content-Security-Policy 설정 -->
@@ -41,17 +41,117 @@
   <link rel="manifest" href="manifest.json">
 
   <script>
-    // The value below is injected by flutter build, do not touch.
-    var serviceWorkerVersion = null;
+    // JavaScript 인터페이스 설정
+    window.PromiseJsImpl = Promise;
+    window.handleThenable = function(promise) {
+      return Promise.resolve(promise);
+    };
+    window.jsify = function(obj) {
+      if (obj === null || obj === undefined) return obj;
+      if (Array.isArray(obj)) {
+        return obj.map(window.jsify);
+      }
+      if (typeof obj === 'object') {
+        const result = {};
+        for (const key in obj) {
+          result[key] = window.jsify(obj[key]);
+        }
+        return result;
+      }
+      return obj;
+    };
+    window.dartify = function(obj) {
+      if (obj === null || obj === undefined) return obj;
+      if (Array.isArray(obj)) {
+        return obj.map(window.dartify);
+      }
+      if (typeof obj === 'object') {
+        const result = {};
+        for (const key in obj) {
+          result[key] = window.dartify(obj[key]);
+        }
+        return result;
+      }
+      return obj;
+    };
+
+    // JavaScript 내장 객체 및 함수 설정
+    window.js = {
+      Promise: Promise,
+      Object: Object,
+      Array: Array,
+      Function: Function,
+      String: String,
+      Number: Number,
+      Boolean: Boolean,
+      Date: Date,
+      RegExp: RegExp,
+      Error: Error,
+      Map: Map,
+      Set: Set,
+      Symbol: Symbol,
+      parseInt: parseInt,
+      parseFloat: parseFloat,
+      isNaN: isNaN,
+      isFinite: isFinite,
+      decodeURI: decodeURI,
+      decodeURIComponent: decodeURIComponent,
+      encodeURI: encodeURI,
+      encodeURIComponent: encodeURIComponent,
+      escape: escape,
+      unescape: unescape
+    };
+
+    // Firebase 인터페이스 설정
+    window.core_interop = {
+      jsify: window.jsify,
+      dartify: window.dartify
+    };
+
+    // PDF.js 설정
+    window.pdfjsLib = {
+      GlobalWorkerOptions: {
+        workerSrc: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+      }
+    };
+
+    // Promise 관련 유틸리티 함수
+    window.promiseUtils = {
+      resolve: function(value) {
+        return Promise.resolve(value);
+      },
+      reject: function(error) {
+        return Promise.reject(error);
+      },
+      toFuture: function(promise) {
+        return Promise.resolve(promise);
+      }
+    };
+
+    const serviceWorkerVersion = null;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('flutter_service_worker.js?v=' + serviceWorkerVersion);
+    }
   </script>
   
-  <!-- PDF.js 스크립트 추가 -->
+  <!-- PDF.js 스크립트 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  </script>
   
-  <!-- This script adds the flutter initialization JS code -->
+  <!-- Flutter 웹 초기화 -->
   <script src="flutter.js" defer></script>
   
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-analytics-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-crashlytics-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-performance-compat.js"></script>
+
   <style>
     /* PDF 뷰어 관련 스타일 */
     .pdf-container {
@@ -92,124 +192,18 @@
   
   <script>
     window.addEventListener('load', function(ev) {
-      // PDF.js 초기화 설정
-      window.pdfjsLib = window.pdfjsLib || {};
-      window.pdfjsLib.GlobalWorkerOptions = window.pdfjsLib.GlobalWorkerOptions || {};
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      
-      // Download main.dart.js
+      // Flutter 웹 엔트리포인트 로드
       _flutter.loader.loadEntrypoint({
         serviceWorker: {
           serviceWorkerVersion: serviceWorkerVersion,
         },
         onEntrypointLoaded: function(engineInitializer) {
-          engineInitializer.initializeEngine({
-            hostElement: document.querySelector('#flutter-target')
-          }).then(function(appRunner) {
-            return appRunner.runApp();
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            appRunner.runApp();
           });
         }
       });
     });
-    
-    // PDF.js 메시지 리스너 설정
-    window.addEventListener('message', function(e) {
-      console.log('[PDF 메시지 처리기] 메시지 수신:', e.data);
-      
-      // PDF.js iframe에서 오는 메시지 처리
-      if (e.data && (typeof e.data === 'string')) {
-        if (e.data.startsWith('pdfInfo:') || e.data.startsWith('{')) {
-          console.log('[PDF 메시지 처리기] Flutter에 전달:', e.data);
-          window.parent.postMessage(e.data, '*');
-        }
-      }
-      
-      // JSON 객체인 경우 문자열로 변환하여 전달
-      if (e.data && typeof e.data === 'object') {
-        try {
-          const jsonStr = JSON.stringify(e.data);
-          console.log('[PDF 메시지 처리기] 객체를 JSON으로 전달:', jsonStr);
-          window.parent.postMessage(jsonStr, '*');
-        } catch (err) {
-          console.error('[PDF 메시지 처리기] JSON 변환 오류:', err);
-        }
-      }
-    }, false);
-    
-    // PDF 뷰어 설정 헬퍼 함수
-    window.setupPdfViewer = function(iframeId, pdfUrl) {
-      console.log('[PDF 초기화] iframe 설정 시작:', iframeId, pdfUrl);
-      
-      const iframe = document.getElementById(iframeId);
-      if (!iframe) {
-        console.error('[PDF 초기화] iframe을 찾을 수 없음:', iframeId);
-        return false;
-      }
-      
-      try {
-        // iframe 로드 완료 후 PDF.js 설정
-        iframe.onload = function() {
-          console.log('[PDF 초기화] iframe 로드 완료');
-          
-          try {
-            const iframeWindow = iframe.contentWindow;
-            if (!iframeWindow) {
-              console.error('[PDF 초기화] iframe contentWindow 접근 불가');
-              return;
-            }
-            
-            // PDFViewerApplication이 초기화될 때까지 확인
-            const checkInit = function() {
-              try {
-                if (iframeWindow.PDFViewerApplication && iframeWindow.PDFViewerApplication.initialized) {
-                  console.log('[PDF 초기화] PDFViewerApplication 초기화 완료');
-                  
-                  // 페이지 변경 이벤트 설정
-                  if (iframeWindow.PDFViewerApplication.eventBus) {
-                    iframeWindow.PDFViewerApplication.eventBus.on('pagechanging', function(evt) {
-                      const message = JSON.stringify({
-                        type: 'pagechange',
-                        page: evt.pageNumber,
-                        total: iframeWindow.PDFViewerApplication.pagesCount
-                      });
-                      window.parent.postMessage(message, '*');
-                    });
-                    
-                    // 초기 페이지 정보 전송
-                    window.parent.postMessage(JSON.stringify({
-                      type: 'pageinfo',
-                      page: iframeWindow.PDFViewerApplication.page,
-                      total: iframeWindow.PDFViewerApplication.pagesCount
-                    }), '*');
-                  }
-                  
-                  return true;
-                } else {
-                  setTimeout(checkInit, 500);
-                  return false;
-                }
-              } catch (e) {
-                console.error('[PDF 초기화] 초기화 확인 오류:', e);
-                setTimeout(checkInit, 500);
-                return false;
-              }
-            };
-            
-            // 초기화 체크 시작
-            checkInit();
-          } catch (e) {
-            console.error('[PDF 초기화] iframe 설정 오류:', e);
-          }
-        };
-        
-        return true;
-      } catch (e) {
-        console.error('[PDF 초기화] 전체 오류:', e);
-        return false;
-      }
-    };
   </script>
-  
-  <!-- Firebase 관련 스크립트와 초기화 코드는 Flutter 앱 내부에서 firebase_core 플러그인으로 처리합니다 -->
 </body>
 </html>

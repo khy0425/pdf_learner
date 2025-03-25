@@ -1,37 +1,32 @@
 import 'dart:io';
+import 'dart:typed_data';
 import '../models/pdf_document.dart';
 import '../models/pdf_bookmark.dart';
 
 /// PDF 문서 관리를 위한 리포지토리 인터페이스
 abstract class PDFRepository {
-  /// 문서 가져오기
-  Future<PDFDocument?> getDocument(String id);
-  
-  /// 문서 목록 가져오기
+  /// 문서 관련 메서드
   Future<List<PDFDocument>> getDocuments();
-  
-  /// PDF 파일 가져오기
-  Future<PDFDocument> importPDF(File file);
-  
-  /// 문서 업데이트
+  Future<PDFDocument?> getDocument(String documentId);
+  Future<void> createDocument(PDFDocument document);
   Future<void> updateDocument(PDFDocument document);
+  Future<void> deleteDocument(String documentId);
   
-  /// 문서 삭제
-  Future<void> deleteDocument(String id);
-  
-  /// 북마크 목록 가져오기
+  /// 북마크 관련 메서드
   Future<List<PDFBookmark>> getBookmarks(String documentId);
-  
-  /// 북마크 추가
-  Future<void> addBookmark(PDFBookmark bookmark);
-  
-  /// 북마크 삭제
+  Future<PDFBookmark?> getBookmark(String bookmarkId);
+  Future<void> createBookmark(PDFBookmark bookmark);
+  Future<void> updateBookmark(PDFBookmark bookmark);
   Future<void> deleteBookmark(String bookmarkId);
+  
+  /// 파일 관련 메서드
+  Future<String> uploadPDFFile(String filePath, String fileName, {Uint8List? bytes});
+  Future<void> deletePDFFile(String fileUrl);
+  
+  /// PDF 처리 관련 메서드
+  Future<int> getPageCount(String filePath);
+  Future<String> extractText(String filePath, int pageNumber);
   
   /// 리소스 정리
   void dispose();
-
-  Future<PDFDocument> addDocument(PDFDocument document);
-  Future<PDFDocument> updateDocument(PDFDocument document);
-  Future<bool> deleteDocument(String id);
 } 

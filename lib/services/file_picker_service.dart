@@ -205,6 +205,41 @@ class FilePickerService {
       return [];
     }
   }
+
+  Future<String?> pickPDFFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (result != null) {
+        return result.files.single.path;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error picking PDF file: $e');
+      return null;
+    }
+  }
+
+  Future<List<String>?> pickMultiplePDFFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        allowMultiple: true,
+      );
+
+      if (result != null) {
+        return result.files.map((file) => file.path!).toList();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error picking multiple PDF files: $e');
+      return null;
+    }
+  }
 }
 
 /// 파일 세부 정보 클래스

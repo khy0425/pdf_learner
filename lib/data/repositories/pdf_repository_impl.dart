@@ -1,126 +1,96 @@
 import 'dart:io';
-import 'package:uuid/uuid.dart';
+import 'dart:typed_data';
+import 'package:injectable/injectable.dart';
 import '../../domain/models/pdf_document.dart';
 import '../../domain/models/pdf_bookmark.dart';
 import '../../domain/repositories/pdf_repository.dart';
-import '../datasources/pdf_local_datasource.dart';
-import '../models/pdf_document_model.dart';
-import '../models/pdf_bookmark_model.dart';
+import '../../core/services/firebase_service.dart';
+import '../../core/services/storage_service.dart';
 
+/// PDF 저장소 구현체
+@Injectable()
 class PDFRepositoryImpl implements PDFRepository {
-  final PDFLocalDataSource _localDataSource;
-  final _uuid = const Uuid();
-  final PDFRepository _repository;
+  final FirebaseService _firebaseService;
+  final StorageService _storageService;
 
-  PDFRepositoryImpl(this._localDataSource, this._repository);
+  PDFRepositoryImpl(this._firebaseService, this._storageService);
 
   @override
-  Future<List<PDFDocument>> getAllDocuments() async {
-    final documents = await _localDataSource.getAllDocuments();
-    return documents.map((doc) => doc.toEntity()).toList();
+  Future<List<PDFDocument>> getDocuments() async {
+    // Stream을 Future로 변환
+    return await _firebaseService.getDocuments().first;
   }
 
   @override
-  Future<PDFDocument?> getDocument(String id) async {
-    final documents = await _localDataSource.getAllDocuments();
-    final document = documents.firstWhere((doc) => doc.id == id);
-    return document.toEntity();
+  Future<PDFDocument?> getDocument(String documentId) async {
+    return await _firebaseService.getDocument(documentId);
   }
 
   @override
-  Future<PDFDocument> saveDocument(PDFDocument document) async {
-    final documents = await _localDataSource.getAllDocuments();
-    final model = PDFDocumentModel.fromEntity(document);
-    documents.add(model);
-    await _localDataSource.saveDocuments(documents);
-    return document;
-  }
-
-  @override
-  Future<void> deleteDocument(String id) async {
-    await _localDataSource.deleteDocument(id);
-  }
-
-  @override
-  Future<PDFDocument> importPDF(File file) async {
-    final documents = await _localDataSource.getAllDocuments();
-    final id = _uuid.v4();
-    final now = DateTime.now();
-    
-    final document = PDFDocument(
-      id: id,
-      title: file.path.split('/').last,
-      filePath: file.path,
-      thumbnailPath: '', // TODO: Implement thumbnail generation
-      totalPages: 0, // TODO: Implement PDF page counting
-      currentPage: 0,
-      isFavorite: false,
-      createdAt: now,
-      updatedAt: now,
-      bookmarks: [],
-    );
-
-    final model = PDFDocumentModel.fromEntity(document);
-    documents.add(model);
-    await _localDataSource.saveDocuments(documents);
-    return document;
+  Future<void> createDocument(PDFDocument document) async {
+    await _firebaseService.createDocument(document);
   }
 
   @override
   Future<void> updateDocument(PDFDocument document) async {
-    final documents = await _localDataSource.getAllDocuments();
-    final index = documents.indexWhere((doc) => doc.id == document.id);
-    if (index != -1) {
-      documents[index] = PDFDocumentModel.fromEntity(document);
-      await _localDataSource.saveDocuments(documents);
-    }
+    await _firebaseService.updateDocument(document);
+  }
+
+  @override
+  Future<void> deleteDocument(String documentId) async {
+    await _firebaseService.deleteDocument(documentId);
   }
 
   @override
   Future<List<PDFBookmark>> getBookmarks(String documentId) async {
-    final bookmarks = await _localDataSource.getAllBookmarks();
-    return bookmarks
-        .where((bookmark) => bookmark.documentId == documentId)
-        .map((bookmark) => bookmark.toEntity())
-        .toList();
+    // Stream을 Future로 변환
+    return await _firebaseService.getBookmarks(documentId).first;
   }
 
   @override
-  Future<PDFBookmark> addBookmark(PDFBookmark bookmark) async {
-    final bookmarks = await _localDataSource.getAllBookmarks();
-    final model = PDFBookmarkModel.fromEntity(bookmark);
-    bookmarks.add(model);
-    await _localDataSource.saveBookmarks(bookmarks);
-    return bookmark;
+  Future<PDFBookmark?> getBookmark(String bookmarkId) async {
+    return await _firebaseService.getBookmark(bookmarkId);
   }
 
   @override
-  Future<void> deleteBookmark(String bookmarkId) async {
-    await _localDataSource.deleteBookmark(bookmarkId);
+  Future<void> createBookmark(PDFBookmark bookmark) async {
+    await _firebaseService.createBookmark(bookmark);
   }
 
   @override
   Future<void> updateBookmark(PDFBookmark bookmark) async {
-    final bookmarks = await _localDataSource.getAllBookmarks();
-    final index = bookmarks.indexWhere((b) => b.id == bookmark.id);
-    if (index != -1) {
-      bookmarks[index] = PDFBookmarkModel.fromEntity(bookmark);
-      await _localDataSource.saveBookmarks(bookmarks);
-    }
+    await _firebaseService.updateBookmark(bookmark);
   }
 
   @override
-  Future<List<PDFDocument>> getDocuments() {
-    return _repository.getDocuments();
+  Future<void> deleteBookmark(String bookmarkId) async {
+    await _firebaseService.deleteBookmark(bookmarkId);
   }
 
   @override
-  Future<PDFDocument> addDocument(PDFDocument document) {
-    return _repository.addDocument(document);
+  Future<String> uploadPDFFile(String filePath, String fileName, {Uint8List? bytes}) async {
+    return await _firebaseService.uploadPDFFile(filePath, fileName, bytes: bytes);
   }
 
   @override
-  Future<bool> deleteDocument(String id) {
-    return _repository.deleteDocument(id);
+  Future<void> deletePDFFile(String fileUrl) async {
+    await _firebaseService.deletePDFFile(fileUrl);
+  }
+
+  @override
+  Future<int> getPageCount(String filePath) async {
+    // TODO: PDF 페이지 수 계산 로직 구현
+    return 0;
+  }
+
+  @override
+  Future<String> extractText(String filePath, int pageNumber) async {
+    // TODO: PDF 텍스트 추출 로직 구현
+    return '';
+  }
+
+  @override
+  void dispose() {
+    // 리소스 정리 로직
   }
 } 

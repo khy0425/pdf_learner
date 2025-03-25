@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 
@@ -5,6 +6,10 @@ import 'package:flutter/foundation.dart';
 class GCUtils {
   static const _tag = 'GCUtils';
   
+  static Timer? _memoryMonitorTimer;
+  static const _monitoringInterval = Duration(minutes: 1);
+  static const _gcThreshold = 100 * 1024 * 1024; // 100MB
+
   /// 메모리 사용량을 로그로 출력
   static void logMemoryUsage() {
     if (kDebugMode) {
@@ -62,16 +67,25 @@ class GCUtils {
   }
 
   /// 메모리 사용량 모니터링 시작
-  static void startMemoryMonitoring({Duration interval = const Duration(minutes: 1)}) {
+  static void startMemoryMonitoring() {
     if (!kDebugMode) return;
-    
-    Timer.periodic(interval, (timer) {
-      final usage = _getMemoryUsage();
-      developer.log('메모리 모니터링: ${usage}MB', name: _tag);
-      
-      if (usage > 1000) { // 1GB 이상 사용 시 경고
-        developer.log('메모리 사용량이 높습니다!', name: _tag);
-      }
+
+    _memoryMonitorTimer?.cancel();
+    _memoryMonitorTimer = Timer.periodic(_monitoringInterval, (timer) {
+      _checkMemoryUsage();
     });
+  }
+
+  static void stopMemoryMonitoring() {
+    _memoryMonitorTimer?.cancel();
+    _memoryMonitorTimer = null;
+  }
+
+  static void _checkMemoryUsage() {
+    final info = PlatformDispatcher.instance.views.first.platformDispatcher;
+    if (info.currentSystemFrameTimeStamp == null) return;
+
+    debugPrint('메모리 사용량 확인 중...');
+    // 실제 메모리 사용량 확인은 플랫폼별로 다르게 구현해야 함
   }
 } 
