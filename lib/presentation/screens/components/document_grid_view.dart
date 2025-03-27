@@ -62,11 +62,9 @@ class DocumentGridView extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PdfViewerPage(
-          documentId: document.id,
+        builder: (context) => PDFViewerPage(
           document: document,
-          showAds: true,
-          showRewardButton: true,
+          documentId: document.id,
         ),
       ),
     );

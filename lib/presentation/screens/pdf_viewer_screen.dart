@@ -1,278 +1,273 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:syncfusion_flutter_core/theme.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
-import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
-// AppLocalizations은 아직 생성되지 않았으므로 주석 처리
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-
-import '../viewmodels/pdf_viewer_viewmodel.dart';
-import '../models/pdf_file_info.dart';
-import '../widgets/pdf_viewer_controls.dart';
-import '../widgets/pdf_thumbnails.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import '../../domain/models/pdf_document.dart';
+import '../viewmodels/pdf_viewmodel.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../theme/app_theme.dart';
 
-/// SfPdfViewerState 확장 클래스 - 최신 버전과의 호환성을 위해 추가
-extension SfPdfViewerStateExtension on SfPdfViewerState {
-  /// 텍스트 선택 지우기
-  void clearTextSelection() {
-    // 최신 버전의 API에서는 pdfViewerController를 사용
-    if (pdfViewerController != null) {
-      pdfViewerController.clearSelection();
-    }
-  }
+/// PDF 문서 뷰어 화면
+class PdfViewerScreen extends StatefulWidget {
+  /// 표시할 PDF 문서
+  final PDFDocument document;
   
-  /// 텍스트 검색
-  void searchText(String searchText, {bool caseSensitive = false, bool wholeWords = false}) {
-    if (searchText.isEmpty || pdfViewerController == null) return;
-    
-    // 최신 버전의 API 사용
-    pdfViewerController.searchText(
-      searchText,
-      searchOption: PdfTextSearchOption(
-        caseSensitive: caseSensitive,
-        wholeWords: wholeWords,
-      ),
-    );
-  }
-}
-
-class PDFViewerScreen extends StatefulWidget {
-  final PdfFileInfo pdf;
-
-  const PDFViewerScreen({required this.pdf, super.key});
-
+  /// PDF 바이트 데이터
+  final Uint8List? pdfBytes;
+  
+  /// 생성자
+  const PdfViewerScreen({
+    Key? key,
+    required this.document,
+    required this.pdfBytes,
+  }) : super(key: key);
+  
   @override
-  State<PDFViewerScreen> createState() => _PDFViewerScreenState();
+  State<PdfViewerScreen> createState() => _PdfViewerScreenState();
 }
 
-class _PDFViewerScreenState extends State<PDFViewerScreen> {
-  // UI 관련 컨트롤러만 로컬 상태로 유지
+class _PdfViewerScreenState extends State<PdfViewerScreen> {
+  /// PDF 제어 컨트롤러
   final PdfViewerController _pdfViewerController = PdfViewerController();
-  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
-  final TextEditingController _searchController = TextEditingController();
-  bool _showThumbnails = false;
-  bool _showSearchBar = false;
-  final ScrollController _thumbnailScrollController = ScrollController();
-
+  
+  /// 현재 페이지
+  int _currentPage = 1;
+  
   @override
   void initState() {
     super.initState();
-    
-    // PDF 데이터 로드
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final viewModel = Provider.of<PdfViewerViewModel>(context, listen: false);
-      viewModel.loadPdf(widget.pdf);
-    });
+    _currentPage = widget.document.currentPage;
   }
-
+  
   @override
   void dispose() {
-    _pdfViewerController.dispose();
-    _searchController.dispose();
-    _thumbnailScrollController.dispose();
+    if (mounted) {
+      try {
+        _saveLastReadPage();
+      } catch (e) {
+        debugPrint('마지막 페이지 저장 오류: $e');
+      }
+    }
     super.dispose();
   }
-
+  
+  /// 마지막으로 읽은 페이지 저장
+  Future<void> _saveLastReadPage() async {
+    if (!mounted) return;
+    
+    try {
+      final pdfViewModel = Provider.of<PDFViewModel>(context, listen: false);
+      await pdfViewModel.saveLastReadPage(widget.document.id, _currentPage);
+    } catch (e) {
+      debugPrint('마지막 페이지 저장 오류: $e');
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations localizations = AppLocalizations.of(context)!;
+    // 반응형 디자인을 위한 화면 크기 체크
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth > 1200; // 넓은 화면에서만 3단 레이아웃 사용
     
-    return Consumer<PdfViewerViewModel>(
-      builder: (context, viewModel, child) {
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              widget.pdf.name,
-              style: const TextStyle(color: Colors.white),
-              overflow: TextOverflow.ellipsis,
-            ),
-            backgroundColor: AppTheme.primaryColor,
-            actions: _buildAppBarActions(viewModel),
+    // 뷰모델 접근
+    final pdfViewModel = Provider.of<PDFViewModel>(context);
+    final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.document.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_border),
+            onPressed: () {
+              // TODO: 북마크 추가 기능 구현
+            },
           ),
-          body: _buildBody(viewModel),
-          bottomNavigationBar: _buildBottomBar(viewModel),
-        );
-      },
-    );
-  }
-
-  List<Widget> _buildAppBarActions(PdfViewerViewModel viewModel) {
-    return [
-      // 검색 아이콘
-      IconButton(
-        icon: const Icon(Icons.search, color: Colors.white),
-        onPressed: () {
-          setState(() {
-            _showSearchBar = !_showSearchBar;
-          });
-        },
-      ),
-      
-      // 북마크 아이콘
-      IconButton(
-        icon: Icon(
-          Icons.bookmark,
-          color: viewModel.bookmarks.isEmpty ? Colors.white : Colors.yellow,
-        ),
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (context) => _buildBookmarksDialog(viewModel),
-          );
-        },
-      ),
-      
-      // 썸네일 아이콘
-      IconButton(
-        icon: const Icon(Icons.photo_library, color: Colors.white),
-        onPressed: () {
-          setState(() {
-            _showThumbnails = !_showThumbnails;
-          });
-        },
-      ),
-      
-      // 설정 아이콘
-      PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert, color: Colors.white),
-        onSelected: (value) => _handleMenuAction(value, viewModel),
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: 'highlight',
-            child: Row(
-              children: [
-                Icon(Icons.highlight),
-                SizedBox(width: 8),
-                Text('하이라이트 모드'),
-              ],
-            ),
-          ),
-          const PopupMenuItem(
-            value: 'summary',
-            child: Row(
-              children: [
-                Icon(Icons.summarize),
-                SizedBox(width: 8),
-                Text('문서 요약'),
-              ],
-            ),
-          ),
-          const PopupMenuItem(
-            value: 'share',
-            child: Row(
-              children: [
-                Icon(Icons.share),
-                SizedBox(width: 8),
-                Text('공유'),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () {
+              // TODO: 공유 기능 구현
+            },
           ),
         ],
       ),
-    ];
+      body: Column(
+        children: [
+          // 미회원 만료 정보 배너
+          if (pdfViewModel.isGuestUser)
+            _buildGuestExpirationBanner(pdfViewModel, authViewModel),
+          
+          // 메인 콘텐츠
+          Expanded(
+            child: widget.pdfBytes == null
+                ? _buildErrorWidget()
+                : isWideScreen
+                    ? _buildWideScreenLayout() // 넓은 화면에서는 3단 레이아웃
+                    : _buildNarrowScreenLayout(), // 좁은 화면에서는 기존 레이아웃
+          ),
+        ],
+      ),
+    );
   }
-
-  Widget _buildBody(PdfViewerViewModel viewModel) {
-    if (viewModel.isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+  
+  /// 미회원 만료 정보 배너
+  Widget _buildGuestExpirationBanner(PDFViewModel pdfViewModel, AuthViewModel authViewModel) {
+    final expirationDays = pdfViewModel.getCurrentDocumentExpirationDays();
+    final isExpired = pdfViewModel.isCurrentDocumentExpired();
+    
+    if (isExpired) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        color: Colors.red.shade100,
+        child: Row(
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('PDF를 불러오는 중...'),
-          ],
-        ),
-      );
-    }
-
-    if (viewModel.hasError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
-            const SizedBox(height: 16),
-            Text('PDF를 불러오는 중 오류가 발생했습니다: ${viewModel.errorMessage}'),
-            const SizedBox(height: 24),
+            Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '이 문서는 만료되었습니다. 회원가입 후 문서를 영구적으로 저장하세요.',
+                style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 8),
             ElevatedButton(
-              onPressed: () => viewModel.loadPdf(widget.pdf), 
-              child: const Text('다시 시도'),
+              onPressed: () {
+                // 회원가입 화면으로 이동
+                // TODO: 회원가입 화면 이동 구현
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade400,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('회원가입'),
             ),
           ],
         ),
       );
+    } else if (expirationDays != null && expirationDays <= 2) {
+      // 만료 예정 배너
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        color: Colors.amber.shade100,
+        child: Row(
+          children: [
+            Icon(Icons.access_time, color: Colors.amber.shade800),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '이 문서는 $expirationDays일 후에 삭제됩니다. 회원가입하여 문서를 영구적으로 저장하세요.',
+                style: TextStyle(color: Colors.amber.shade800),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () {
+                // 회원가입 화면으로 이동
+                // TODO: 회원가입 화면 이동 구현
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('회원가입'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return const SizedBox.shrink(); // 만료가 멀었거나 회원인 경우 표시하지 않음
     }
-
+  }
+  
+  /// 에러 화면 위젯
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+          const SizedBox(height: 16),
+          const Text('PDF 데이터를 로드할 수 없습니다.'),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('돌아가기'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// 넓은 화면용 3단 레이아웃
+  Widget _buildWideScreenLayout() {
+    return Row(
+      children: [
+        // 왼쪽: 페이지네이션 패널 (전체 너비의 15%)
+        SizedBox(
+          width: MediaQuery.of(context).size.width * 0.15,
+          child: _buildPaginationPanel(),
+        ),
+        
+        // 중앙: PDF 뷰어 (전체 너비의 55%)
+        Expanded(
+          flex: 55,
+          child: _buildPdfViewer(),
+        ),
+        
+        // 오른쪽: 기능 패널 (전체 너비의 30%)
+        SizedBox(
+          width: MediaQuery.of(context).size.width * 0.30,
+          child: _buildFeaturesPanel(),
+        ),
+      ],
+    );
+  }
+  
+  /// 좁은 화면용 레이아웃
+  Widget _buildNarrowScreenLayout() {
     return Column(
       children: [
-        // 검색 바
-        if (_showSearchBar) _buildSearchBar(),
+        // PDF 뷰어
+        Expanded(child: _buildPdfViewer()),
         
-        // PDF 뷰어 (메인 컨텐츠)
-        Expanded(
+        // 하단 제어 도구 모음
+        Container(
+          padding: const EdgeInsets.all(8),
+          color: Colors.grey.shade100,
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // 썸네일 사이드바
-              if (_showThumbnails)
-                SizedBox(
-                  width: 120,
-                  child: PdfThumbnails(
-                    pdfData: viewModel.pdfData!,
-                    currentPage: viewModel.currentPage,
-                    totalPages: viewModel.totalPages,
-                    onPageSelected: (page) => viewModel.goToPage(page),
-                    controller: _thumbnailScrollController,
-                  ),
-                ),
-              
-              // PDF 뷰어
-              Expanded(
-                child: Stack(
-                  children: [
-                    // PDF 뷰어
-                    SfPdfViewerTheme(
-                      data: SfPdfViewerThemeData(
-                        backgroundColor: Colors.white,
-                      ),
-                      child: SfPdfViewer.memory(
-                        viewModel.pdfData!,
-                        key: _pdfViewerKey,
-                        controller: _pdfViewerController,
-                        onPageChanged: (PdfPageChangedDetails details) {
-                          viewModel.setCurrentPage(details.newPageNumber);
-                        },
-                        onZoomLevelChanged: (PdfZoomDetails details) {
-                          viewModel.setZoomLevel(details.newZoomLevel);
-                        },
-                        enableDocumentLinkAnnotation: true,
-                        enableTextSelection: true,
-                        enableDoubleTapZooming: true,
-                        canShowScrollHead: true,
-                        canShowScrollStatus: true,
-                        canShowPaginationDialog: true,
-                      ),
-                    ),
-                    
-                    // 하이라이트 버튼 (하이라이트 모드일 때 활성화)
-                    if (viewModel.isHighlightMode)
-                      Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: FloatingActionButton(
-                          backgroundColor: AppTheme.accentColor,
-                          onPressed: () {
-                            // 하이라이트 추가 로직
-                            _showAddHighlightDialog(viewModel);
-                          },
-                          child: const Icon(Icons.highlight),
-                        ),
-                      ),
-                  ],
-                ),
+              IconButton(
+                icon: const Icon(Icons.first_page),
+                onPressed: () {
+                  _pdfViewerController.firstPage();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.navigate_before),
+                onPressed: () {
+                  _pdfViewerController.previousPage();
+                },
+              ),
+              Text(
+                '$_currentPage / ${widget.document.pageCount > 0 ? widget.document.pageCount : "?"}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.navigate_next),
+                onPressed: () {
+                  _pdfViewerController.nextPage();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.last_page),
+                onPressed: () {
+                  _pdfViewerController.lastPage();
+                },
               ),
             ],
           ),
@@ -280,338 +275,175 @@ class _PDFViewerScreenState extends State<PDFViewerScreen> {
       ],
     );
   }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: '검색어를 입력하세요',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: () {
-              _searchController.clear();
-              _pdfViewerKey.currentState?.clearTextSelection();
-            },
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-        ),
-        onSubmitted: (value) {
-          if (value.isNotEmpty) {
-            _pdfViewerKey.currentState?.searchText(value);
-          }
-        },
-      ),
+  
+  /// PDF 뷰어 위젯
+  Widget _buildPdfViewer() {
+    return SfPdfViewer.memory(
+      widget.pdfBytes!,
+      controller: _pdfViewerController,
+      pageSpacing: 4,
+      enableDoubleTapZooming: true,
+      enableTextSelection: true,
+      canShowScrollHead: true,
+      canShowScrollStatus: true,
+      canShowPaginationDialog: true,
+      enableDocumentLinkAnnotation: true,
+      enableHyperlinkNavigation: true,
+      initialPageNumber: _currentPage,
+      onPageChanged: (PdfPageChangedDetails details) {
+        setState(() {
+          _currentPage = details.newPageNumber;
+        });
+      },
     );
   }
-
-  Widget _buildBottomBar(PdfViewerViewModel viewModel) {
-    return BottomAppBar(
-      color: AppTheme.primaryColor,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+  
+  /// 페이지네이션 패널 위젯
+  Widget _buildPaginationPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(
+          right: BorderSide(
+            color: Colors.grey.shade300,
+            width: 1.0,
+          ),
+        ),
+      ),
+      child: Column(
         children: [
-          // 이전 페이지 버튼
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: viewModel.currentPage > 1
-                ? () => viewModel.previousPage()
-                : null,
-          ),
-          
-          // 페이지 표시
-          GestureDetector(
-            onTap: () => _showPageNavigationDialog(viewModel),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                '${viewModel.currentPage} / ${viewModel.totalPages}',
-                style: TextStyle(
-                  color: AppTheme.primaryColor,
-                  fontWeight: FontWeight.bold,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            alignment: Alignment.center,
+            color: Colors.blue.shade100,
+            child: const Text(
+              '페이지',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
           ),
-          
-          // 다음 페이지 버튼
-          IconButton(
-            icon: const Icon(Icons.arrow_forward, color: Colors.white),
-            onPressed: viewModel.currentPage < viewModel.totalPages
-                ? () => viewModel.nextPage()
-                : null,
-          ),
-          
-          // 확대 버튼
-          IconButton(
-            icon: const Icon(Icons.zoom_in, color: Colors.white),
-            onPressed: () => viewModel.zoomIn(),
-          ),
-          
-          // 축소 버튼
-          IconButton(
-            icon: const Icon(Icons.zoom_out, color: Colors.white),
-            onPressed: () => viewModel.zoomOut(),
-          ),
-          
-          // 북마크 추가/제거 버튼
-          IconButton(
-            icon: Icon(
-              viewModel.isPageBookmarked(viewModel.currentPage)
-                  ? Icons.bookmark
-                  : Icons.bookmark_border,
-              color: Colors.white,
-            ),
-            onPressed: () {
-              viewModel.toggleBookmark(viewModel.currentPage);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBookmarksDialog(PdfViewerViewModel viewModel) {
-    return AlertDialog(
-      title: const Text('북마크'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: viewModel.bookmarks.isEmpty
-            ? const Center(child: Text('북마크가 없습니다.'))
-            : ListView.builder(
-                shrinkWrap: true,
-                itemCount: viewModel.bookmarks.length,
-                itemBuilder: (context, index) {
-                  final page = viewModel.bookmarks[index];
-                  return ListTile(
-                    title: Text('페이지 $page'),
-                    onTap: () {
-                      // String -> int 변환
-                      final pageNumber = int.tryParse(page.replaceAll('page_', '')) ?? 1;
-                      viewModel.goToPage(pageNumber);
-                      Navigator.pop(context);
-                    },
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () {
-                        // String -> int 변환 
-                        final pageNumber = int.tryParse(page.replaceAll('page_', '')) ?? 1;
-                        viewModel.toggleBookmark(pageNumber);
-                        // 북마크가 없어지면 다이얼로그 닫기
-                        if (viewModel.bookmarks.isEmpty) {
-                          Navigator.pop(context);
-                        }
-                      },
+          Expanded(
+            child: ListView.builder(
+              itemCount: widget.document.pageCount,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemBuilder: (context, index) {
+                // 페이지 번호는 1부터 시작
+                final pageNumber = index + 1;
+                final isSelected = pageNumber == _currentPage;
+                
+                return GestureDetector(
+                  onTap: () {
+                    _pdfViewerController.jumpToPage(pageNumber);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                  );
-                },
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('닫기'),
-        ),
-      ],
-    );
-  }
-
-  void _showPageNavigationDialog(PdfViewerViewModel viewModel) {
-    final TextEditingController controller = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('페이지 이동'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            hintText: '1 - ${viewModel.totalPages} 범위 내 페이지 번호 입력',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              final pageNumber = int.tryParse(controller.text);
-              if (pageNumber != null && 
-                  pageNumber >= 1 && 
-                  pageNumber <= viewModel.totalPages) {
-                viewModel.goToPage(pageNumber);
-                Navigator.pop(context);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('유효한 페이지 번호를 입력해주세요')),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.blue
+                            : Colors.grey.shade300,
+                        width: isSelected ? 2.0 : 1.0,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      color: isSelected
+                          ? Colors.blue.shade50
+                          : Colors.white,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$pageNumber',
+                      style: TextStyle(
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
                 );
-              }
-            },
-            child: const Text('이동'),
+              },
+            ),
           ),
         ],
       ),
     );
   }
-
-  void _showAddHighlightDialog(PdfViewerViewModel viewModel) {
-    final TextEditingController textController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('하이라이트 추가'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('현재 페이지에 하이라이트할 텍스트를 입력하세요:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: textController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: '하이라이트할 텍스트',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
+  
+  /// 기능 패널 위젯
+  Widget _buildFeaturesPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          left: BorderSide(
+            color: Colors.grey.shade300,
+            width: 1.0,
           ),
-          TextButton(
-            onPressed: () {
-              if (textController.text.isNotEmpty) {
-                viewModel.addHighlight(
-                  viewModel.currentPage, 
-                  textController.text
-                );
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('하이라이트가 추가되었습니다')),
-                );
-              }
-            },
-            child: const Text('추가'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleMenuAction(String action, PdfViewerViewModel viewModel) {
-    switch (action) {
-      case 'highlight':
-        viewModel.toggleHighlightMode();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              viewModel.isHighlightMode 
-                  ? '하이라이트 모드가 활성화되었습니다' 
-                  : '하이라이트 모드가 비활성화되었습니다'
-            ),
-          ),
-        );
-        break;
-      case 'summary':
-        _generateSummary(viewModel);
-        break;
-      case 'share':
-        _sharePdf(viewModel);
-        break;
-    }
-  }
-
-  void _generateSummary(PdfViewerViewModel viewModel) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('PDF 내용을 요약하는 중...'),
-          ],
         ),
       ),
-    );
-
-    viewModel.generateSummary().then((_) {
-      Navigator.pop(context); // 로딩 다이얼로그 닫기
-      
-      // 요약 결과 다이얼로그 표시
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('문서 요약'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '문서 요약 결과:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    viewModel.summary?.content ?? '요약을 생성할 수 없습니다.',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '생성 모델: ${viewModel.summary?.apiModel}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                Text(
-                  '생성 시간: ${viewModel.summary?.createdAt.toString()}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
+      child: DefaultTabController(
+        length: 4,
+        child: Column(
+          children: [
+            // 탭 바
+            TabBar(
+              tabs: const [
+                Tab(icon: Icon(Icons.summarize), text: "요약"),
+                Tab(icon: Icon(Icons.quiz), text: "퀴즈"),
+                Tab(icon: Icon(Icons.bubble_chart), text: "마인드맵"),
+                Tab(icon: Icon(Icons.chat), text: "AI 채팅"),
               ],
+              labelColor: Colors.blue,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.blue,
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('닫기'),
+            // 탭 뷰
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildSummaryTab(),
+                  _buildQuizTab(),
+                  _buildMindMapTab(),
+                  _buildAIChatTab(),
+                ],
+              ),
             ),
           ],
         ),
-      );
-    }).catchError((error) {
-      Navigator.pop(context); // 로딩 다이얼로그 닫기
-      
-      // 오류 메시지 표시
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('요약 생성 중 오류가 발생했습니다: $error')),
-      );
-    });
+      ),
+    );
   }
-
-  void _sharePdf(PdfViewerViewModel viewModel) {
-    // 공유 기능 구현
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PDF 공유 기능은 아직 준비 중입니다')),
+  
+  /// 요약 탭 위젯
+  Widget _buildSummaryTab() {
+    return const Center(
+      child: Text('요약 기능은 개발 중입니다.'),
+    );
+  }
+  
+  /// 퀴즈 탭 위젯
+  Widget _buildQuizTab() {
+    return const Center(
+      child: Text('퀴즈 기능은 개발 중입니다.'),
+    );
+  }
+  
+  /// 마인드맵 탭 위젯
+  Widget _buildMindMapTab() {
+    return const Center(
+      child: Text('마인드맵 기능은 개발 중입니다.'),
+    );
+  }
+  
+  /// AI 채팅 탭 위젯
+  Widget _buildAIChatTab() {
+    return const Center(
+      child: Text('AI 채팅 기능은 개발 중입니다.'),
     );
   }
 } 

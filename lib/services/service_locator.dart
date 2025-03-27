@@ -25,6 +25,10 @@ import 'in_app_purchase_service.dart';
 import 'subscription_service.dart';
 import 'api_key_service.dart';
 import 'ai_service.dart';
+import 'pdf/pdf_service.dart';
+import 'firebase_service.dart';
+import '../domain/repositories/pdf_repository.dart';
+import '../data/repositories/pdf_repository_impl.dart';
 
 class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
@@ -57,6 +61,9 @@ class ServiceLocator {
   late final SubscriptionService subscriptionService;
   late final ApiKeyService apiKeyService;
   late final AIService aiService;
+  late final FirebaseService firebaseService;
+  late final PDFRepository pdfRepository;
+  late final PDFService pdfService;
 
   Future<void> initialize() async {
     // 기본 서비스 초기화
@@ -88,6 +95,9 @@ class ServiceLocator {
     aiService = AIService(
       apiKey: await apiKeyService.getApiKey('openai_api_key') ?? '',
     );
+    firebaseService = FirebaseService();
+    pdfRepository = PDFRepositoryImpl(firebaseService, _prefs);
+    pdfService = PDFServiceImpl();
 
     // 서비스 초기화
     await Future.wait([
@@ -111,5 +121,6 @@ class ServiceLocator {
     // 서비스 정리
     adsService.disposeAllAds();
     inAppPurchaseService.dispose();
+    pdfService.dispose();
   }
 } 

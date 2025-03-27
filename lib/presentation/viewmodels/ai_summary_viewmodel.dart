@@ -3,17 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pdf_learner_v2/models/ai_summary.dart';
+import 'package:pdf_learner_v2/data/models/ai_summary.dart';
 import 'package:pdf_learner_v2/services/api_keys.dart';
 import 'package:pdf_learner_v2/services/api_key_service.dart';
 import 'package:pdf_learner_v2/services/subscription_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pdf_learner_v2/services/secure_storage.dart';
 import 'package:share_plus/share_plus.dart';
-import '../models/pdf_document.dart';
-import '../repositories/pdf_repository.dart';
-import '../services/ai_service.dart';
-import '../utils/rate_limiter.dart';
+import 'package:pdf_learner_v2/data/models/pdf_document.dart';
+import 'package:pdf_learner_v2/domain/repositories/pdf_repository.dart';
+import 'package:pdf_learner_v2/services/ai_service.dart';
+import 'package:pdf_learner_v2/core/utils/rate_limiter.dart';
 
 /// Gemini API 요청 결과 상태
 enum ApiRequestStatus {

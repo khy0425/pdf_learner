@@ -121,10 +121,25 @@ class PDFLocalDataSourceImpl implements PDFLocalDataSource {
     try {
       final document = PDFDocument(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: file.path.split('/').last,
+        title: file.path.split('/').last.replaceAll('.pdf', ''),
+        description: '',
         filePath: file.path,
+        downloadUrl: '',
+        pageCount: 1, // 실제 구현에서는 페이지 수를 계산해야 함
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        currentPage: 0,
+        readingProgress: 0.0,
+        isFavorite: false,
+        isSelected: false,
+        readingTime: 0,
+        status: PDFDocumentStatus.created,
+        importance: PDFDocumentImportance.medium,
+        securityLevel: PDFDocumentSecurityLevel.none,
+        tags: [],
+        bookmarks: [],
+        metadata: {},
+        fileSize: file.lengthSync(),
       );
       await saveDocument(document);
       return document;

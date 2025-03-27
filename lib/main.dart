@@ -1,22 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart';
-import 'presentation/pages/home_page.dart';
-import 'presentation/pages/login_page.dart';
-import 'presentation/viewmodels/pdf_viewmodel.dart';
-import 'presentation/viewmodels/auth_view_model.dart';
-import 'presentation/di/service_locator.dart';
-import 'presentation/pages/signup_page.dart';
-import 'presentation/pages/reset_password_page.dart';
-import 'presentation/screens/splash_screen.dart';
-import 'package:get_it/get_it.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'presentation/app.dart';
+import 'config/firebase_options.dart';
+import 'core/di/dependency_injection.dart';
+import 'core/localization/app_localizations.dart';
+import 'presentation/viewmodels/theme_viewmodel.dart';
+import 'presentation/viewmodels/locale_viewmodel.dart';
+import 'presentation/screens/login_screen.dart';
+import 'presentation/screens/signup_screen.dart';
+import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/settings_screen.dart';
+import 'presentation/screens/pdf_viewer_page.dart';
+import 'presentation/screens/subscription_screen.dart';
+import 'core/utils/web_storage_utils.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 환경 변수 로드 - 다른 초기화보다 먼저 실행
+  try {
+    await dotenv.load(fileName: '.env');
+    debugPrint('환경 변수 로드 성공');
+    _logEnvironmentVariables(); // 환경 변수 로깅
+  } catch (e) {
+    debugPrint('환경 변수 로드 실패: $e');
+    // 기본 환경 변수 설정
+    await _setupDefaultEnvVariables();
+  }
   
   // Firebase 초기화
   await Firebase.initializeApp(
@@ -24,78 +37,84 @@ void main() async {
   );
   
   // 의존성 주입 설정
-  await setupLocator();
+  await DependencyInjection.init();
+  
+  // 웹 스토리지에서 만료된 데이터 정리
+  await _cleanupExpiredData();
   
   runApp(const App());
 }
 
-/// PDF Learner 앱
+/// 환경 변수 로깅 (디버그 모드에서만)
+void _logEnvironmentVariables() {
+  if (kDebugMode) {
+    debugPrint('PayPal 기본 플랜 ID: ${dotenv.env['PAYPAL_BASIC_PLAN_ID']}');
+    debugPrint('PayPal 프리미엄 플랜 ID: ${dotenv.env['PAYPAL_PREMIUM_PLAN_ID']}');
+    debugPrint('PayPal 클라이언트 ID: ${dotenv.env['PAYPAL_CLIENT_ID']}');
+    debugPrint('PayPal 판매자 ID: ${dotenv.env['PAYPAL_MERCHANT_ID']}');
+    debugPrint('환경: ${dotenv.env['ENVIRONMENT']}');
+  }
+}
+
+/// 기본 환경 변수 설정
+Future<void> _setupDefaultEnvVariables() async {
+  // 기본값 설정을 위한 임시 메서드
+  dotenv.env['PAYPAL_CLIENT_ID'] = 'AY4xA8BL8YVstPdRZRd_6BM6vhoEGu0ei3UUjOpn0EajAI2FG2yALLnjmniYERxr7R1BpZI0aQy3Xi9w';
+  dotenv.env['PAYPAL_MERCHANT_ID'] = 'RJWUGHMG9C6FQ'; 
+  dotenv.env['PAYPAL_BASIC_PLAN_ID'] = 'P-0C773510SU364272XM7SPX6I';
+  dotenv.env['PAYPAL_PREMIUM_PLAN_ID'] = 'P-2EM77373KV537191YM7SPYNY';
+}
+
+/// 만료된 데이터 정리
+Future<void> _cleanupExpiredData() async {
+  try {
+    // 웹 스토리지에서 만료된 PDF 데이터 정리
+    await WebStorageUtils.removeExpiredData();
+  } catch (e) {
+    debugPrint('만료 데이터 정리 중 오류: $e');
+  }
+}
+
 class App extends StatelessWidget {
-  const App({super.key});
+  const App({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // DI 컨테이너에서 필요한 뷰모델들 가져오기
+    final themeViewModel = DependencyInjection.instance<ThemeViewModel>();
+    final localeViewModel = DependencyInjection.instance<LocaleViewModel>();
+
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<AuthViewModel>(
-          create: (_) => GetIt.I<AuthViewModel>(),
-        ),
-        ChangeNotifierProvider<PDFViewModel>(
-          create: (_) => GetIt.I<PDFViewModel>(),
-        ),
+        ChangeNotifierProvider.value(value: themeViewModel),
+        ChangeNotifierProvider.value(value: localeViewModel),
       ],
-      child: MaterialApp(
-        title: 'PDF Learner',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.indigo,
-            brightness: Brightness.light,
-          ),
-          useMaterial3: true,
-          cardTheme: CardTheme(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          appBarTheme: const AppBarTheme(
-            centerTitle: false,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-          ),
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          inputDecorationTheme: InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.grey.shade100,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.indigo.shade200),
-            ),
-            contentPadding: const EdgeInsets.all(16),
-          ),
-        ),
-        home: const SplashScreen(),
-        routes: {
-          '/login': (context) => const LoginPage(),
-          '/signup': (context) => const SignUpPage(),
-          '/reset-password': (context) => const ResetPasswordPage(),
-          '/home': (context) => const HomePage(),
+      child: Consumer2<ThemeViewModel, LocaleViewModel>(
+        builder: (context, themeVM, localeVM, _) {
+          return MaterialApp(
+            title: 'PDF 학습 도우미',
+            theme: themeVM.lightTheme,
+            darkTheme: themeVM.darkTheme,
+            themeMode: themeVM.themeMode,
+            locale: localeVM.locale,
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            initialRoute: '/login',
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/signup': (context) => const SignupScreen(),
+              '/home': (context) => const HomeScreen(),
+              '/settings': (context) => const SettingsScreen(),
+              '/pdf_viewer': (context) => const PdfViewerPage(),
+              '/subscription': (context) => const SubscriptionScreen(),
+            },
+            debugShowCheckedModeBanner: false,
+          );
         },
       ),
     );

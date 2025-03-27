@@ -1,22 +1,29 @@
 import Flutter
 import UIKit
 import UserNotifications
+import UniformTypeIdentifiers
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private let CHANNEL = "com.example.pdf_learner_v2/platform"
+  private let FILE_PICKER_CHANNEL = "com.example.pdf_learner_v2/file_picker"
   private var methodChannel: FlutterMethodChannel?
+  private var filePickerChannel: FlutterMethodChannel?
+  private var filePickerResult: FlutterResult?
   
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // 플러터 엔진 설정
     let controller = window?.rootViewController as! FlutterViewController
-    methodChannel = FlutterMethodChannel(name: CHANNEL, binaryMessenger: controller.binaryMessenger)
     
-    // 메소드 콜 핸들러 등록
+    // 메인 채널 설정
+    methodChannel = FlutterMethodChannel(name: CHANNEL, binaryMessenger: controller.binaryMessenger)
     setupMethodChannel()
+    
+    // 파일 선택 채널 설정
+    filePickerChannel = FlutterMethodChannel(name: FILE_PICKER_CHANNEL, binaryMessenger: controller.binaryMessenger)
+    setupFilePickerChannel()
     
     // 알림 권한 요청
     requestNotificationPermission()
@@ -42,6 +49,19 @@ import UserNotifications
         self.handleVibrate(arguments: call.arguments as? [String: Any], result: result)
       case "showNotification":
         self.handleShowNotification(arguments: call.arguments as? [String: Any], result: result)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+  
+  private func setupFilePickerChannel() {
+    filePickerChannel?.setMethodCallHandler { [weak self] (call, result) in
+      switch call.method {
+      case "pickFiles":
+        self?.handlePickFiles(call: call, result: result)
+      case "getDirectoryPath":
+        self?.handleGetDirectoryPath(result: result)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -197,5 +217,88 @@ import UserNotifications
         result(nil)
       }
     }
+  }
+  
+  private func handlePickFiles(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+          let allowedExtensions = args["allowedExtensions"] as? [String],
+          let allowMultiple = args["allowMultiple"] as? Bool else {
+      result(FlutterError(code: "INVALID_ARGUMENTS",
+                        message: "Invalid arguments",
+                        details: nil))
+      return
+    }
+    
+    filePickerResult = result
+    
+    // 허용된 파일 타입 설정
+    var contentTypes: [UTType] = []
+    for ext in allowedExtensions {
+      if let utType = UTType(tag: ext, tagClass: .filenameExtension, conformingTo: nil) {
+        contentTypes.append(utType)
+      }
+    }
+    
+    // 기본 PDF 타입 추가
+    if contentTypes.isEmpty {
+      contentTypes = [.pdf]
+    }
+    
+    let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes)
+    documentPicker.delegate = self
+    documentPicker.allowsMultipleSelection = allowMultiple
+    
+    if let viewController = window?.rootViewController {
+      viewController.present(documentPicker, animated: true)
+    }
+  }
+  
+  private func handleGetDirectoryPath(result: @escaping FlutterResult) {
+    if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+      result(documentsPath.path)
+    } else {
+      result(nil)
+    }
+  }
+}
+
+extension AppDelegate: UIDocumentPickerDelegate {
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    var fileDataList: [[String: Any]] = []
+    
+    for url in urls {
+      do {
+        // 파일 접근 권한 유지
+        let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+          if shouldStopAccessing {
+            url.stopAccessingSecurityScopedResource()
+          }
+        }
+        
+        let resourceValues = try url.resourceValues(forKeys: [.nameKey, .fileSizeKey])
+        let name = resourceValues.name ?? url.lastPathComponent
+        let size = resourceValues.fileSize ?? 0
+        let extension = url.pathExtension
+        
+        let fileData: [String: Any] = [
+          "name": name,
+          "path": url.path,
+          "size": size,
+          "extension": extension,
+          "uri": url.absoluteString
+        ]
+        
+        fileDataList.append(fileData)
+      } catch {
+        print("Error getting file info: \(error)")
+      }
+    }
+    
+    filePickerResult?(fileDataList)
+  }
+  
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    filePickerResult?(nil)
   }
 }

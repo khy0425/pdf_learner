@@ -10,7 +10,7 @@ import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:pdf_learner_v2/utils/web_utils.dart';
+import 'package:pdf_learner_v2/core/utils/web_utils.dart';
 import 'package:pdf_render/pdf_render.dart' as pdf_render;
 import 'package:http/http.dart' as http;
 import 'package:pdf_learner_v2/services/storage/storage_service.dart';

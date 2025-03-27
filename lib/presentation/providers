@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AIServiceProvider extends ChangeNotifier {
-  static const String _apiUrl = 'YOUR_AI_SERVICE_ENDPOINT';
+  final String _apiUrl = 'https://api.example.com/ai'; // 실제 API URL로 변경
   
   Future<String> summarizeText(String text) async {
     try {
@@ -10,7 +11,7 @@ class AIServiceProvider extends ChangeNotifier {
         Uri.parse('$_apiUrl/summarize'),
         body: {'text': text},
         headers: {
-          'Authorization': 'Bearer YOUR_API_KEY',
+          'Authorization': 'Bearer ${dotenv.env['PAID_GEMINI_API_KEY']}',
         },
       );
       

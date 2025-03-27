@@ -5,25 +5,25 @@ import 'package:flutter/foundation.dart';
 
 /// 웹 환경용 dart:io 스텁
 
-/// 파일 클래스 스텁
+/// 웹 환경을 위한 File 클래스 대체 구현
 class File {
   final String path;
   
   File(this.path);
   
-  /// 파일 존재 여부 확인
+  /// 파일 존재 여부 확인 (웹에서는 항상 false 반환)
   Future<bool> exists() async {
     return false;
   }
   
-  /// 파일 읽기 - Uint8List 반환
+  /// 파일을 바이트로 읽기 (웹에서는 항상 예외 발생)
   Future<Uint8List> readAsBytes() async {
-    return Uint8List(0);
+    throw UnsupportedError('Web environment does not support file operations');
   }
   
-  /// 파일 쓰기
-  Future<File> writeAsBytes(List<int> bytes) async {
-    return this;
+  /// 파일에 바이트 쓰기 (웹에서는 항상 예외 발생)
+  Future<void> writeAsBytes(Uint8List bytes) async {
+    throw UnsupportedError('Web environment does not support file operations');
   }
   
   /// 파일 복사
@@ -35,20 +35,20 @@ class File {
   Future<void> delete() async {}
 }
 
-/// 디렉토리 클래스 스텁
+/// 웹 환경을 위한 Directory 클래스 대체 구현
 class Directory {
   final String path;
   
   Directory(this.path);
   
-  /// 디렉토리 생성
-  Future<Directory> create({bool recursive = false}) async {
-    return this;
-  }
-  
-  /// 디렉토리 존재 여부 확인
+  /// 디렉토리 존재 여부 확인 (웹에서는 항상 false 반환)
   Future<bool> exists() async {
     return false;
+  }
+  
+  /// 디렉토리 생성 (웹에서는 항상 this 반환)
+  Future<Directory> create({bool recursive = false}) async {
+    return this;
   }
   
   /// 임시 디렉토리 생성

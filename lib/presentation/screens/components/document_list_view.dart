@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../models/pdf_document.dart';
+import '../../../domain/models/pdf_document.dart';
 import '../pdf_viewer_page.dart';
 import '../../utils/date_formatter.dart';
 import 'document_thumbnail_widget.dart';
@@ -64,11 +64,9 @@ class DocumentListView extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PdfViewerPage(
-          documentId: document.id,
+        builder: (context) => PDFViewerPage(
           document: document,
-          showAds: true,
-          showRewardButton: true,
+          documentId: document.id,
         ),
       ),
     );

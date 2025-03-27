@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../views/screens/loading_screen.dart';
-import '../views/screens/login_screen.dart';
-import '../views/screens/desktop_home_screen.dart';
-import '../views/screens/mobile_home_screen.dart';
-import '../views/screens/pdf_viewer_screen.dart';
-import '../models/pdf_document.dart';
+import 'package:pdf_learner_v2/presentation/screens/loading_screen.dart';
+import 'package:pdf_learner_v2/presentation/screens/login_screen.dart';
+import 'package:pdf_learner_v2/presentation/screens/desktop_home_screen.dart';
+import 'package:pdf_learner_v2/presentation/screens/mobile_home_screen.dart';
+import 'package:pdf_learner_v2/presentation/screens/pdf_viewer_screen.dart';
+import 'package:pdf_learner_v2/domain/models/pdf_document.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 

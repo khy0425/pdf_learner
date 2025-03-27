@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../viewmodels/auth_view_model.dart';
-import '../pages/home_page.dart';
+import '../viewmodels/auth_viewmodel.dart';
+import 'home_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -47,9 +47,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   // 익명 로그인 후 홈 화면으로 이동
   Future<void> _signInAnonymously() async {
     final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-    await authViewModel.signInAnonymously();
+    
+    // 로그인된 상태가 아니면 자동으로 미회원(익명) 로그인
+    if (!authViewModel.isAuthenticated) {
+      await authViewModel.signInAnonymously();
+    }
     
     if (mounted) {
+      // 항상 홈 화면으로 이동
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => const HomePage(),
@@ -86,8 +91,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF5D5FEF),
-                          const Color(0xFF3D6AFF),
+                          Colors.grey.shade700,
+                          Colors.grey.shade800,
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -105,7 +110,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     'PDF 학습기',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF5D5FEF),
+                      color: Colors.grey.shade800,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -119,7 +124,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   ),
                   const SizedBox(height: 40),
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFF5D5FEF)),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade600),
                   ),
                 ],
               ),

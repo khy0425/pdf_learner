@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_learner_v2/models/user_model.dart';
+import 'package:pdf_learner_v2/data/models/user_model.dart';
 import 'package:pdf_learner_v2/services/subscription_service.dart';
-import 'package:pdf_learner_v2/utils/subscription_badge.dart';
+import 'package:pdf_learner_v2/core/utils/subscription_badge.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf_learner_v2/services/auth_service.dart';

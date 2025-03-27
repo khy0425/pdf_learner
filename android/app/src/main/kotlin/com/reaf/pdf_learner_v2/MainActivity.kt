@@ -20,10 +20,26 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
+import androidx.activity.result.contract.ActivityResultContracts
+import android.app.Activity
+import android.content.ContentResolver
+import android.util.Log
+import android.os.Parcelable
+import android.content.ClipData
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.example.pdf_learner_v2/platform"
+    private val CHANNEL = "com.example.pdf_learner_v2/file_picker"
     private lateinit var methodChannel: MethodChannel
+    private var filePickerResult: MethodChannel.Result? = null
+    private var currentAllowedExtensions: List<String>? = null
+    
+    private val pickFileLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        handleFilePickerResult(uris)
+    }
     
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -32,8 +48,32 @@ class MainActivity: FlutterActivity() {
         
         methodChannel.setMethodCallHandler { call, result ->
             when (call.method) {
-                "pickFile" -> {
-                    handlePickFile(call.arguments as Map<String, Any>, result)
+                "pickFiles" -> {
+                    filePickerResult = result
+                    val allowedExtensions = call.argument<List<String>>("allowedExtensions")
+                    val allowMultiple = call.argument<Boolean>("allowMultiple") ?: false
+                    currentAllowedExtensions = allowedExtensions
+                    
+                    // MIME 타입 설정
+                    val mimeTypes = if (allowedExtensions?.isNotEmpty() == true) {
+                        allowedExtensions.map { "application/$it" }.toTypedArray()
+                    } else {
+                        arrayOf("application/pdf")
+                    }
+                    
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        if (allowMultiple) {
+                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                        }
+                    }
+                    
+                    pickFileLauncher.launch("*/*")
+                }
+                "getDirectoryPath" -> {
+                    result.success(getExternalFilesDir(null)?.absolutePath)
                 }
                 "saveFile" -> {
                     handleSaveFile(call.arguments as Map<String, Any>, result)
@@ -57,20 +97,50 @@ class MainActivity: FlutterActivity() {
         }
     }
     
-    private fun handlePickFile(arguments: Map<String, Any>, result: MethodChannel.Result) {
+    private fun handleFilePickerResult(uris: List<Uri>) {
         try {
-            val allowedExtensions = arguments["allowedExtensions"] as? List<String> ?: listOf("pdf")
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
-                putExtra(Intent.EXTRA_MIME_TYPES, allowedExtensions.map { "application/$it" }.toTypedArray())
+            if (uris.isEmpty()) {
+                filePickerResult?.success(null)
+                return
             }
             
-            // TODO: 결과를 처리하기 위한 ActivityResultLauncher 구현 필요
-            // 현재 샘플 코드에서는 바로 null 반환
-            result.success(null)
+            val contentResolver: ContentResolver = context.contentResolver
+            val fileDataList = mutableListOf<Map<String, Any>>()
+            
+            for (uri in uris) {
+                val cursor = contentResolver.query(uri, null, null, null, null)
+                
+                cursor?.use {
+                    val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = it.getColumnIndex(OpenableColumns.SIZE)
+                    
+                    it.moveToFirst()
+                    val name = it.getString(nameIndex)
+                    val size = it.getLong(sizeIndex)
+                    val extension = MimeTypeMap.getFileExtensionFromUrl(uri.toString)
+                    
+                    // 파일 접근 권한 유지
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                    
+                    val fileData = mapOf(
+                        "name" to name,
+                        "path" to uri.toString(),
+                        "size" to size,
+                        "extension" to (extension ?: ""),
+                        "uri" to uri.toString()
+                    )
+                    
+                    fileDataList.add(fileData)
+                }
+            }
+            
+            filePickerResult?.success(fileDataList)
         } catch (e: Exception) {
-            result.error("PICK_FILE_ERROR", "파일 선택 중 오류 발생", e.message)
+            Log.e("FilePicker", "Error handling file picker result", e)
+            filePickerResult?.error("FILE_PICKER_ERROR", e.message, null)
         }
     }
     

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdf_learner_v2/models/user_model.dart';
+import 'package:pdf_learner_v2/data/models/user_model.dart';
 
 /// 사용자 모델
 class AppUser {

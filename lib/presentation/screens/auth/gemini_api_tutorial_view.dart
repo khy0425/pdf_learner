@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import 'package:pdf_learner_v2/core/utils/app_theme.dart';
 
 /// Gemini API 키 발급 튜토리얼 화면
 class GeminiApiTutorialView extends StatelessWidget {

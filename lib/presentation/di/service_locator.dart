@@ -5,12 +5,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import 'package:pdf_learner_v2/core/services/firebase_service.dart';
+import 'package:pdf_learner_v2/services/firebase_service.dart';
 import 'package:pdf_learner_v2/domain/repositories/auth_repository.dart';
 import 'package:pdf_learner_v2/data/repositories/auth_repository_impl.dart';
 import 'package:pdf_learner_v2/domain/repositories/pdf_repository.dart';
 import 'package:pdf_learner_v2/data/repositories/pdf_repository_impl.dart';
-import 'package:pdf_learner_v2/presentation/viewmodels/auth_view_model.dart';
+import 'package:pdf_learner_v2/presentation/viewmodels/auth_viewmodel.dart';
 import 'package:pdf_learner_v2/presentation/viewmodels/pdf_viewmodel.dart';
 
 /// 서비스 로케이터 인스턴스

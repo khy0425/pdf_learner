@@ -9,7 +9,7 @@ import '../../data/repositories/pdf_repository_impl.dart';
 import '../../domain/repositories/pdf_repository.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
-import '../../presentation/viewmodels/auth_view_model.dart';
+import '../../presentation/viewmodels/auth_viewmodel.dart';
 import '../../presentation/viewmodels/pdf_viewmodel.dart';
 import '../services/firebase_service.dart';
 import '../services/storage_service.dart';

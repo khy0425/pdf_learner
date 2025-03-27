@@ -6,10 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/pdf_document.dart' as model;
+import 'package:pdf_learner_v2/domain/models/pdf_document.dart' as model;
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
+import '../utils/conditional_file_picker.dart';
 
 /// PDF 관련 기능을 플랫폼 특화적으로 처리하는 서비스
 class PlatformSpecificPdfService {
@@ -80,8 +80,8 @@ class PlatformSpecificPdfService {
     try {
       if (kIsWeb) {
         // 웹 환경에서 파일 선택
-        final result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
+        final result = await ConditionalFilePicker.pickFiles(
+          type: FilePickerType.custom,
           allowedExtensions: ['pdf'],
         );
         
@@ -102,8 +102,8 @@ class PlatformSpecificPdfService {
         return null;
       } else {
         // 네이티브 환경에서 파일 선택
-        final result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
+        final result = await ConditionalFilePicker.pickFiles(
+          type: FilePickerType.custom,
           allowedExtensions: ['pdf'],
         );
         

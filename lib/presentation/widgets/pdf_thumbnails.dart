@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'dart:typed_data';
 
 import '../theme/app_theme.dart';
+import 'pdf_static_thumbnail.dart';
 
 class PdfThumbnails extends StatelessWidget {
   final Uint8List pdfData;
@@ -84,18 +84,9 @@ class PdfThumbnails extends StatelessWidget {
                           child: SizedBox(
                             height: 120,
                             width: double.infinity,
-                            child: SfPdfViewer.memory(
-                              pdfData,
-                              initialPageNumber: pageNumber,
-                              enableDoubleTapZooming: false,
-                              enableTextSelection: false,
-                              enableDocumentLinkNavigation: false,
-                              canShowScrollHead: false,
-                              canShowScrollStatus: false,
-                              canShowPaginationDialog: false,
-                              interactionMode: PdfInteractionMode.pan,
-                              maxZoomLevel: 1.0,
-                              pageSpacing: 0,
+                            child: PdfStaticThumbnail(
+                              pdfData: pdfData,
+                              pageNumber: pageNumber,
                             ),
                           ),
                         ),

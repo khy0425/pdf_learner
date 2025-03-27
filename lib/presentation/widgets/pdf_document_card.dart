@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:pdf_learner_v2/models/pdf_document.dart';
+import 'package:pdf_learner_v2/data/models/pdf_document.dart';
 import 'package:pdf_learner_v2/theme/app_theme.dart';
-import 'package:pdf_learner_v2/utils/date_formatter.dart';
+import 'package:pdf_learner_v2/core/utils/date_formatter.dart';
 
 /// UPDF 스타일의 PDF 문서 카드 위젯
 class PDFDocumentCard extends StatelessWidget {

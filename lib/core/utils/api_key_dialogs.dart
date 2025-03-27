@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../views/auth/api_key_management_view.dart';
-import '../views/auth/gemini_api_tutorial_view.dart';
-import '../views/subscription/subscription_page.dart';
+import 'package:pdf_learner_v2/presentation/screens/auth/api_key_management_view.dart';
+import 'package:pdf_learner_v2/presentation/screens/auth/gemini_api_tutorial_view.dart';
+import 'package:pdf_learner_v2/presentation/screens/subscription/subscription_page.dart';
 
 /// API 키 관련 다이얼로그 유틸리티
 class ApiKeyDialogs {

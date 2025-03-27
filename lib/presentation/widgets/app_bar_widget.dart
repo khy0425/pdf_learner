@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:pdf_learner_v2/theme/app_theme.dart';
 import 'package:provider/provider.dart';
-import '../models/user_model.dart';
-import '../services/auth_service.dart';
-import '../views/login_page.dart';
-import '../views/profile/user_profile_page.dart';
-import '../views/subscription/subscription_page.dart';
-import '../utils/subscription_badge.dart';
+import 'package:pdf_learner_v2/data/models/user_model.dart';
+import 'package:pdf_learner_v2/services/auth_service.dart';
+import 'package:pdf_learner_v2/presentation/screens/login_page.dart';
+import 'package:pdf_learner_v2/presentation/screens/profile/user_profile_page.dart';
+import 'package:pdf_learner_v2/presentation/screens/subscription/subscription_page.dart';
+import 'package:pdf_learner_v2/core/utils/subscription_badge.dart';
 
 /// UPDF 스타일의 앱바 위젯
 class PDFAppBar extends StatelessWidget implements PreferredSizeWidget {

@@ -1,42 +1,98 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
-import '../../domain/entities/pdf_bookmark.dart';
+import '../../domain/models/pdf_bookmark.dart';
+import 'dart:convert';
 
-part 'pdf_bookmark_model.freezed.dart';
-part 'pdf_bookmark_model.g.dart';
+class PDFBookmarkModel {
+  final String id;
+  final String documentId;
+  final String title;
+  final int pageNumber;
+  final DateTime createdAt;
+  final String note;
+  final bool isHighlighted;
+  final String textContent;
+  final String color;
+  final int position;
 
-@freezed
-class PDFBookmarkModel with _$PDFBookmarkModel {
-  const factory PDFBookmarkModel({
-    required String id,
-    required String documentId,
-    required String title,
-    required int pageNumber,
-    required DateTime createdAt,
-    String? description,
-  }) = _PDFBookmarkModel;
+  const PDFBookmarkModel({
+    required this.id,
+    required this.documentId,
+    required this.title,
+    required this.pageNumber,
+    required this.createdAt,
+    this.note = '',
+    this.isHighlighted = false,
+    this.textContent = '',
+    this.color = '',
+    this.position = 0,
+  });
 
-  factory PDFBookmarkModel.fromJson(Map<String, dynamic> json) =>
-      _$PDFBookmarkModelFromJson(json);
-
-  factory PDFBookmarkModel.fromEntity(PDFBookmark entity) {
+  factory PDFBookmarkModel.fromJson(Map<String, dynamic> json) {
     return PDFBookmarkModel(
-      id: entity.id,
-      documentId: entity.documentId,
-      title: entity.title,
-      pageNumber: entity.pageNumber,
-      createdAt: entity.createdAt,
-      description: entity.description,
+      id: json['id'] as String,
+      documentId: json['documentId'] as String,
+      title: json['title'] as String,
+      pageNumber: json['pageNumber'] as int,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      note: json['note'] as String? ?? '',
+      isHighlighted: json['isHighlighted'] as bool? ?? false,
+      textContent: json['textContent'] as String? ?? '',
+      color: json['color'] as String? ?? '',
+      position: json['position'] as int? ?? 0,
     );
   }
 
-  PDFBookmark toEntity() {
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'documentId': documentId,
+      'title': title,
+      'pageNumber': pageNumber,
+      'createdAt': createdAt.toIso8601String(),
+      'note': note,
+      'isHighlighted': isHighlighted,
+      'textContent': textContent,
+      'color': color,
+      'position': position,
+    };
+  }
+
+  PDFBookmark toDomain() {
     return PDFBookmark(
       id: id,
       documentId: documentId,
       title: title,
+      description: '',
       pageNumber: pageNumber,
       createdAt: createdAt,
-      description: description,
+      note: note,
+      tags: [],
+      metadata: {},
+      isFavorite: false,
+      isSelected: false,
+      isHighlighted: isHighlighted,
+      textContent: textContent,
+      color: color,
+      position: position,
     );
+  }
+
+  static PDFBookmarkModel fromDomain(PDFBookmark bookmark) {
+    return PDFBookmarkModel(
+      id: bookmark.id,
+      documentId: bookmark.documentId,
+      title: bookmark.title,
+      pageNumber: bookmark.pageNumber,
+      createdAt: bookmark.createdAt,
+      note: bookmark.note,
+      isHighlighted: bookmark.isHighlighted,
+      textContent: bookmark.textContent,
+      color: bookmark.color,
+      position: bookmark.position,
+    );
+  }
+  
+  // String으로 된 JSON을 파싱하여 모델 생성
+  static PDFBookmarkModel fromJsonString(String json) {
+    return PDFBookmarkModel.fromJson(jsonDecode(json) as Map<String, dynamic>);
   }
 } 

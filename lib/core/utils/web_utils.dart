@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:universal_html/html.dart' as html;
+import 'dart:html' as html;
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:injectable/injectable.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
+import '../utils/conditional_file_picker.dart';
 
 /// 웹 환경에서 사용하는 유틸리티 함수들
 @singleton
@@ -131,8 +133,8 @@ class WebUtils {
   /// 파일 선택 대화상자 열기
   Future<String?> pickFile({List<String>? allowedExtensions}) async {
     if (!isWeb) {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
+      final result = await ConditionalFilePicker.pickFiles(
+        type: FilePickerType.custom,
         allowedExtensions: allowedExtensions,
       );
       return result?.files.single.path;
@@ -143,8 +145,8 @@ class WebUtils {
   /// 여러 파일 선택 대화상자 열기
   Future<List<String>> pickFiles({List<String>? allowedExtensions}) async {
     if (!isWeb) {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
+      final result = await ConditionalFilePicker.pickFiles(
+        type: FilePickerType.custom,
         allowedExtensions: allowedExtensions,
         allowMultiple: true,
       );

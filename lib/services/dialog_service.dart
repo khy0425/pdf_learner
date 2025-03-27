@@ -1,39 +1,46 @@
 import 'package:flutter/material.dart';
+import 'package:injectable/injectable.dart';
 
+@singleton
 class DialogService {
-  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-  Future<bool?> showConfirmationDialog({
-    required String title,
+  /// 확인 다이얼로그 표시
+  Future<bool> showConfirmDialog(
+    BuildContext context, {
+    String? title,
     required String message,
+    String confirmText = '확인',
+    String cancelText = '취소',
   }) async {
-    return showDialog<bool>(
-      context: navigatorKey.currentContext!,
+    final result = await showDialog<bool>(
+      context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
+        title: title != null ? Text(title) : null,
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text(cancelText),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('확인'),
+            child: Text(confirmText),
           ),
         ],
       ),
     );
+    return result ?? false;
   }
 
-  Future<void> showErrorDialog({
-    required String title,
+  /// 에러 다이얼로그 표시
+  Future<void> showErrorDialog(
+    BuildContext context, {
+    String? title,
     required String message,
   }) async {
-    return showDialog<void>(
-      context: navigatorKey.currentContext!,
+    await showDialog<void>(
+      context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
+        title: title != null ? Text(title) : const Text('오류'),
         content: Text(message),
         actions: [
           TextButton(
@@ -45,17 +52,28 @@ class DialogService {
     );
   }
 
-  Future<void> showLoadingDialog() async {
-    return showDialog<void>(
-      context: navigatorKey.currentContext!,
+  /// 로딩 다이얼로그 표시
+  Future<void> showLoadingDialog(
+    BuildContext context, {
+    String message = '로딩 중...',
+  }) async {
+    await showDialog<void>(
+      context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text(message),
+          ],
+        ),
       ),
     );
   }
 
-  void hideLoadingDialog() {
-    Navigator.of(navigatorKey.currentContext!).pop();
+  /// 로딩 다이얼로그 닫기
+  void hideLoadingDialog(BuildContext context) {
+    Navigator.of(context).pop();
   }
 } 

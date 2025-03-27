@@ -72,3 +72,6 @@ key.properties
 
 # Web related
 /web/firebase-config.js
+
+index.html
+firebase_options.dart

@@ -1,278 +1,745 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:injectable/injectable.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
-import '../../domain/models/pdf_document.dart';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../core/base/base_viewmodel.dart';
+import '../../core/base/result.dart';
 import '../../domain/models/pdf_bookmark.dart';
+import '../../domain/models/pdf_document.dart';
 import '../../domain/repositories/pdf_repository.dart';
-import '../../../core/utils/gc_utils.dart';
-import '../../../core/services/pdf_service.dart';
+import '../../services/pdf/pdf_service.dart';
 import '../../data/datasources/pdf_local_datasource.dart';
+import '../viewmodels/auth_viewmodel.dart';
+import '../viewmodels/pdf_viewmodel.dart';
 
-/// PDF 뷰어의 상태를 나타내는 열거형
-enum PDFViewerState {
+/// PDF 문서 뷰어 상태
+enum PDFViewerStatus {
+  /// 초기 상태
   initial,
+  
+  /// 문서 로딩 중
   loading,
-  loaded,
+  
+  /// 문서 로드 성공
+  success,
+  
+  /// 문서 로드 오류
   error,
-  disposed
-}
-
-/// PDF 뷰어의 에러 상태를 나타내는 열거형
-enum PDFViewerError {
-  none,
-  documentNotFound,
-  loadFailed,
-  saveFailed,
-  bookmarkFailed,
-  invalidPage
 }
 
 /// PDF 뷰어 뷰모델
-/// 
-/// PDF 문서의 로딩, 페이지 이동, 북마크 관리 등의 기능을 제공합니다.
-/// 
-/// 주요 기능:
-/// - PDF 문서 로드 및 표시
-/// - 페이지 탐색
-/// - 북마크 관리
-/// - 즐겨찾기 관리
-/// - 메모리 관리
-/// 
-/// 사용 예시:
-/// ```dart
-/// final viewModel = PDFViewerViewModel(repository, pdfService);
-/// await viewModel.loadDocument('document_id');
-/// ```
-class PDFViewerViewModel extends ChangeNotifier {
+@injectable
+class PDFViewerViewModel extends BaseViewModel {
+  /// PDF 리포지토리
   final PDFRepository _repository;
+  
+  /// PDF 서비스
   final PDFService _pdfService;
+  
+  /// PDF 로컬 데이터 소스
   final PDFLocalDataSource _localDataSource;
   
-  // 상태 관리
-  PDFViewerState _state = PDFViewerState.initial;
-  PDFViewerError _error = PDFViewerError.none;
-  String _errorMessage = '';
+  /// PDF 뷰모델
+  final PDFViewModel _pdfViewModel;
   
-  // PDF 문서 관련
+  /// 인증 뷰모델
+  final AuthViewModel _authViewModel;
+  
+  /// 현재 PDF 문서
   PDFDocument? _document;
-  int _currentPage = 1;
-  int _totalPages = 0;
-  bool _isLoading = false;
   
-  // 북마크 관련
+  /// 문서 ID
+  final String? _documentId;
+  
+  /// 북마크 목록
   List<PDFBookmark> _bookmarks = [];
   
-  // 페이지 캐시
-  final Map<int, List<int>> _pageCache = {};
-  static const int _maxCacheSize = 5;
+  /// 현재 페이지
+  int _currentPage = 0;
   
-  // 생성자
+  /// 총 페이지 수
+  int _totalPages = 0;
+  
+  /// 뷰어 상태
+  PDFViewerStatus _status = PDFViewerStatus.initial;
+  
+  /// 에러 메시지
+  String _errorMessage = '';
+  
+  bool _isFullScreen = false;
+  bool _isBookmarksVisible = false;
+  
+  /// 생성자
   PDFViewerViewModel({
-    required PDFRepository repository,
+    required PDFRepository pdfRepository,
+    required PDFViewModel pdfViewModel,
+    required AuthViewModel authViewModel,
     required PDFService pdfService,
     required PDFLocalDataSource localDataSource,
-  }) : _repository = repository,
-       _pdfService = pdfService,
-       _localDataSource = localDataSource;
+    PDFDocument? initialDocument,
+    String? documentId,
+  })  : _repository = pdfRepository,
+        _pdfViewModel = pdfViewModel,
+        _authViewModel = authViewModel,
+        _pdfService = pdfService,
+        _localDataSource = localDataSource,
+        _document = initialDocument,
+        _documentId = documentId {
+    _init();
+  }
   
-  // Getters
-  PDFViewerState get state => _state;
-  PDFViewerError get error => _error;
-  String get errorMessage => _errorMessage;
+  /// 현재 문서 getter
   PDFDocument? get document => _document;
-  int get currentPage => _currentPage;
-  int get totalPages => _totalPages;
-  bool get isLoading => _isLoading;
+  
+  /// 북마크 목록 getter
   List<PDFBookmark> get bookmarks => _bookmarks;
   
-  /// PDF 문서를 로드합니다.
-  Future<void> loadDocument(String id) async {
-    try {
-      _setLoading(true);
-      _clearError();
-      notifyListeners();
-
-      final document = await _repository.getDocument(id);
-      if (document != null) {
-        _document = document;
-        _totalPages = document.totalPages;
-        _currentPage = document.currentPage;
-      } else {
-        _setError(PDFViewerError.documentNotFound, '문서를 찾을 수 없습니다.');
-      }
-    } catch (e) {
-      _setError(PDFViewerError.loadFailed, '문서 로드 중 오류가 발생했습니다: $e');
-    } finally {
-      _setLoading(false);
-      notifyListeners();
-    }
+  /// 현재 페이지 getter
+  int get currentPage => _currentPage;
+  
+  /// 총 페이지 수 getter
+  int get totalPages => _totalPages;
+  
+  /// 뷰어 상태 getter
+  PDFViewerStatus get status => _status;
+  
+  /// 에러 메시지 getter
+  String get errorMessage => _errorMessage;
+  
+  bool get isFullScreen => _isFullScreen;
+  bool get isBookmarksVisible => _isBookmarksVisible;
+  
+  /// AuthViewModel getter
+  AuthViewModel get authViewModel => _authViewModel;
+  
+  /// 현재 사용자
+  User? get currentUser => _authViewModel.currentUser != null 
+      ? FirebaseAuth.instance.currentUser 
+      : null;
+  
+  /// 게스트 모드 여부
+  bool get isGuestMode => _authViewModel.isGuestMode;
+  
+  /// 로그인한 사용자 여부
+  bool get hasAuthUser => _authViewModel.currentUser != null;
+  
+  /// 전체 화면 모드 설정
+  void setFullScreen(bool value) {
+    _isFullScreen = value;
+    notifyListeners();
   }
   
-  /// 페이지를 변경합니다.
-  Future<void> changePage(int pageNumber) async {
-    if (_state != PDFViewerState.loaded || _isLoading) return;
-    
-    try {
-      _isLoading = true;
-      notifyListeners();
-      
-      // 페이지 유효성 검사
-      if (pageNumber < 1 || pageNumber > _totalPages) {
-        _setError(PDFViewerError.invalidPage, '유효하지 않은 페이지 번호입니다.');
-        return;
-      }
-      
-      // 페이지 이동
-      final success = await _pdfService.goToPage(pageNumber);
-      if (!success) {
-        _setError(PDFViewerError.loadFailed, '페이지 이동에 실패했습니다.');
-        return;
-      }
-      
-      _currentPage = pageNumber;
-      
-      // 페이지 캐시 관리
-      await _managePageCache();
-      
-      notifyListeners();
-    } catch (e) {
-      _setError(PDFViewerError.loadFailed, '페이지 변경 중 오류가 발생했습니다: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+  /// 북마크 패널 표시 여부 설정
+  void setBookmarksVisible(bool value) {
+    _isBookmarksVisible = value;
+    notifyListeners();
   }
   
-  /// 북마크를 추가합니다.
-  Future<void> addBookmark({String? note}) async {
-    if (_state != PDFViewerState.loaded || _document == null) return;
-    
-    try {
-      final bookmark = PDFBookmark(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        documentId: _document!.id,
-        pageNumber: _currentPage,
-        note: note,
-        createdAt: DateTime.now(),
-      );
-      
-      final success = await _localDataSource.saveBookmark(_document!.id, bookmark);
-      if (!success) {
-        _setError(PDFViewerError.bookmarkFailed, '북마크 저장에 실패했습니다.');
-        return;
-      }
-      
-      _bookmarks.add(bookmark);
-      notifyListeners();
-    } catch (e) {
-      _setError(PDFViewerError.bookmarkFailed, '북마크 추가 중 오류가 발생했습니다: $e');
-    }
+  /// 광고 시청 후 보상
+  Future<void> rewardAfterAd() async {
+    await _authViewModel.rewardAfterAd();
   }
   
-  /// 북마크를 삭제합니다.
-  Future<void> deleteBookmark(String bookmarkId) async {
-    if (_state != PDFViewerState.loaded || _document == null) return;
+  /// 현재 페이지 저장
+  Future<void> saveCurrentPage(int page) async {
+    if (_document == null || page <= 0) return;
     
-    try {
-      final success = await _localDataSource.deleteBookmark(_document!.id, bookmarkId);
-      if (!success) {
-        _setError(PDFViewerError.bookmarkFailed, '북마크 삭제에 실패했습니다.');
-        return;
-      }
-      
-      _bookmarks.removeWhere((b) => b.id == bookmarkId);
-      notifyListeners();
-    } catch (e) {
-      _setError(PDFViewerError.bookmarkFailed, '북마크 삭제 중 오류가 발생했습니다: $e');
-    }
+    _currentPage = page;
+    
+    // 문서 정보 업데이트
+    final updatedDocument = _document!.copyWith(currentPage: page);
+    _document = updatedDocument;
+    
+    // 저장
+    await _pdfViewModel.updateDocument(updatedDocument);
+    
+    notifyListeners();
   }
   
-  /// 즐겨찾기 상태를 토글합니다.
-  Future<void> toggleFavorite() async {
-    if (_state != PDFViewerState.loaded || _document == null) return;
+  /// PDF 파일 로드하기
+  Future<Uint8List> loadPdf() async {
+    if (_document == null) {
+      return Uint8List(0);
+    }
     
     try {
+      // URL인 경우 다운로드
+      if (_document!.filePath.startsWith('http://') || _document!.filePath.startsWith('https://')) {
+        final response = await http.get(Uri.parse(_document!.filePath));
+        if (response.statusCode == 200) {
+          return response.bodyBytes;
+        }
+      }
+      
+      // 로컬 파일인 경우
+      final file = File(_document!.filePath);
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+    } catch (e) {
+      debugPrint('PDF 로딩 오류: $e');
+    }
+    
+    // 샘플 PDF 반환 (실패 시)
+    if (kIsWeb) {
+      try {
+        final response = await http.get(Uri.parse('assets/sample.pdf'));
+        if (response.statusCode == 200) {
+          return response.bodyBytes;
+        }
+      } catch (e) {
+        debugPrint('샘플 PDF 로딩 오류: $e');
+      }
+    }
+    
+    return Uint8List(0);
+  }
+  
+  /// 즐겨찾기 토글
+  Future<Result<PDFDocument>> toggleFavorite() async {
+    if (_document == null) {
+      return Result.failure(Exception('문서가 없습니다.'));
+    }
+    
+    try {
+      // 상태 반전
       final updatedDocument = _document!.copyWith(
-        isFavorite: !_document!.isFavorite,
+        isFavorite: !(_document!.isFavorite),
+        updatedAt: DateTime.now(),
       );
       
-      final success = await _localDataSource.updateDocument(updatedDocument);
-      if (!success) {
-        _setError(PDFViewerError.saveFailed, '즐겨찾기 상태 변경에 실패했습니다.');
-        return;
+      // 저장
+      final result = await _pdfViewModel.updateDocument(updatedDocument);
+      if (result.isSuccess) {
+        _document = updatedDocument;
+        notifyListeners();
       }
       
-      _document = updatedDocument;
-      notifyListeners();
+      return result;
     } catch (e) {
-      _setError(PDFViewerError.saveFailed, '즐겨찾기 상태 변경 중 오류가 발생했습니다: $e');
+      return Result.failure(Exception(e.toString()));
     }
   }
   
-  /// 리소스를 정리합니다.
-  @override
-  void dispose() {
-    _pdfService.dispose();
-    _pageCache.clear();
-    _setState(PDFViewerState.disposed);
-    super.dispose();
+  /// 북마크 추가하기
+  Future<Result<PDFBookmark>> addBookmark({
+    required String title,
+    required String note,
+    required String selectedText,
+  }) async {
+    if (_document == null) {
+      return Result.failure(Exception('문서가 없습니다.'));
+    }
+    
+    try {
+      // 북마크 생성
+      final bookmark = PDFBookmark(
+        id: const Uuid().v4(),
+        documentId: _document!.id,
+        title: title,
+        note: note,
+        pageNumber: _currentPage,
+        selectedText: selectedText,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      
+      // 북마크 저장
+      final result = await _repository.saveBookmark(bookmark);
+      
+      if (result.isSuccess) {
+        _bookmarks.add(result.data!);
+        notifyListeners();
+        return Result.success(result.data!);
+      } else {
+        return Result.failure(result.error ?? Exception('북마크 저장 실패'));
+      }
+    } catch (e) {
+      return Result.failure(Exception(e.toString()));
+    }
   }
   
-  // Private methods
-  
-  /// 상태를 설정합니다.
-  void _setState(PDFViewerState state) {
-    _state = state;
-    notifyListeners();
+  /// AI 기능 사용 처리 메서드
+  void useSummarize() {
+    if (_authViewModel.isGuestMode) {
+      _authViewModel.useSummarize();
+    }
   }
   
-  /// 에러를 설정합니다.
-  void _setError(PDFViewerError error, String message) {
-    _error = error;
-    _errorMessage = message;
-    _state = PDFViewerState.error;
-    notifyListeners();
+  void useChat() {
+    if (_authViewModel.isGuestMode) {
+      _authViewModel.useChat();
+    }
   }
   
-  /// 에러를 초기화합니다.
-  void _clearError() {
-    _error = PDFViewerError.none;
+  void useQuiz() {
+    if (_authViewModel.isGuestMode) {
+      _authViewModel.useQuiz();
+    }
+  }
+  
+  void useMindmap() {
+    if (_authViewModel.isGuestMode) {
+      _authViewModel.useMindmap();
+    }
+  }
+  
+  /// 문서 로드
+  Future<Result<PDFDocument?>> loadDocument(String documentId) async {
+    _setStatus(PDFViewerStatus.loading);
+    
+    try {
+      final documentResult = await _repository.getDocument(documentId);
+      
+      if (documentResult.isSuccess) {
+        _document = documentResult.getOrNull();
+        
+        if (_document != null) {
+          await _loadDocumentData();
+          await _loadBookmarks();
+          _currentPage = await _loadLastReadPage();
+          _setSuccess();
+          return Result.success(_document);
+        } else {
+          _setError('문서를 찾을 수 없습니다.');
+          return Result.failure(Exception('문서를 찾을 수 없습니다.'));
+        }
+      } else {
+        final error = documentResult.error ?? Exception('문서 로드 실패');
+        _setError(error.toString());
+        return Result.failure(error);
+      }
+    } catch (e) {
+      _setError('문서 로드 중 오류: $e');
+      return Result.failure(Exception(e.toString()));
+    }
+  }
+  
+  /// 문서 상세 데이터 로드
+  Future<void> _loadDocumentData() async {
+    if (_document == null) return;
+    
+    // 문서의 총 페이지 수 확인
+    if (_document!.pageCount <= 0) {
+      try {
+        final int pageCount = await _pdfService.getPageCount(_document!.filePath);
+        if (pageCount > 0) {
+          _totalPages = pageCount;
+          _document = _document!.copyWith(pageCount: pageCount);
+          await _repository.saveDocument(_document!);
+        }
+      } catch (e) {
+        debugPrint('PDF 페이지 수 확인 실패: $e');
+      }
+    } else {
+      _totalPages = _document!.pageCount;
+    }
+  }
+  
+  /// 마지막으로 읽은 페이지 로드
+  Future<int> _loadLastReadPage() async {
+    if (_document == null) return 0;
+    
+    try {
+      final int? lastReadPage = await _localDataSource.getLastReadPage(_document!.id);
+      if (lastReadPage != null && lastReadPage > 0 && lastReadPage <= _totalPages) {
+        _currentPage = lastReadPage;
+        return lastReadPage;
+      } else {
+        _currentPage = 1;
+        return 1;
+      }
+    } catch (e) {
+      // 오류 발생 시 첫 페이지로 설정
+      debugPrint('마지막 읽은 페이지 로드 오류: $e');
+      _currentPage = 1;
+      return 1;
+    }
+  }
+  
+  /// 문서의 모든 북마크 로드
+  Future<void> loadBookmarks() async {
+    if (_document == null) return;
+    
+    _setStatus(PDFViewerStatus.loading);
     _errorMessage = '';
+    
+    try {
+      final bookmarksResult = await _repository.getBookmarks(_document!.id);
+      
+      if (bookmarksResult.isSuccess) {
+        _bookmarks = bookmarksResult.data ?? [];
+        notifyListeners();
+      } else {
+        _setError(bookmarksResult.error?.toString() ?? '북마크 로드 실패');
+      }
+    } catch (e) {
+      _setError('북마크 로드 오류: $e');
+    } finally {
+      _setStatus(PDFViewerStatus.success);
+    }
   }
   
-  /// 북마크를 로드합니다.
-  Future<void> _loadBookmarks() async {
+  /// 북마크 생성하기
+  Future<void> createBookmark(PDFBookmark bookmark) async {
+    _setStatus(PDFViewerStatus.loading);
+    _errorMessage = '';
+    
+    try {
+      final result = await _repository.saveBookmark(bookmark);
+      
+      if (result.isSuccess) {
+        _bookmarks.add(result.data!);
+        notifyListeners();
+      } else {
+        _setError(result.error?.toString() ?? '북마크 생성 실패');
+      }
+    } catch (e) {
+      _setError('북마크 생성 오류: $e');
+    } finally {
+      _setStatus(PDFViewerStatus.success);
+    }
+  }
+  
+  /// 북마크 삭제하기
+  Future<void> deleteBookmark(String bookmarkId) async {
+    _setStatus(PDFViewerStatus.loading);
+    _errorMessage = '';
+    
+    try {
+      final result = await _repository.deleteBookmark(bookmarkId);
+      
+      if (result.isSuccess) {
+        _bookmarks.removeWhere((bookmark) => bookmark.id == bookmarkId);
+        notifyListeners();
+      } else {
+        _setError(result.error?.toString() ?? '북마크 삭제 실패');
+      }
+    } catch (e) {
+      _setError('북마크 삭제 오류: $e');
+    } finally {
+      _setStatus(PDFViewerStatus.success);
+    }
+  }
+  
+  /// 상태 설정
+  void _setStatus(PDFViewerStatus status) {
+    _status = status;
+    
+    switch (status) {
+      case PDFViewerStatus.loading:
+        setLoading(true);
+        break;
+      case PDFViewerStatus.success:
+        setLoading(false);
+        clearError();
+        break;
+      case PDFViewerStatus.error:
+        // 오류는 _setError 메서드에서 처리됩니다.
+        break;
+      case PDFViewerStatus.initial:
+        resetState();
+        break;
+    }
+    
+    notifyListeners();
+  }
+  
+  /// 오류 설정
+  void _setError(String message) {
+    _status = PDFViewerStatus.error;
+    setError(message);
+  }
+  
+  /// 성공 상태 설정
+  void _setSuccess() {
+    _status = PDFViewerStatus.success;
+    _errorMessage = '';
+    notifyListeners();
+  }
+  
+  /// 페이지 변경
+  Future<void> changePage(int page) async {
+    if (_document == null || page < 1 || page > _totalPages) return;
+    
+    _currentPage = page;
+    await _saveLastReadPage();
+    notifyListeners();
+  }
+  
+  /// 다음 페이지로 이동
+  Future<void> nextPage() async {
+    if (_currentPage < _totalPages) {
+      await changePage(_currentPage + 1);
+    }
+  }
+  
+  /// 이전 페이지로 이동
+  Future<void> previousPage() async {
+    if (_currentPage > 1) {
+      await changePage(_currentPage - 1);
+    }
+  }
+  
+  /// 마지막으로 읽은 페이지 저장
+  Future<void> _saveLastReadPage() async {
     if (_document == null) return;
     
     try {
-      _bookmarks = await _localDataSource.getBookmarks(_document!.id);
-      notifyListeners();
+      await _localDataSource.saveLastReadPage(_document!.id, _currentPage);
     } catch (e) {
-      debugPrint('북마크 로드 실패: $e');
+      // 저장 실패 시 무시
     }
   }
   
-  /// 페이지 캐시를 관리합니다.
-  Future<void> _managePageCache() async {
-    // 현재 페이지 캐시
-    if (!_pageCache.containsKey(_currentPage)) {
-      final pageData = await _pdfService.renderPage();
-      _pageCache[_currentPage] = pageData;
+  /// 문서 공유
+  Future<void> shareDocument() async {
+    if (_document == null || _document!.filePath.isEmpty) return;
+    
+    try {
+      // 문서가 내장 메모리에 있는 경우
+      if (File(_document!.filePath).existsSync()) {
+        await Share.shareXFiles([XFile(_document!.filePath)], text: _document!.title);
+        return;
+      }
+      
+      // 원격 문서인 경우 다운로드 후 공유
+      if (_document!.downloadUrl.isNotEmpty) {
+        _setStatus(PDFViewerStatus.loading);
+        
+        final result = await _pdfService.downloadPdf(_document!.downloadUrl);
+        
+        if (result.isSuccess) {
+          final filePath = result.getOrNull();
+          if (filePath != null && filePath.isNotEmpty) {
+            await Share.shareXFiles([XFile(filePath)], text: _document!.title);
+          }
+        }
+        
+        _setStatus(PDFViewerStatus.success);
+      }
+    } catch (e) {
+      _setError('문서 공유 중 오류가 발생했습니다: $e');
+    }
+  }
+  
+  /// 문서 파일 저장
+  Future<bool> saveDocumentToDevice() async {
+    if (_document == null || _document!.filePath.isEmpty) {
+      _setError('저장할 문서가 없습니다.');
+      return false;
     }
     
-    // 캐시 크기 제한
-    if (_pageCache.length > _maxCacheSize) {
-      final keysToRemove = _pageCache.keys
-          .where((key) => key != _currentPage)
-          .take(_pageCache.length - _maxCacheSize);
+    try {
+      // 권한 확인
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        _setError('저장 권한이 거부되었습니다.');
+        return false;
+      }
       
-      for (final key in keysToRemove) {
-        _pageCache.remove(key);
+      // 저장 경로 가져오기
+      final directory = await getExternalStorageDirectory();
+      if (directory == null) {
+        _setError('저장 디렉토리를 찾을 수 없습니다.');
+        return false;
+      }
+      
+      // 원본 파일
+      final sourceFile = File(_document!.filePath);
+      if (!await sourceFile.exists()) {
+        // 다운로드 URL이 있는 경우 다운로드
+        if (_document!.downloadUrl.isNotEmpty) {
+          _setStatus(PDFViewerStatus.loading);
+          
+          final result = await _pdfService.downloadPdf(_document!.downloadUrl);
+          
+          if (result.isSuccess) {
+            final filePath = result.getOrNull();
+            if (filePath != null && filePath.isNotEmpty) {
+              final downloadedFile = File(filePath);
+              final targetPath = '${directory.path}/${_document!.title}.pdf';
+              await downloadedFile.copy(targetPath);
+              _setStatus(PDFViewerStatus.success);
+              return true;
+            }
+          } else {
+            _setError('파일 다운로드 실패: ${result.error?.toString() ?? '알 수 없는 오류'}');
+            return false;
+          }
+          
+          _setStatus(PDFViewerStatus.success);
+          return false;
+        } else {
+          _setError('파일을 찾을 수 없고 다운로드 URL도 없습니다.');
+          return false;
+        }
+      }
+      
+      // 대상 파일 경로
+      final targetPath = '${directory.path}/${_document!.title}.pdf';
+      
+      // 파일 복사
+      await sourceFile.copy(targetPath);
+      return true;
+    } catch (e) {
+      _setError('문서 저장 중 오류가 발생했습니다: $e');
+      return false;
+    }
+  }
+  
+  /// PDF 파일 다운로드
+  Future<Uint8List?> downloadPdf(String url) async {
+    try {
+      _setStatus(PDFViewerStatus.loading);
+      
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        _setStatus(PDFViewerStatus.success);
+        return response.bodyBytes;
+      } else {
+        _setError('PDF 다운로드 실패: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      _setError('PDF 다운로드 중 오류: $e');
+      return null;
+    }
+  }
+  
+  /// 로컬 PDF 파일 로드
+  Future<Uint8List?> loadLocalPdf(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      } else {
+        _setError('파일을 찾을 수 없습니다: $filePath');
+        return null;
+      }
+    } catch (e) {
+      _setError('PDF 로드 중 오류: $e');
+      return null;
+    }
+  }
+  
+  /// 샘플 PDF 로드
+  Future<Uint8List?> loadSamplePdf() async {
+    try {
+      return await _repository.loadSamplePdf();
+    } catch (e) {
+      _setError('샘플 PDF 로드 중 오류: $e');
+      return null;
+    }
+  }
+  
+  /// 리소스 해제
+  @override
+  void dispose() {
+    // 마지막으로 읽은 페이지 저장
+    if (_document != null) {
+      _saveLastReadPage();
+    }
+    
+    super.dispose();
+  }
+
+  Future<void> _downloadPdf() async {
+    if (_document == null) return;
+    
+    // 이미 로컬에 있는 경우 건너뜀
+    if (await File(_document!.filePath).exists()) return;
+    
+    // 다운로드 URL이 있는 경우에만 다운로드
+    if (_document!.downloadUrl.isNotEmpty) {
+      try {
+        _setStatus(PDFViewerStatus.loading);
+        
+        final result = await _pdfService.downloadPdf(_document!.downloadUrl);
+        
+        if (result.isSuccess) {
+          final filePath = result.getOrNull();
+          
+          if (filePath != null && filePath.isNotEmpty) {
+            // 문서 업데이트
+            _document = _document!.copyWith(
+              filePath: filePath,
+              updatedAt: DateTime.now(),
+            );
+            
+            await _repository.saveDocument(_document!);
+            _setSuccess();
+          }
+        } else {
+          _setError(result.error?.toString() ?? '다운로드 실패');
+        }
+      } catch (e) {
+        _setError('다운로드 오류: $e');
       }
     }
   }
 
-  void _setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
+  Future<void> _init() async {
+    _setStatus(PDFViewerStatus.loading);
+    
+    try {
+      // 문서 ID가 있으면 해당 문서를 로드
+      if (_documentId != null && _documentId!.isNotEmpty) {
+        final result = await _loadDocumentById(_documentId!);
+        if (result.isFailure) {
+          throw result.error ?? Exception('문서 로드 실패');
+        }
+      } 
+      // 이미 문서가 제공된 경우 추가 정보 로드
+      else if (_document != null) {
+        await _loadDocumentData();
+        await _loadBookmarks();
+        _currentPage = await _loadLastReadPage();
+        _setStatus(PDFViewerStatus.success);
+      }
+      // 문서와 ID가 모두 없는 경우 오류 처리
+      else {
+        throw Exception('문서 정보가 부족합니다.');
+      }
+    } catch (e) {
+      debugPrint('PDF 뷰어 초기화 오류: $e');
+      _setError('초기화 중 오류: $e');
+    }
+  }
+
+  Future<Result<PDFDocument>> _loadDocumentById(String documentId) async {
+    try {
+      _setStatus(PDFViewerStatus.loading);
+      
+      final documentResult = await _repository.getDocument(documentId);
+      
+      if (documentResult.isSuccess) {
+        _document = documentResult.getOrNull();
+        
+        if (_document != null) {
+          await _loadBookmarks();
+          _currentPage = await _loadLastReadPage();
+          _setStatus(PDFViewerStatus.success);
+          return Result.success(_document!);
+        } else {
+          throw Exception('문서를 찾을 수 없습니다.');
+        }
+      } else {
+        throw documentResult.error ?? Exception('문서 로드 실패');
+      }
+    } catch (e) {
+      _setError('문서 ID로 로드 중 오류: $e');
+      return Result.failure(Exception(e.toString()));
+    }
   }
 } 

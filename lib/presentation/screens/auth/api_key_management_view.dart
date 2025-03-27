@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf_learner_v2/services/auth_service.dart';
 import 'package:pdf_learner_v2/services/api_keys.dart';
-import 'package:pdf_learner_v2/utils/app_theme.dart';
-import 'package:pdf_learner_v2/views/auth/gemini_api_tutorial_view.dart';
+import 'package:pdf_learner_v2/core/utils/app_theme.dart';
+import 'package:pdf_learner_v2/presentation/screens/auth/gemini_api_tutorial_view.dart';
 
 /// API 키 관리 화면
 class ApiKeyManagementView extends StatefulWidget {

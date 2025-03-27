@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../models/pdf_document.dart';
-import '../../utils/formatters/date_formatter.dart';
-import '../../utils/formatters/file_size_formatter.dart';
+import '../../../domain/models/pdf_document.dart';
+import '../../../core/utils/formatters.dart';
 import '../pdf_viewer_page.dart';
 import 'document_thumbnail_widget.dart';
 
@@ -100,11 +99,9 @@ class DocumentCardWidget extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PdfViewerPage(
-          documentId: document.id,
+        builder: (context) => PDFViewerPage(
           document: document,
-          showAds: true,
-          showRewardButton: true,
+          documentId: document.id,
         ),
       ),
     );

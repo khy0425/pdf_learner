@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:injectable/injectable.dart';
 import 'package:pdf_learner_v2/domain/models/user_model.dart';
 import 'package:pdf_learner_v2/domain/repositories/auth_repository.dart';
-import 'package:pdf_learner_v2/core/services/firebase_service.dart';
+import 'package:pdf_learner_v2/services/firebase_service.dart';
+import 'package:flutter/foundation.dart';
 
 @Injectable(as: AuthRepository)
 class AuthRepositoryImpl implements AuthRepository {
@@ -95,38 +95,29 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<UserCredential> signInWithGoogle() async {
     try {
-      // 구글 로그인 진행
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        throw Exception('구글 로그인이 취소되었습니다.');
-      }
+      if (kIsWeb) {
+        // 웹 환경에서는 Firebase Auth의 팝업 방식 사용
+        final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        return await FirebaseAuth.instance.signInWithPopup(googleProvider);
+      } else {
+        // 모바일 환경에서는 GoogleSignIn 패키지 사용
+        final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+        if (googleUser == null) {
+          throw Exception('구글 로그인이 취소되었습니다.');
+        }
 
-      // 구글 인증 정보 얻기
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth = 
+            await googleUser.authentication;
+        final OAuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
 
-      // 파이어베이스에 구글 인증 정보 전달
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // 파이어베이스에 로그인
-      return await FirebaseAuth.instance.signInWithCredential(credential);
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'account-exists-with-different-credential':
-          throw Exception('이미 다른 방식으로 가입된 이메일입니다. 다른 로그인 방법을 시도해보세요.');
-        case 'invalid-credential':
-          throw Exception('인증 정보가 잘못되었습니다. 다시 시도해주세요.');
-        case 'operation-not-allowed':
-          throw Exception('구글 로그인이 비활성화되어 있습니다. 관리자에게 문의하세요.');
-        case 'user-disabled':
-          throw Exception('이 계정은 비활성화되었습니다. 관리자에게 문의하세요.');
-        default:
-          throw Exception('구글 로그인 중 오류가 발생했습니다: ${e.message}');
+        return await FirebaseAuth.instance.signInWithCredential(credential);
       }
     } catch (e) {
-      throw Exception('구글 로그인 중 예상치 못한 오류가 발생했습니다: ${e.toString()}');
+      debugPrint('Google 로그인 오류: $e');
+      rethrow;
     }
   }
 
@@ -175,7 +166,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<UserModel?> signInWithFacebook() async {
-    throw UnimplementedError('페이스북 로그인은 아직 구현되지 않았습니다');
+    throw UnimplementedError('페이스북 로그인은 구현되지 않았습니다.');
   }
 
   @override

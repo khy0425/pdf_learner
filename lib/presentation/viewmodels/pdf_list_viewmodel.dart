@@ -1,209 +1,272 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:pdf_learner_v2/models/pdf_document.dart';
-import 'package:pdf_learner_v2/repositories/pdf_repository.dart';
-import 'package:pdf_learner_v2/services/storage_service.dart';
-import 'package:pdf_learner_v2/utils/web_utils.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../domain/models/pdf_document.dart';
+import '../../domain/repositories/pdf_repository.dart';
+import '../../services/storage/storage_service.dart';
+import '../../core/base/base_viewmodel.dart';
+import '../../core/utils/web_utils.dart';
 
-class PDFListViewModel extends ChangeNotifier {
+/// PDF 목록 뷰 상태
+enum PDFListViewState {
+  /// 초기 상태
+  initial,
+  
+  /// 로딩 중
+  loading,
+  
+  /// 성공 상태
+  success,
+  
+  /// 오류 상태
+  error,
+}
+
+/// PDF 문서 목록 뷰모델
+class PDFListViewModel extends BaseViewModel {
   final PDFRepository _repository;
   final StorageService _storageService;
   
+  // 상태 변수
+  List<PDFDocument> _documents = [];
+  List<PDFDocument> _filteredDocuments = [];
+  String _searchQuery = '';
+  bool _isGridView = true;
+  PDFListViewState _state = PDFListViewState.initial;
+  String _errorMessage = '';
+  
+  // 생성자
   PDFListViewModel({
     required PDFRepository repository,
     required StorageService storageService,
-  })  : _repository = repository,
-        _storageService = storageService;
-
-  List<PDFDocument> _documents = [];
-  List<PDFDocument> _filteredDocuments = [];
-  bool _isLoading = false;
-  String _searchQuery = '';
-
-  List<PDFDocument> get documents => _searchQuery.isEmpty 
-    ? _documents 
-    : _filteredDocuments;
+  }) : 
+    _repository = repository,
+    _storageService = storageService;
   
-  bool get isLoading => _isLoading;
-
-  /// 문서 목록 불러오기
+  // 게터
+  List<PDFDocument> get documents => _searchQuery.isEmpty
+      ? _documents
+      : _filteredDocuments;
+  bool get isGridView => _isGridView;
+  String get searchQuery => _searchQuery;
+  
+  // 초기화
+  Future<void> init() async {
+    setLoading();
+    await loadDocuments();
+    setLoaded();
+  }
+  
+  // 문서 목록 로드
   Future<void> loadDocuments() async {
-    _isLoading = true;
-    notifyListeners();
+    _setState(PDFListViewState.loading);
     
     try {
-      _documents = await _repository.loadDocuments();
+      final result = await _repository.getDocuments();
+      
+      if (result.isSuccess) {
+        _documents = result.data ?? [];
+        _filteredDocuments = List.from(_documents);
+        _setState(PDFListViewState.success);
+      } else {
+        _setError('문서 로드 실패: ${result.error}');
+      }
     } catch (e) {
-      debugPrint('문서 로드 오류: $e');
-      _documents = [];
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setError('문서 로드 중 오류: $e');
     }
   }
-
-  /// 문서 검색
+  
+  // 문서 검색
   void searchDocuments(String query) {
-    _searchQuery = query.toLowerCase().trim();
-    
-    if (_searchQuery.isEmpty) {
+    _searchQuery = query;
+    _searchDocuments(query);
+    notifyListeners();
+  }
+  
+  // 내부 검색 처리
+  void _searchDocuments(String query) {
+    if (query.isEmpty) {
       _filteredDocuments = [];
-    } else {
-      _filteredDocuments = _documents.where((document) {
-        final title = document.title.toLowerCase();
-        return title.contains(_searchQuery);
-      }).toList();
+      return;
     }
     
+    _filteredDocuments = _documents.where((document) {
+      final title = document.title.toLowerCase();
+      final desc = document.description.toLowerCase();
+      final q = query.toLowerCase();
+      return title.contains(q) || desc.contains(q);
+    }).toList();
+  }
+  
+  // 최신순 정렬
+  void sortByDateAdded() {
+    _documents.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _searchDocuments(_searchQuery);
     notifyListeners();
   }
-
-  /// 날짜순 정렬
-  void sortDocumentsByDate() {
-    _documents.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
-    if (_searchQuery.isNotEmpty) {
-      searchDocuments(_searchQuery);
-    }
-    notifyListeners();
-  }
-
-  /// 이름순 정렬
-  void sortDocumentsByName() {
+  
+  // 제목순 정렬
+  void sortByTitle() {
     _documents.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-    if (_searchQuery.isNotEmpty) {
-      searchDocuments(_searchQuery);
-    }
+    _searchDocuments(_searchQuery);
     notifyListeners();
   }
-
-  /// 크기순 정렬
-  void sortDocumentsBySize() {
+  
+  // 크기순 정렬
+  void sortBySize() {
     _documents.sort((a, b) => b.size.compareTo(a.size));
-    if (_searchQuery.isNotEmpty) {
-      searchDocuments(_searchQuery);
-    }
+    _searchDocuments(_searchQuery);
     notifyListeners();
   }
-
-  /// 즐겨찾기 토글
+  
+  // 즐겨찾기 토글
   Future<void> toggleFavorite(PDFDocument document) async {
     final index = _documents.indexWhere((doc) => doc.id == document.id);
     if (index == -1) return;
     
-    // 즐겨찾기 목록 업데이트
-    final updatedDoc = _documents[index].copyWith(
-      favorites: document.favorites.isEmpty ? ['default'] : [],
+    final updatedDocument = document.copyWith(
+      isFavorite: !document.isFavorite,
     );
     
-    _documents[index] = updatedDoc;
-    
-    // 저장소에 업데이트
-    await _repository.updateDocument(updatedDoc);
-    
-    if (_searchQuery.isNotEmpty) {
-      searchDocuments(_searchQuery);
+    try {
+      // UI 즉시 업데이트
+      _documents[index] = updatedDocument;
+      _searchDocuments(_searchQuery);
+      notifyListeners();
+      
+      // 실제 저장
+      final result = await _repository.updateDocument(updatedDocument);
+      
+      if (result.isSuccess) {
+        // 성공 시 아무 작업 안함
+      } else {
+        // 실패 시 복원
+        _documents[index] = document;
+        _searchDocuments(_searchQuery);
+        notifyListeners();
+        _setError(result.error?.toString() ?? "즐겨찾기 변경 실패");
+      }
+    } catch (e) {
+      // 실패 시 복원
+      _documents[index] = document;
+      _searchDocuments(_searchQuery);
+      notifyListeners();
+      _setError(e.toString());
     }
-    
-    notifyListeners();
   }
-
-  /// 문서 이름 변경
+  
+  // 문서 이름 변경
   Future<void> renameDocument(PDFDocument document, String newTitle) async {
     final index = _documents.indexWhere((doc) => doc.id == document.id);
     if (index == -1) return;
     
-    // 이름 업데이트
-    final updatedDoc = _documents[index].copyWith(
+    final updatedDocument = document.copyWith(
       title: newTitle,
-      dateModified: DateTime.now(),
+      updatedAt: DateTime.now(),
     );
     
-    _documents[index] = updatedDoc;
-    
-    // 저장소에 업데이트
-    await _repository.updateDocument(updatedDoc);
-    
-    if (_searchQuery.isNotEmpty) {
-      searchDocuments(_searchQuery);
+    try {
+      // UI 즉시 업데이트
+      _documents[index] = updatedDocument;
+      _searchDocuments(_searchQuery);
+      notifyListeners();
+      
+      // 실제 저장
+      final result = await _repository.updateDocument(updatedDocument);
+      
+      if (result.isSuccess) {
+        // 성공 시 아무 작업 안함
+      } else {
+        // 실패 시 복원
+        _documents[index] = document;
+        _searchDocuments(_searchQuery);
+        notifyListeners();
+        _setError(result.error?.toString() ?? "문서 이름 변경 실패");
+      }
+    } catch (e) {
+      // 실패 시 복원
+      _documents[index] = document;
+      _searchDocuments(_searchQuery);
+      notifyListeners();
+      _setError(e.toString());
     }
-    
-    notifyListeners();
   }
-
-  /// 문서 삭제
+  
+  // 문서 삭제
   Future<void> deleteDocument(PDFDocument document) async {
     final index = _documents.indexWhere((doc) => doc.id == document.id);
     if (index == -1) return;
     
-    // 목록에서 삭제
-    _documents.removeAt(index);
-    
-    // 저장소에서 삭제
-    await _repository.deleteDocument(document);
-    
-    if (_searchQuery.isNotEmpty) {
-      searchDocuments(_searchQuery);
+    try {
+      // UI 즉시 업데이트
+      final removedDocument = _documents.removeAt(index);
+      _searchDocuments(_searchQuery);
+      notifyListeners();
+      
+      // 실제 삭제
+      final result = await _repository.deleteDocument(document.id);
+      
+      if (result.isSuccess) {
+        // 성공 시 아무 작업 안함
+      } else {
+        // 실패 시 복원
+        _documents.insert(index, removedDocument);
+        _searchDocuments(_searchQuery);
+        notifyListeners();
+        _setError(result.error?.toString() ?? "문서 삭제 실패");
+      }
+    } catch (e) {
+      _setError(e.toString());
     }
-    
+  }
+  
+  // 문서 공유
+  Future<void> shareDocument(PDFDocument document) async {
+    try {
+      // 웹 환경의 경우 다운로드
+      final webUtils = WebUtils();
+      if (webUtils.isWeb) {
+        webUtils.downloadFile(document.downloadUrl, document.title);
+      } else {
+        // 모바일 환경의 경우 공유
+        final filePath = document.filePath;
+        await webUtils.shareUrl(filePath);
+      }
+    } catch (e) {
+      setError(e.toString());
+    }
+  }
+  
+  // 보기 모드 전환
+  void toggleViewMode() {
+    _isGridView = !_isGridView;
+    notifyListeners();
+  }
+  
+  // 문서 즐겨찾기 목록 가져오기
+  List<PDFDocument> getFavorites() {
+    return _documents.where((doc) => doc.isFavorite).toList();
+  }
+  
+  // 최근 문서 목록 가져오기
+  List<PDFDocument> getRecentDocuments() {
+    final sorted = List<PDFDocument>.from(_documents);
+    sorted.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return sorted.take(5).toList();
+  }
+  
+  /// 상태 설정
+  void _setState(PDFListViewState newState) {
+    _state = newState;
     notifyListeners();
   }
 
-  /// 문서 공유
-  Future<void> shareDocument(PDFDocument document) async {
-    try {
-      if (kIsWeb) {
-        // 웹에서는 다운로드로 대체
-        await WebUtils.downloadFile(document.url, document.title);
-      } else {
-        final filePath = await _storageService.getFilePath(document.id);
-        await Share.shareFiles([filePath], text: document.title);
-      }
-    } catch (e) {
-      debugPrint('문서 공유 오류: $e');
-    }
-  }
-
-  /// 문서 선택 및 추가
-  Future<void> pickAndAddDocument() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-      );
-
-      if (result != null) {
-        final file = result.files.first;
-        
-        if (kIsWeb) {
-          // 웹에서는 bytes를 사용
-          if (file.bytes != null) {
-            final document = await _repository.addDocument(
-              file.name,
-              bytes: file.bytes,
-            );
-            _documents.insert(0, document);
-          }
-        } else {
-          // 네이티브에서는 파일 경로 사용
-          if (file.path != null) {
-            final document = await _repository.addDocument(
-              file.name,
-              path: file.path,
-            );
-            _documents.insert(0, document);
-          }
-        }
-        
-        if (_searchQuery.isNotEmpty) {
-          searchDocuments(_searchQuery);
-        }
-        
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('문서 추가 오류: $e');
-    }
+  /// 오류 설정
+  void _setError(String message) {
+    _errorMessage = message;
+    _setState(PDFListViewState.error);
   }
 } 
