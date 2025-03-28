@@ -12,7 +12,7 @@ import 'dart:async';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
-import '../core/models/result.dart';
+import '../core/base/result.dart';
 
 @injectable
 class FirebaseService {
@@ -263,7 +263,7 @@ class FirebaseService {
   /// 북마크 저장
   Future<Result<PDFBookmark>> saveBookmark(PDFBookmark bookmark) async {
     try {
-      final bookmarkRef = bookmark.id.isEmpty
+      final bookmarkRef = bookmark.id == null || bookmark.id.isEmpty
           ? _userBookmarksForDocument(bookmark.documentId).doc()
           : _userBookmarksForDocument(bookmark.documentId).doc(bookmark.id);
       
@@ -476,5 +476,24 @@ class FirebaseService {
     } catch (e) {
       return Result.failure(Exception('구독 취소 실패: $e'));
     }
+  }
+
+  // 현재 사용자가 로그인되어 있는지 확인
+  bool isUserLoggedIn() {
+    return _auth.currentUser != null;
+  }
+
+  /// 인증 정보를 가져옵니다.
+  AuthCredential? getCredential() {
+    try {
+      return _auth.currentUser?.credential;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 현재 사용자를 가져옵니다.
+  User? getCurrentUser() {
+    return _auth.currentUser;
   }
 } 

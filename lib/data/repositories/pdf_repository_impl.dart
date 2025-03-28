@@ -1,14 +1,11 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:pdf_learner_v2/core/utils/web_stub.dart';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'dart:convert';
-
-// 웹에서는 dart:io를 사용할 수 없으므로 조건부 임포트
-import 'dart:io' if (dart.library.html) 'package:pdf_learner_v2/core/utils/web_stub.dart';
-
-import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:injectable/injectable.dart';
@@ -16,18 +13,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdf_learner_v2/core/base/result.dart';
-import 'package:pdf_learner_v2/core/models/bookmark.dart';
-import 'package:pdf_learner_v2/core/models/note.dart';
-import 'package:pdf_learner_v2/core/utils/web_storage_utils.dart';
-import 'package:pdf_learner_v2/core/utils/conditional_file_picker.dart';
-import '../../data/datasources/local/pdf_local_data_source.dart';
-import '../../data/datasources/remote/pdf_remote_data_source.dart';
+import '../../core/base/result.dart';
+import '../../core/utils/web_storage_utils.dart';
+import '../../core/utils/conditional_file_picker.dart';
+import '../../data/datasources/pdf_local_data_source.dart';
+import '../../data/datasources/pdf_remote_data_source.dart';
+import '../../services/storage/storage_service.dart';
 import '../../data/models/pdf_document_model.dart';
 import '../../domain/models/pdf_document.dart';
 import '../../domain/models/pdf_bookmark.dart';
 import '../../domain/repositories/pdf_repository.dart';
 import '../../services/firebase_service.dart';
+import '../../data/models/pdf_bookmark_model.dart';
 
 @Injectable(as: PDFRepository)
 class PDFRepositoryImpl implements PDFRepository {
@@ -48,20 +45,16 @@ class PDFRepositoryImpl implements PDFRepository {
   @override
   Future<Result<List<PDFDocument>>> getDocuments() async {
     try {
-      final localDocuments = await _localDataSource.getDocuments();
-      final documents = localDocuments.map((model) => model.toDomain()).toList();
+      final documents = await _localDataSource.getDocuments();
       
       if (documents.isEmpty) {
         try {
-          final remoteResult = await _remoteDataSource.getDocuments();
-          
-          if (remoteResult.isSuccess && remoteResult.data != null) {
+          final remoteDocuments = await _remoteDataSource.getDocuments();
+          if (remoteDocuments.isNotEmpty) {
             // 원격에서 가져온 문서 로컬에 저장
-            for (final model in remoteResult.data!) {
-              await _localDataSource.saveDocument(model);
+            for (final document in remoteDocuments) {
+              await _localDataSource.saveDocument(document);
             }
-            
-            final remoteDocuments = remoteResult.data!.map((model) => model.toDomain()).toList();
             return Result.success(remoteDocuments);
           }
         } catch (e) {
@@ -76,7 +69,7 @@ class PDFRepositoryImpl implements PDFRepository {
       return Result.failure(Exception(e.toString()));
     }
   }
-  
+
   @override
   Future<Result<PDFDocument>> getDocument(String id) async {
     try {
@@ -84,17 +77,17 @@ class PDFRepositoryImpl implements PDFRepository {
       final localDocument = await _localDataSource.getDocument(id);
       
       if (localDocument != null) {
-        return Result.success(localDocument.toDomain());
+        return Result.success(localDocument);
       }
       
-      // 로컬에 없으면 원격에서 조회
+      // 로컬에 없으면, 원격에서 조회
       try {
-        final remoteResult = await _remoteDataSource.getDocument(id);
+        final remoteDocument = await _remoteDataSource.getDocument(id);
         
-        if (remoteResult.isSuccess && remoteResult.data != null) {
+        if (remoteDocument != null) {
           // 로컬에 저장
-          await _localDataSource.saveDocument(remoteResult.data!);
-          return Result.success(remoteResult.data!.toDomain());
+          await _localDataSource.saveDocument(remoteDocument);
+          return Result.success(remoteDocument);
         } else {
           return Result.failure(Exception('문서를 찾을 수 없습니다.'));
         }
@@ -111,15 +104,14 @@ class PDFRepositoryImpl implements PDFRepository {
   Future<Result<PDFDocument>> saveDocument(PDFDocument document) async {
     try {
       // 로컬 저장
-      await _localDataSource.saveDocument(PDFDocumentModel.fromDomain(document));
+      await _localDataSource.saveDocument(document);
       
-      // 원격 저장
-      final remoteResult = await _remoteDataSource.saveDocument(
-        PDFDocumentModel.fromDomain(document)
-      );
-      
-      if (remoteResult.isFailure) {
-        return Result.failure(remoteResult.error ?? Exception('원격 저장 실패'));
+      // 원격 저장 시도
+      try {
+        await _remoteDataSource.saveDocument(document);
+      } catch (e) {
+        debugPrint('원격 저장 실패: $e');
+        // 원격 저장 실패해도 로컬 저장은 성공으로 처리
       }
       
       return Result.success(document);
@@ -132,12 +124,11 @@ class PDFRepositoryImpl implements PDFRepository {
   Future<Result<PDFDocument>> updateDocument(PDFDocument document) async {
     try {
       // 로컬에 저장
-      final documentModel = PDFDocumentModel.fromDomain(document);
-      await _localDataSource.saveDocument(documentModel);
+      await _localDataSource.saveDocument(document);
 
       // 원격에 저장
       try {
-        await _remoteDataSource.updateDocument(documentModel);
+        await _remoteDataSource.updateDocument(document);
       } catch (e) {
         debugPrint('원격 문서 업데이트 오류: $e');
         // 원격 저장 실패해도 로컬 저장은 성공으로 처리
@@ -175,21 +166,19 @@ class PDFRepositoryImpl implements PDFRepository {
   Future<Result<List<PDFBookmark>>> getBookmarks(String documentId) async {
     try {
       // 로컬에서 북마크 목록 조회
-      final localModels = await _localDataSource.getBookmarks(documentId);
-      final bookmarks = localModels.map((model) => model.toDomain()).toList();
+      final bookmarks = await _localDataSource.getBookmarks(documentId);
       
       // 로컬에 북마크가 없으면 원격에서 조회 시도
       if (bookmarks.isEmpty) {
         try {
-          final remoteResult = await _remoteDataSource.getBookmarks(documentId);
+          final remoteBookmarks = await _remoteDataSource.getBookmarks(documentId);
           
-          if (remoteResult.isSuccess && remoteResult.data != null) {
+          if (remoteBookmarks.isNotEmpty) {
             // 원격에서 가져온 북마크 로컬에 저장
-            for (final model in remoteResult.data!) {
-              await _localDataSource.saveBookmark(model);
+            for (final bookmark in remoteBookmarks) {
+              await _localDataSource.saveBookmark(bookmark);
             }
             
-            final remoteBookmarks = remoteResult.data!.map((model) => model.toDomain()).toList();
             return Result.success(remoteBookmarks);
           }
         } catch (e) {
@@ -206,118 +195,48 @@ class PDFRepositoryImpl implements PDFRepository {
   }
   
   @override
-  Future<Result<PDFBookmark>> saveBookmark(PDFBookmark bookmark) async {
-    try {
-      // 로컬에 저장
-      final bookmarkModel = PDFBookmarkModel.fromDomain(bookmark);
-      await _localDataSource.saveBookmark(bookmarkModel);
-      
-      // 원격에 저장
-      try {
-        final remoteResult = await _remoteDataSource.saveBookmark(bookmarkModel);
-        
-        if (remoteResult.isFailure) {
-          debugPrint('원격 북마크 저장 실패: ${remoteResult.error}');
-          // 원격 저장 실패해도 로컬 저장은 성공으로 처리
-        }
-      } catch (e) {
-        debugPrint('원격 북마크 저장 오류: $e');
-        // 원격 저장 실패해도 로컬 저장은 성공으로 처리
-      }
-      
-      return Result.success(bookmark);
-    } catch (e) {
-      debugPrint('북마크 저장 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<void>> updateBookmark(PDFBookmark bookmark) async {
-    try {
-      // 로컬에 업데이트
-      final bookmarkModel = PDFBookmarkModel.fromDomain(bookmark);
-      await _localDataSource.saveBookmark(bookmarkModel);
-      
-      // 원격에 업데이트
-      final remoteResult = await _remoteDataSource.updateBookmark(bookmarkModel);
-      
-      if (!remoteResult.isSuccess) {
-        return Result.failure(remoteResult.error ?? Exception('원격 업데이트 실패'));
-      }
-      
-      return Result.success(null);
-    } catch (e) {
-      debugPrint('북마크 업데이트 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<bool>> deleteBookmark(String bookmarkId) async {
-    try {
-      // 북마크 정보 가져오기
-      final bookmark = await _localDataSource.getBookmark(bookmarkId);
-      if (bookmark == null) {
-        return Result.failure(Exception('북마크를 찾을 수 없습니다.'));
-      }
-      
-      // 로컬에서 삭제
-      await _localDataSource.deleteBookmark(bookmarkId);
-      
-      // 원격에서 삭제 시도
-      try {
-        await _remoteDataSource.deleteBookmark(bookmarkId);
-      } catch (e) {
-        debugPrint('원격 북마크 삭제 오류: $e');
-        // 원격 삭제 실패해도 로컬 삭제는 성공으로 처리
-      }
-      
-      return Result.success(true);
-    } catch (e) {
-      debugPrint('북마크 삭제 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
   Future<Result<Uint8List>> downloadPdf(String url) async {
     try {
-      // web_ 접두사가 있는 경우 (웹 환경의 로컬 스토리지에서 로드)
-      if (url.startsWith('web_')) {
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final base64Data = prefs.getString(url);
-          
-          if (base64Data != null && base64Data.isNotEmpty) {
-            return Result.success(Uint8List.fromList(base64Decode(base64Data)));
-          } else {
-            return Result.failure(Exception('웹 스토리지에서 파일을 찾을 수 없습니다.'));
+      // 웹 환경에서는 WebStorageUtils 사용
+      if (kIsWeb) {
+        // 로컬 스토리지에 저장된 PDF인지 확인
+        if (url.startsWith('web_')) {
+          final pdfBytes = await WebStorageUtils.instance.getBytesFromIndexedDB(url);
+          if (pdfBytes != null) {
+            return Result.success(pdfBytes);
           }
-        } catch (e) {
-          debugPrint('웹 스토리지에서 PDF 로드 오류: $e');
-          return Result.failure(Exception('웹 스토리지에서 PDF 로드 오류: $e'));
         }
-      }
-      
-      // URL이 로컬 경로인 경우
-      if (!url.startsWith('http')) {
-        final file = File(url);
-        if (await file.exists()) {
-          return Result.success(await file.readAsBytes());
-        } else {
-          return Result.failure(Exception('파일을 찾을 수 없습니다.'));
+        
+        // URL이 실제 웹 주소인 경우 HTTP 요청
+        if (url.startsWith('http')) {
+          final response = await http.get(Uri.parse(url));
+          if (response.statusCode == 200) {
+            // 웹 환경에서는 다운로드한 PDF를 WebStorage에 저장
+            final bytes = response.bodyBytes;
+            final fileId = 'web_${DateTime.now().millisecondsSinceEpoch}';
+            await WebStorageUtils.instance.saveBytesToIndexedDB(fileId, bytes);
+            return Result.success(bytes);
+          } else {
+            return Result.failure(Exception('PDF 다운로드 실패: HTTP ${response.statusCode}'));
+          }
         }
-      }
-      
-      // 원격 URL인 경우
-      final response = await http.get(Uri.parse(url));
-      
-      if (response.statusCode == 200) {
-        return Result.success(response.bodyBytes);
       } else {
-        return Result.failure(Exception('PDF 다운로드 실패: ${response.statusCode}'));
+        // 네이티브 환경에서는 파일 시스템 사용
+        if (url.startsWith('http')) {
+          // URL에서 다운로드
+          final response = await http.get(Uri.parse(url));
+          if (response.statusCode == 200) {
+            return Result.success(response.bodyBytes);
+          } else {
+            return Result.failure(Exception('PDF 다운로드 실패: HTTP ${response.statusCode}'));
+          }
+        } else if (await File(url).exists()) {
+          // 로컬 파일 경로인 경우
+          return Result.success(await File(url).readAsBytes());
+        }
       }
+      
+      return Result.failure(Exception('PDF를 다운로드할 수 없는 형식: $url'));
     } catch (e) {
       debugPrint('PDF 다운로드 오류: $e');
       return Result.failure(Exception(e.toString()));
@@ -337,9 +256,9 @@ class PDFRepositoryImpl implements PDFRepository {
       final tempPath = await _storageService.getTempFilePath(fileName);
       
       // 파일 저장
-      final success = await _storageService.saveFile(tempPath, bytes);
+      final savedPath = await _storageService.saveFile(bytes, tempPath);
       
-      if (success) {
+      if (savedPath.isNotEmpty) {
         return Result.success(tempPath);
       } else {
         return Result.failure(Exception('PDF 파일 저장 실패'));

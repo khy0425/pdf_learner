@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf_learner_v2/domain/models/pdf_document.dart' as model;
 import 'dart:io' if (dart.library.html) 'dart:html' as html;
 import '../utils/conditional_file_picker.dart';
+import '../utils/web_stub.dart';
+import '../utils/web_storage_utils.dart';
 
 /// PDF 관련 기능을 플랫폼 특화적으로 처리하는 서비스
 class PlatformSpecificPdfService {
@@ -18,6 +20,8 @@ class PlatformSpecificPdfService {
   factory PlatformSpecificPdfService() => _instance;
   
   PlatformSpecificPdfService._internal();
+  
+  final WebStorageUtils _webStorage = WebStorageUtils.instance;
   
   /// PDF 문서 불러오기 (URL에서)
   Future<Uint8List?> loadPdfFromUrl(String url) async {
@@ -266,6 +270,86 @@ class PlatformSpecificPdfService {
       return null;
     } catch (e) {
       debugPrint('썸네일 생성 중 오류: $e');
+      return null;
+    }
+  }
+
+  /// PDF 파일 다운로드
+  Future<bool> downloadPdf(String url, String filename) async {
+    if (url.isEmpty) {
+      return false;
+    }
+
+    try {
+      if (kIsWeb) {
+        // 웹에서는 AnchorElement를 사용하여 다운로드
+        final anchor = AnchorElement()
+          ..href = url
+          ..download = filename;
+        
+        // body에 앵커 추가
+        document.body?.appendChild(anchor);
+        
+        // 클릭 이벤트 발생
+        anchor.click();
+        
+        // 앵커 제거
+        document.body?.removeChild(anchor);
+        
+        return true;
+      } else {
+        // 모바일 환경에서는 File 클래스를 사용하여 다운로드
+        // 실제 구현은 별도의 모바일 서비스에서 처리
+        return false;
+      }
+    } catch (e) {
+      debugPrint('PDF 다운로드 중 오류 발생: $e');
+      return false;
+    }
+  }
+
+  /// PDF 파일 열기
+  Future<bool> openPdf(Uint8List bytes, String filename) async {
+    try {
+      if (kIsWeb) {
+        // 웹에서는 Blob URL을 생성하여 새 창에서 열기
+        final blob = bytes; // 실제로는 bytes를 Blob으로 변환
+        final url = Url.createObjectUrl(blob);
+        
+        final anchor = AnchorElement()
+          ..href = url
+          ..target = '_blank';
+        
+        // 클릭 이벤트 발생
+        anchor.click();
+        
+        // URL 해제
+        Url.revokeObjectUrl(url);
+        
+        return true;
+      } else {
+        // 모바일 환경에서는 플랫폼별 구현을 사용
+        return false;
+      }
+    } catch (e) {
+      debugPrint('PDF 열기 중 오류 발생: $e');
+      return false;
+    }
+  }
+
+  /// PDF 파일 미리보기 생성
+  Future<Uint8List?> generatePdfThumbnail(Uint8List pdfBytes, {int page = 0}) async {
+    try {
+      if (kIsWeb) {
+        // 웹에서 PDF 썸네일 생성 로직
+        // (실제 구현은 플러그인을 통해 처리해야 함)
+        return Uint8List(0);
+      } else {
+        // 모바일 환경에서 PDF 썸네일 생성 로직
+        return Uint8List(0);
+      }
+    } catch (e) {
+      debugPrint('PDF 썸네일 생성 중 오류 발생: $e');
       return null;
     }
   }

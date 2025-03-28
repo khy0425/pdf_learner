@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../services/auth_service.dart';
 import '../services/api_key_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -57,6 +58,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  void _useTestApiKey() {
+    // 환경 변수에서 테스트용 API 키 가져오기
+    final testApiKey = dotenv.env['FREE_GEMINI_API_KEY'] ?? '';
+    if (testApiKey.isNotEmpty) {
+      setState(() {
+        _apiKeyController.text = testApiKey;
+      });
+      _validateApiKey();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('테스트용 API 키를 불러올 수 없습니다. 직접 입력해주세요.')),
+      );
     }
   }
 
@@ -123,14 +139,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 '5. 테스트용 API 키',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const Text('테스트를 위해 다음 API 키를 사용할 수 있습니다:'),
-              SelectableText(
-                'AIzaSyBAaUaNUqLKupp0Il9OHczUyb5VXDU2EhM',
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
+              const Text('앱 내장 테스트 키를 사용하려면 아래 버튼을 클릭하세요:'),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _useTestApiKey();
+                },
+                child: const Text('테스트 키 사용하기'),
               ),
               const SizedBox(height: 12),
               
@@ -140,7 +156,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const Text('• API 키는 선택사항입니다. 입력하지 않아도 기본 기능을 사용할 수 있습니다.\n'
                   '• 자신의 API 키를 사용하면 더 많은 요청을 처리할 수 있습니다.\n'
-                  '• API 키는 안전하게 저장되며 귀하의 요청에만 사용됩니다.'),
+                  '• API 키는 안전하게 저장되며 귀하의 요청에만 사용됩니다.\n'
+                  '• 테스트 키는 사용량 제한이 있을 수 있으므로 자신의 키를 사용하는 것이 좋습니다.'),
             ],
           ),
         ),
@@ -267,52 +284,72 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _apiKeyController,
-                        decoration: InputDecoration(
-                          labelText: 'API 키 (선택사항)',
-                          border: const OutlineInputBorder(),
-                          helperText: '자신의 Gemini API 키를 입력하세요',
-                          errorText: _isApiKeyValid ? null : _apiKeyErrorMessage,
-                          suffixIcon: _apiKeyController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(
-                                    _isApiKeyValid ? Icons.check_circle : Icons.error,
-                                    color: _isApiKeyValid ? Colors.green : Colors.red,
-                                  ),
-                                  onPressed: _validateApiKey,
-                                )
-                              : null,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _apiKeyController,
+                            decoration: InputDecoration(
+                              labelText: 'API 키 (선택사항)',
+                              border: const OutlineInputBorder(),
+                              helperText: '자신의 Gemini API 키를 입력하세요',
+                              errorText: _isApiKeyValid ? null : _apiKeyErrorMessage,
+                              suffixIcon: _apiKeyController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: Icon(
+                                        _isApiKeyValid ? Icons.check_circle : Icons.error,
+                                        color: _isApiKeyValid ? Colors.green : Colors.red,
+                                      ),
+                                      onPressed: _validateApiKey,
+                                    )
+                                  : null,
+                            ),
+                            onChanged: (value) {
+                              if (value.isEmpty) {
+                                setState(() {
+                                  _isApiKeyValid = true;
+                                  _apiKeyErrorMessage = '';
+                                });
+                              }
+                            },
+                          ),
                         ),
-                        onChanged: (value) {
-                          if (value.isEmpty) {
-                            setState(() {
-                              _isApiKeyValid = true;
-                              _apiKeyErrorMessage = '';
-                            });
-                          }
-                        },
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.help_outline),
+                          tooltip: 'API 키 설정 방법',
+                          onPressed: _showApiKeyTutorial,
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.help_outline),
-                      tooltip: 'API 키 설정 방법',
-                      onPressed: _showApiKeyTutorial,
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _useTestApiKey,
+                          icon: const Icon(Icons.vpn_key, size: 18),
+                          label: const Text('테스트 키 사용'),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                        ),
+                        if (_apiKeyController.text.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: _validateApiKey,
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('키 검증하기'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
-                if (_apiKeyController.text.isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _validateApiKey,
-                      child: const Text('API 키 검증하기'),
-                    ),
-                  ),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: _isLoading ? null : _signUp,

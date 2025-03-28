@@ -58,6 +58,24 @@ class PdfFileInfo {
   /// 파일 크기 (바이트)
   final int fileSize;
   
+  /// 파일 URL (클라우드)
+  final String url;
+  
+  /// 로컬 저장 여부
+  final bool isLocal;
+  
+  /// 클라우드 저장 여부
+  final bool isCloudStored;
+  
+  /// 게스트 파일 여부
+  final bool isGuestFile;
+  
+  /// 읽기 진행 상태 (0.0 ~ 1.0)
+  final double readingProgress;
+  
+  /// 포맷된 파일 크기 문자열
+  final String formattedSize;
+  
   /// 생성자
   PdfFileInfo({
     required this.path,
@@ -78,12 +96,27 @@ class PdfFileInfo {
     List<dynamic>? bookmarks,
     List<dynamic>? annotations,
     int? fileSize,
+    this.url = '',
+    this.isLocal = true,
+    this.isCloudStored = false,
+    this.isGuestFile = false,
+    this.readingProgress = 0.0,
+    String? formattedSize,
   }) : 
     this.createdAt = createdAt ?? DateTime.now(),
     this.lastAccessedAt = lastAccessedAt ?? DateTime.now(),
     this.bookmarks = bookmarks ?? [],
     this.annotations = annotations ?? [],
-    this.fileSize = fileSize ?? size;
+    this.fileSize = fileSize ?? size,
+    this.formattedSize = formattedSize ?? _formatFileSize(fileSize ?? size);
+  
+  /// 파일 크기를 사람이 읽기 쉬운 형태로 변환
+  static String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1073741824) return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+    return '${(bytes / 1073741824).toStringAsFixed(1)} GB';
+  }
   
   /// 파일 인스턴스에서 생성
   factory PdfFileInfo.fromFile(File file, {
@@ -132,6 +165,12 @@ class PdfFileInfo {
     List<dynamic>? bookmarks,
     List<dynamic>? annotations,
     int? fileSize,
+    String? url,
+    bool? isLocal,
+    bool? isCloudStored,
+    bool? isGuestFile,
+    double? readingProgress,
+    String? formattedSize,
   }) {
     return PdfFileInfo(
       path: path ?? this.path,
@@ -152,46 +191,82 @@ class PdfFileInfo {
       bookmarks: bookmarks ?? this.bookmarks,
       annotations: annotations ?? this.annotations,
       fileSize: fileSize ?? this.fileSize,
+      url: url ?? this.url,
+      isLocal: isLocal ?? this.isLocal,
+      isCloudStored: isCloudStored ?? this.isCloudStored,
+      isGuestFile: isGuestFile ?? this.isGuestFile,
+      readingProgress: readingProgress ?? this.readingProgress,
+      formattedSize: formattedSize ?? this.formattedSize,
     );
   }
 
   /// PDFDocument에서 PdfFileInfo 생성
   factory PdfFileInfo.fromPdfDocument(PDFDocument document) {
+    final fileSize = document.fileSize;
+    // 메타데이터에서 필요한 추가 정보 추출
+    final metadata = document.metadata;
+    
     return PdfFileInfo(
       path: document.filePath,
-      name: document.title,
-      size: document.fileSize ?? 0,
+      name: _extractFileName(document.filePath),
+      size: fileSize,
       id: document.id,
-      userId: document.userId ?? '',
+      userId: metadata['userId'] as String? ?? '',
       title: document.title,
-      fileName: document.fileName ?? document.title,
-      pageCount: document.pageCount ?? 0,
-      createdAt: document.createdAt,
-      lastAccessedAt: document.lastAccessedAt,
-      accessCount: document.accessCount ?? 0,
-      bookmarks: document.bookmarks ?? [],
-      annotations: document.annotations ?? [],
-      fileSize: document.fileSize ?? 0,
-      isFavorite: document.isFavorite ?? false,
+      fileName: metadata['fileName'] as String? ?? _extractFileName(document.filePath),
+      pageCount: document.pageCount,
+      createdAt: document.createdAt ?? DateTime.now(),
+      lastAccessedAt: document.lastAccessedAt ?? DateTime.now(),
+      accessCount: metadata['accessCount'] as int? ?? 0,
+      bookmarks: metadata['bookmarks'] as List<dynamic>? ?? [],
+      annotations: metadata['annotations'] as List<dynamic>? ?? [],
+      fileSize: fileSize,
+      isFavorite: document.isFavorite,
+      url: metadata['url'] as String? ?? '',
+      isLocal: metadata['isLocal'] as bool? ?? true,
+      isCloudStored: metadata['isCloudStored'] as bool? ?? false,
+      isGuestFile: metadata['isGuestFile'] as bool? ?? false,
+      readingProgress: document.readingProgress,
+      formattedSize: _formatFileSize(fileSize),
     );
+  }
+  
+  /// 파일 경로에서 파일 이름 추출
+  static String _extractFileName(String filePath) {
+    final parts = filePath.split('/');
+    return parts.isNotEmpty ? parts.last : '';
   }
   
   /// PdfFileInfo에서 PDFDocument 생성
   PDFDocument toPdfDocument() {
+    // 추가 메타데이터로 저장할 속성들
+    final metadata = <String, dynamic>{
+      'userId': userId,
+      'fileName': fileName,
+      'accessCount': accessCount,
+      'bookmarks': bookmarks,
+      'annotations': annotations,
+      'url': url,
+      'isLocal': isLocal,
+      'isCloudStored': isCloudStored,
+      'isGuestFile': isGuestFile,
+    };
+    
     return PDFDocument(
       id: id.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : id,
       title: title.isEmpty ? name : title,
       filePath: path,
-      userId: userId,
-      fileName: fileName.isEmpty ? name : fileName,
+      fileSize: fileSize,
       pageCount: pageCount,
       createdAt: createdAt,
       lastAccessedAt: lastAccessedAt,
-      accessCount: accessCount,
-      bookmarks: bookmarks,
-      annotations: annotations,
-      fileSize: fileSize,
       isFavorite: isFavorite,
+      readingProgress: readingProgress,
+      downloadUrl: url,
+      status: isLocal 
+        ? PDFDocumentStatus.added 
+        : (isCloudStored ? PDFDocumentStatus.downloaded : PDFDocumentStatus.added),
+      metadata: metadata,
     );
   }
 

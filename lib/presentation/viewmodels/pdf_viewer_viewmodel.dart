@@ -18,7 +18,7 @@ import '../../domain/models/pdf_bookmark.dart';
 import '../../domain/models/pdf_document.dart';
 import '../../domain/repositories/pdf_repository.dart';
 import '../../services/pdf/pdf_service.dart';
-import '../../data/datasources/pdf_local_datasource.dart';
+import '../../data/datasources/pdf_local_data_source.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/pdf_viewmodel.dart';
 
@@ -351,14 +351,17 @@ class PDFViewerViewModel extends BaseViewModel {
     if (_document == null) return 0;
     
     try {
-      final int? lastReadPage = await _localDataSource.getLastReadPage(_document!.id);
-      if (lastReadPage != null && lastReadPage > 0 && lastReadPage <= _totalPages) {
-        _currentPage = lastReadPage;
-        return lastReadPage;
-      } else {
-        _currentPage = 1;
-        return 1;
+      final result = await _localDataSource.getLastReadPage(_document!.id);
+      if (result.isSuccess) {
+        final lastReadPage = result.data;
+        if (lastReadPage > 0 && lastReadPage <= _totalPages) {
+          _currentPage = lastReadPage;
+          return lastReadPage;
+        }
       }
+      // 유효한 페이지를 가져오지 못하면 첫 페이지로 설정
+      _currentPage = 1;
+      return 1;
     } catch (e) {
       // 오류 발생 시 첫 페이지로 설정
       debugPrint('마지막 읽은 페이지 로드 오류: $e');
@@ -496,9 +499,12 @@ class PDFViewerViewModel extends BaseViewModel {
     if (_document == null) return;
     
     try {
-      await _localDataSource.saveLastReadPage(_document!.id, _currentPage);
+      final result = await _localDataSource.saveLastReadPage(_document!.id, _currentPage);
+      if (result.isFailure) {
+        debugPrint('마지막 읽은 페이지 저장 실패: ${result.error}');
+      }
     } catch (e) {
-      // 저장 실패 시 무시
+      debugPrint('마지막 읽은 페이지 저장 중 오류: $e');
     }
   }
   
@@ -636,7 +642,13 @@ class PDFViewerViewModel extends BaseViewModel {
   /// 샘플 PDF 로드
   Future<Uint8List?> loadSamplePdf() async {
     try {
-      return await _repository.loadSamplePdf();
+      final result = await _repository.loadSamplePdf();
+      if (result.isSuccess) {
+        return result.data;
+      } else {
+        _setError(result.error?.toString() ?? '샘플 PDF 로드 실패');
+        return null;
+      }
     } catch (e) {
       _setError('샘플 PDF 로드 중 오류: $e');
       return null;
@@ -740,6 +752,25 @@ class PDFViewerViewModel extends BaseViewModel {
     } catch (e) {
       _setError('문서 ID로 로드 중 오류: $e');
       return Result.failure(Exception(e.toString()));
+    }
+  }
+
+  /// 북마크 목록 로드 (비공개 메소드)
+  Future<void> _loadBookmarks() async {
+    if (_document == null) return;
+    
+    try {
+      final bookmarksResult = await _repository.getBookmarks(_document!.id);
+      
+      if (bookmarksResult.isSuccess) {
+        _bookmarks = bookmarksResult.data ?? [];
+      } else {
+        debugPrint('북마크 로드 실패: ${bookmarksResult.error}');
+        _bookmarks = [];
+      }
+    } catch (e) {
+      debugPrint('북마크 로드 오류: $e');
+      _bookmarks = [];
     }
   }
 } 

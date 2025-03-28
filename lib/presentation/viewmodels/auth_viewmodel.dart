@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/base/base_viewmodel.dart';
-import '../../core/models/result.dart';
+import '../../core/base/result.dart';
 import '../../services/firebase_service.dart';
 import '../../domain/models/user_model.dart';
 

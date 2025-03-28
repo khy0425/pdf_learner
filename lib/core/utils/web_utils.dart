@@ -11,10 +11,18 @@ import 'package:injectable/injectable.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../utils/conditional_file_picker.dart';
+import 'package:get_it/get_it.dart';
 
 /// 웹 환경에서 사용하는 유틸리티 함수들
 @singleton
 class WebUtils {
+  /// 싱글톤 인스턴스 관리
+  static final WebUtils _instance = WebUtils._internal();
+  factory WebUtils() => _instance;
+  
+  /// 내부 생성자
+  WebUtils._internal();
+
   /// 웹 환경인지 확인합니다.
   bool get isWeb => kIsWeb;
 
@@ -24,32 +32,46 @@ class WebUtils {
   /// 페이지 새로고침
   Future<void> reloadPage() async {
     if (isWeb) {
-      // Web reload is handled by the browser
-    } else {
-      exit(0); // Native app restart
+      window.location.reload();
     }
   }
   
   /// URL 공유 (웹 환경)
   Future<bool> shareUrl(String url) async {
     if (!isWeb) {
-      try {
-        await Share.share(url);
+      return false;
+    }
+    
+    try {
+      if (window.navigator.share != null) {
+        await window.navigator.share({
+          'url': url,
+        });
         return true;
-      } catch (e) {
-        return false;
       }
+    } catch (e) {
+      debugPrint('URL 공유 오류: $e');
     }
     return false;
   }
   
   /// 파일 다운로드 (웹 환경)
   void downloadFile(String url, String filename) {
-    if (!isWeb) {
-      final directory = Directory.current;
-      final file = File('${directory.path}/$filename');
-      // Download file implementation
-    }
+    if (!isWeb) return;
+    
+    // <a> 요소 생성
+    final anchor = html.AnchorElement()
+      ..href = url
+      ..download = filename
+      ..target = '_blank'
+      ..style.display = 'none';
+    
+    // 문서에 추가하고 클릭
+    html.document.body!.children.add(anchor);
+    anchor.click();
+    
+    // 문서에서 제거
+    anchor.remove();
   }
   
   /// URL에서 PDF 파일 다운로드하여 바이트 배열로 반환
@@ -78,19 +100,7 @@ class WebUtils {
   /// PDF 파일 사용자 다운로드
   void downloadPdfToUser(String url, String filename) {
     if (isWeb) {
-      // <a> 요소 생성
-      final anchor = html.AnchorElement()
-        ..href = url
-        ..download = filename
-        ..target = '_blank'
-        ..style.display = 'none';
-      
-      // 문서에 추가하고 클릭
-      html.document.body!.children.add(anchor);
-      anchor.click();
-      
-      // 문서에서 제거
-      anchor.remove();
+      downloadFile(url, filename);
     }
   }
 
@@ -123,42 +133,46 @@ class WebUtils {
     }
   }
 
-  /// 클립보드에 텍스트 복사
-  Future<void> copyToClipboard(String text) async {
-    if (!isWeb) {
-      // Native clipboard handling
+  /// 세션 스토리지에 값을 저장합니다.
+  void setSessionItem(String key, String value) {
+    if (isWeb) {
+      window.sessionStorage[key] = value;
     }
   }
 
-  /// 파일 선택 대화상자 열기
-  Future<String?> pickFile({List<String>? allowedExtensions}) async {
-    if (!isWeb) {
-      final result = await ConditionalFilePicker.pickFiles(
-        type: FilePickerType.custom,
-        allowedExtensions: allowedExtensions,
-      );
-      return result?.files.single.path;
+  /// 세션 스토리지에서 값을 가져옵니다.
+  String? getSessionItem(String key) {
+    if (isWeb) {
+      return window.sessionStorage[key];
     }
     return null;
   }
 
-  /// 여러 파일 선택 대화상자 열기
-  Future<List<String>> pickFiles({List<String>? allowedExtensions}) async {
-    if (!isWeb) {
-      final result = await ConditionalFilePicker.pickFiles(
-        type: FilePickerType.custom,
-        allowedExtensions: allowedExtensions,
-        allowMultiple: true,
-      );
-      return result?.files.map((file) => file.path!).toList() ?? [];
+  /// 세션 스토리지에서 항목을 삭제합니다.
+  void removeSessionItem(String key) {
+    if (isWeb) {
+      window.sessionStorage.remove(key);
     }
-    return [];
+  }
+
+  /// 세션 스토리지를 비웁니다.
+  void clearSession() {
+    if (isWeb) {
+      window.sessionStorage.clear();
+    }
+  }
+
+  /// 클립보드에 텍스트 복사
+  Future<void> copyToClipboard(String text) async {
+    if (isWeb) {
+      await window.navigator.clipboard?.writeText(text);
+    }
   }
 
   /// Blob URL 생성
   String createBlobUrl(List<int> bytes, String mimeType) {
     if (!isWeb) return '';
-    final blob = html.Blob(bytes, mimeType);
+    final blob = html.Blob([bytes], mimeType);
     return html.Url.createObjectUrlFromBlob(blob);
   }
   
@@ -173,29 +187,6 @@ class WebUtils {
       }
     }
     return '';
-  }
-  
-  /// URL에서 파일 다운로드
-  Future<void> downloadFileFromUrl(String url, String filename) async {
-    if (isWeb) {
-      try {
-        // <a> 요소 생성
-        final anchor = html.AnchorElement()
-          ..href = url
-          ..download = filename
-          ..target = '_blank'
-          ..style.display = 'none';
-        
-        // 문서에 추가하고 클릭
-        html.document.body!.children.add(anchor);
-        anchor.click();
-        
-        // 문서에서 제거
-        anchor.remove();
-      } catch (e) {
-        debugPrint('파일 다운로드 오류: $e');
-      }
-    }
   }
 
   /// 바이트 배열을 Base64 문자열로 변환합니다.
@@ -270,5 +261,12 @@ class WebUtils {
       return directory.path;
     }
     return null;
+  }
+
+  /// GetIt에 싱글톤으로 등록
+  static void registerSingleton() {
+    if (!GetIt.instance.isRegistered<WebUtils>()) {
+      GetIt.instance.registerSingleton<WebUtils>(_instance);
+    }
   }
 } 

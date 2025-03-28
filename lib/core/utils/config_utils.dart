@@ -5,31 +5,35 @@ import 'package:flutter/foundation.dart';
 class ConfigUtils {
   // PayPal 관련 설정
   static String getPayPalBasicPlanId() {
-    // 디버그 모드에서는 테스트 ID 사용, 릴리스 모드에서는 .env에서 로드
-    if (kDebugMode) {
-      return dotenv.env['PAYPAL_BASIC_PLAN_ID'] ?? 'P-0C773510SU364272XM7SPX6I'; // 테스트 ID
+    final planId = dotenv.env['PAYPAL_BASIC_PLAN_ID'];
+    if (planId == null || planId.isEmpty) {
+      throw Exception('PayPal 기본 플랜 ID가 설정되지 않았습니다.');
     }
-    return dotenv.env['PAYPAL_BASIC_PLAN_ID'] ?? 'P-0C773510SU364272XM7SPX6I';
+    return planId;
   }
 
   static String getPayPalPremiumPlanId() {
-    if (kDebugMode) {
-      return dotenv.env['PAYPAL_PREMIUM_PLAN_ID'] ?? 'P-2EM77373KV537191YM7SPYNY'; // 테스트 ID
+    final planId = dotenv.env['PAYPAL_PREMIUM_PLAN_ID'];
+    if (planId == null || planId.isEmpty) {
+      throw Exception('PayPal 프리미엄 플랜 ID가 설정되지 않았습니다.');
     }
-    return dotenv.env['PAYPAL_PREMIUM_PLAN_ID'] ?? 'P-2EM77373KV537191YM7SPYNY';
+    return planId;
   }
 
   static String getPayPalClientId() {
-    if (kDebugMode) {
-      // 개발 환경용 클라이언트 ID
-      return dotenv.env['PAYPAL_CLIENT_ID'] ?? 'AY4xA8BL8YVstPdRZRd_6BM6vhoEGu0ei3UUjOpn0EajAI2FG2yALLnjmniYERxr7R1BpZI0aQy3Xi9w';
+    final clientId = dotenv.env['PAYPAL_CLIENT_ID'];
+    if (clientId == null || clientId.isEmpty) {
+      throw Exception('PayPal 클라이언트 ID가 설정되지 않았습니다.');
     }
-    // 프로덕션 환경에서는 .env 파일에서 로드
-    return dotenv.env['PAYPAL_CLIENT_ID'] ?? 'AY4xA8BL8YVstPdRZRd_6BM6vhoEGu0ei3UUjOpn0EajAI2FG2yALLnjmniYERxr7R1BpZI0aQy3Xi9w';
+    return clientId;
   }
 
   static String getPayPalMerchantId() {
-    return dotenv.env['PAYPAL_MERCHANT_ID'] ?? 'RJWUGHMG9C6FQ';
+    final merchantId = dotenv.env['PAYPAL_MERCHANT_ID'];
+    if (merchantId == null || merchantId.isEmpty) {
+      throw Exception('PayPal 판매자 ID가 설정되지 않았습니다.');
+    }
+    return merchantId;
   }
 
   // 앱 버전 정보

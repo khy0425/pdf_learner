@@ -3,67 +3,77 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/base/base_viewmodel.dart';
 
+/// 로케일 관리 ViewModel
 class LocaleViewModel extends BaseViewModel {
-  static const String _localePrefsKey = 'preferred_locale';
+  /// 로케일 저장 키
+  static const String _localePreferenceKey = 'locale_code';
   
-  Locale _locale = const Locale('en', '');
+  /// SharedPreferences 인스턴스
   final SharedPreferences _prefs;
-  bool _initialized = false;
   
-  LocaleViewModel({required SharedPreferences sharedPreferences})
-      : _prefs = sharedPreferences {
-    _initViewModel();
+  /// 현재 로케일
+  Locale? _locale;
+  
+  /// 지원 로케일 목록
+  final List<Locale> _supportedLocales = const [
+    Locale('ko', ''), // 한국어
+    Locale('en', ''), // 영어
+    Locale('ja', ''), // 일본어
+    Locale('zh', ''), // 중국어
+  ];
+  
+  /// 생성자
+  LocaleViewModel({required SharedPreferences sharedPreferences}) : _prefs = sharedPreferences {
+    _loadSavedLocale();
   }
   
-  Future<void> _initViewModel() async {
-    try {
-      setLoading(true);
-      await _loadSavedLocale();
-      setLoading(false);
-    } catch (e) {
-      setError('Failed to load locale: $e');
-    }
-  }
+  /// 현재 로케일 반환
+  Locale? get locale => _locale;
   
-  Locale get locale => _locale;
-  bool get isInitialized => _initialized;
-  List<Locale> get supportedLocales => AppLocalizations.supportedLocales;
+  /// 지원 로케일 목록 반환
+  List<Locale> get supportedLocales => _supportedLocales;
   
-  Future<void> _loadSavedLocale() async {
-    final savedLocaleString = _prefs.getString(_localePrefsKey);
+  /// 로케일 설정
+  Future<void> setLocale(Locale locale) async {
+    if (_locale == locale) return;
     
-    if (savedLocaleString != null) {
-      final parts = savedLocaleString.split('_');
-      if (parts.isNotEmpty) {
-        final languageCode = parts[0];
-        final countryCode = parts.length > 1 ? parts[1] : '';
-        
-        _locale = Locale(languageCode, countryCode);
-      }
-    }
-    
-    _initialized = true;
+    _locale = locale;
     notifyListeners();
+    
+    await _prefs.setString(_localePreferenceKey, locale.languageCode);
   }
   
-  Future<void> changeLocale(Locale newLocale) async {
-    if (_locale == newLocale) return;
+  /// 저장된 로케일 로드
+  void _loadSavedLocale() {
+    String? localeCode = _prefs.getString(_localePreferenceKey);
     
-    try {
-      setLoading(true);
-      _locale = newLocale;
-      
-      final localeString = newLocale.countryCode != null && newLocale.countryCode!.isNotEmpty
-          ? '${newLocale.languageCode}_${newLocale.countryCode}'
-          : newLocale.languageCode;
-      
-      await _prefs.setString(_localePrefsKey, localeString);
-      
-      setLoading(false);
-      notifyListeners();
-    } catch (e) {
-      setError('Failed to change locale: $e');
+    if (localeCode != null) {
+      _locale = Locale(localeCode, '');
     }
+  }
+  
+  /// 로케일 코드로 로케일 설정
+  Future<void> setLocaleByCode(String code) async {
+    final locale = Locale(code, '');
+    await setLocale(locale);
+  }
+  
+  /// 시스템 로케일 사용 (null로 설정)
+  Future<void> useSystemLocale() async {
+    _locale = null;
+    notifyListeners();
+    
+    await _prefs.remove(_localePreferenceKey);
+  }
+  
+  /// 한국어 설정
+  Future<void> setKorean() async {
+    await setLocale(const Locale('ko', ''));
+  }
+  
+  /// 영어 설정
+  Future<void> setEnglish() async {
+    await setLocale(const Locale('en', ''));
   }
   
   String getLanguageName(Locale locale) {
@@ -75,6 +85,6 @@ class LocaleViewModel extends BaseViewModel {
   }
   
   String get currentLanguageName {
-    return getLanguageName(_locale);
+    return getLanguageName(_locale ?? const Locale('en', ''));
   }
 } 

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
-import 'package:pdf_learner_v2/core/models/result.dart';
+import '../../core/base/result.dart';
 import 'package:pdf_learner_v2/domain/models/pdf_document.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:injectable/injectable.dart';

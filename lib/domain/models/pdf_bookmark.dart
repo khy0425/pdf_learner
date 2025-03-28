@@ -1,287 +1,239 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:equatable/equatable.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+/// PDF 북마크 타입 정의
+enum PDFBookmarkType {
+  /// 일반 북마크
+  normal,
+  
+  /// 하이라이트
+  highlight,
+  
+  /// 메모
+  note,
+  
+  /// 그림 주석
+  drawing,
+  
+  /// 텍스트 선택
+  textSelection
+}
 
 /// PDF 북마크 모델
 /// 
 /// PDF 문서의 특정 페이지에 대한 북마크 정보를 관리합니다.
-class PDFBookmark {
+class PDFBookmark extends Equatable {
   /// 북마크 고유 ID
   final String id;
   
-  /// 문서 ID
+  /// 북마크가 속한 문서 ID
   final String documentId;
-  
-  /// 페이지 번호
-  final int pageNumber;
   
   /// 북마크 제목
   final String title;
   
-  /// 북마크 설명
-  final String description;
+  /// 북마크된 페이지 번호
+  final int page;
   
-  /// 생성일시
-  final DateTime createdAt;
+  /// 페이지 내 위치 (0.0 ~ 1.0)
+  final double position;
   
-  /// 업데이트 일시
+  /// 북마크 색상 (ARGB 값)
+  final int color;
+  
+  /// 북마크 타입
+  final PDFBookmarkType type;
+  
+  /// 북마크 내용
+  final String? content;
+  
+  /// 생성 시간
+  final DateTime? createdAt;
+  
+  /// 마지막 업데이트 시간
   final DateTime? updatedAt;
   
-  /// 북마크 태그 목록
-  final List<String> tags;
-  
-  /// 북마크 메모
-  final String note;
-  
-  /// 선택된 텍스트
-  final String selectedText;
-  
-  /// 북마크 메타데이터
-  final Map<String, dynamic> metadata;
-  
-  /// 북마크가 즐겨찾기인지 여부
+  /// 즐겨찾기 여부
   final bool isFavorite;
   
-  /// 북마크가 선택된 상태인지 여부
-  final bool isSelected;
+  /// 메타데이터
+  final Map<String, dynamic> metadata;
   
-  /// 북마크가 하이라이트 상태인지 여부
-  final bool isHighlighted;
-  
-  /// 하이라이트된 텍스트 내용
-  final String textContent;
-  
-  /// 북마크 색상
-  final String color;
-  
-  /// 북마크 위치
-  final int position;
-
-  /// 기본 북마크 생성자
+  /// 북마크 생성자
   const PDFBookmark({
     required this.id,
     required this.documentId,
     required this.title,
-    this.description = '',
-    required this.pageNumber,
-    required this.createdAt,
+    required this.page,
+    this.position = 0.0,
+    this.color = 0xFF42A5F5,
+    this.type = PDFBookmarkType.normal,
+    this.content,
+    this.createdAt,
     this.updatedAt,
-    this.note = '',
-    this.selectedText = '',
-    this.tags = const [],
-    this.metadata = const {},
     this.isFavorite = false,
-    this.isSelected = false,
-    this.isHighlighted = false,
-    this.textContent = '',
-    this.color = '',
-    this.position = 0,
+    this.metadata = const {},
   });
-
-  /// JSON 문자열에서 북마크 객체 생성
-  factory PDFBookmark.fromJson(String jsonString) {
-    try {
-      final json = jsonDecode(jsonString) as Map<String, dynamic>;
-      
-      return PDFBookmark(
-        id: json['id'] as String,
-        documentId: json['documentId'] as String,
-        title: json['title'] as String,
-        description: json['description'] as String? ?? '',
-        pageNumber: json['pageNumber'] as int,
-        createdAt: json['createdAt'] != null
-            ? DateTime.parse(json['createdAt'] as String)
-            : DateTime.now(),
-        updatedAt: json['updatedAt'] != null
-            ? DateTime.parse(json['updatedAt'] as String)
-            : null,
-        note: json['note'] as String? ?? '',
-        selectedText: json['selectedText'] as String? ?? '',
-        tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? [],
-        metadata: (json['metadata'] as Map<String, dynamic>?) ?? {},
-        isFavorite: json['isFavorite'] as bool? ?? false,
-        isSelected: json['isSelected'] as bool? ?? false,
-        isHighlighted: json['isHighlighted'] as bool? ?? false,
-        textContent: json['textContent'] as String? ?? '',
-        color: json['color'] as String? ?? '',
-        position: json['position'] as int? ?? 0,
-      );
-    } catch (e) {
-      debugPrint('북마크 JSON 파싱 오류: $e');
-      return PDFBookmark(
-        id: const Uuid().v4(),
-        documentId: '',
-        title: '오류 북마크',
-        description: '파싱 중 오류 발생',
-        pageNumber: 0,
-        createdAt: DateTime.now(),
-      );
-    }
+  
+  /// JSON에서 생성
+  factory PDFBookmark.fromJson(String json) {
+    return PDFBookmark.fromMap(jsonDecode(json) as Map<String, dynamic>);
   }
   
-  /// JSON 문자열로 변환
+  /// 맵에서 북마크 생성
+  factory PDFBookmark.fromMap(Map<String, dynamic> map) {
+    return PDFBookmark(
+      id: map['id'] as String? ?? '',
+      documentId: map['documentId'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      page: map['page'] as int? ?? 0,
+      position: (map['position'] as num?)?.toDouble() ?? 0.0,
+      color: map['color'] as int? ?? 0xFF42A5F5,
+      type: _bookmarkTypeFromString(map['type'] as String?),
+      content: map['content'] as String?,
+      createdAt: map['createdAt'] != null 
+          ? (map['createdAt'] is Timestamp 
+              ? (map['createdAt'] as Timestamp).toDate() 
+              : DateTime.parse(map['createdAt'].toString()))
+          : null,
+      updatedAt: map['updatedAt'] != null 
+          ? (map['updatedAt'] is Timestamp 
+              ? (map['updatedAt'] as Timestamp).toDate() 
+              : DateTime.parse(map['updatedAt'].toString()))
+          : null,
+      isFavorite: map['isFavorite'] as bool? ?? false,
+      metadata: map['metadata'] != null 
+          ? Map<String, dynamic>.from(map['metadata'] as Map) 
+          : {},
+    );
+  }
+  
+  /// 다른 인스턴스와 현재 인스턴스 비교를 위한 프로퍼티 목록
+  @override
+  List<Object?> get props => [
+    id,
+    documentId,
+    title,
+    page,
+    position,
+    color,
+    type,
+    content,
+    createdAt,
+    updatedAt,
+    isFavorite,
+    metadata,
+  ];
+  
+  /// JSON으로 변환
   String toJson() {
     return jsonEncode(toMap());
   }
   
-  /// Map으로 변환
+  /// 맵으로 변환
   Map<String, dynamic> toMap() {
-    return {
+    final map = <String, dynamic>{
       'id': id,
       'documentId': documentId,
       'title': title,
-      'description': description,
-      'pageNumber': pageNumber,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
-      'note': note,
-      'selectedText': selectedText,
-      'tags': tags,
-      'metadata': metadata,
-      'isFavorite': isFavorite,
-      'isSelected': isSelected,
-      'isHighlighted': isHighlighted,
-      'textContent': textContent,
-      'color': color,
+      'page': page,
       'position': position,
+      'color': color,
+      'type': _bookmarkTypeToString(type),
+      'isFavorite': isFavorite,
     };
-  }
-
-  /// Map에서 객체 생성
-  factory PDFBookmark.fromMap(Map<String, dynamic> map) {
-    try {
-      return PDFBookmark(
-        id: map['id'] ?? '',
-        documentId: map['documentId'] ?? '',
-        title: map['title'] ?? '',
-        description: map['description'] ?? '',
-        pageNumber: map['pageNumber'] ?? 0,
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'])
-            : DateTime.now(),
-        updatedAt: map['updatedAt'] != null
-            ? DateTime.parse(map['updatedAt'])
-            : null,
-        note: map['note'] ?? '',
-        selectedText: map['selectedText'] ?? '',
-        tags: List<String>.from(map['tags'] ?? []),
-        metadata: Map<String, dynamic>.from(map['metadata'] ?? {}),
-        isFavorite: map['isFavorite'] ?? false,
-        isSelected: map['isSelected'] ?? false,
-        isHighlighted: map['isHighlighted'] ?? false,
-        textContent: map['textContent'] ?? '',
-        color: map['color'] ?? '',
-        position: map['position'] ?? 0,
-      );
-    } catch (e) {
-      debugPrint('북마크 맵 파싱 오류: $e');
-      return PDFBookmark(
-        id: const Uuid().v4(),
-        documentId: '',
-        title: '오류 북마크',
-        description: '파싱 중 오류 발생',
-        pageNumber: 0,
-        createdAt: DateTime.now(),
-      );
+    
+    if (content != null) {
+      map['content'] = content;
     }
-  }
-
-  /// 기본 북마크 생성
-  factory PDFBookmark.createDefault() {
-    return PDFBookmark(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      documentId: '',
-      pageNumber: 0,
-      title: '새 북마크',
-      description: '',
-      createdAt: DateTime.now(),
-      tags: [],
-      note: '',
-      metadata: {},
-      isFavorite: false,
-      isSelected: false,
-      isHighlighted: false,
-      textContent: '',
-      color: '#FFFF00',
-      position: 0,
-    );
+    
+    if (createdAt != null) {
+      map['createdAt'] = createdAt!.toIso8601String();
+    }
+    
+    if (updatedAt != null) {
+      map['updatedAt'] = updatedAt!.toIso8601String();
+    }
+    
+    if (metadata.isNotEmpty) {
+      map['metadata'] = metadata;
+    } else {
+      map['metadata'] = {};
+    }
+    
+    return map;
   }
   
-  /// 복사본 생성
+  /// 복사하여 새 인스턴스 생성
   PDFBookmark copyWith({
     String? id,
     String? documentId,
-    int? pageNumber,
     String? title,
-    String? description,
+    int? page,
+    double? position,
+    int? color,
+    PDFBookmarkType? type,
+    String? content,
     DateTime? createdAt,
     DateTime? updatedAt,
-    String? note,
-    String? selectedText,
-    List<String>? tags,
-    Map<String, dynamic>? metadata,
     bool? isFavorite,
-    bool? isSelected,
-    bool? isHighlighted,
-    String? textContent,
-    String? color,
-    int? position,
+    Map<String, dynamic>? metadata,
   }) {
     return PDFBookmark(
       id: id ?? this.id,
       documentId: documentId ?? this.documentId,
-      pageNumber: pageNumber ?? this.pageNumber,
       title: title ?? this.title,
-      description: description ?? this.description,
+      page: page ?? this.page,
+      position: position ?? this.position,
+      color: color ?? this.color,
+      type: type ?? this.type,
+      content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      note: note ?? this.note,
-      selectedText: selectedText ?? this.selectedText,
-      tags: tags ?? this.tags,
-      metadata: metadata ?? this.metadata,
       isFavorite: isFavorite ?? this.isFavorite,
-      isSelected: isSelected ?? this.isSelected,
-      isHighlighted: isHighlighted ?? this.isHighlighted,
-      textContent: textContent ?? this.textContent,
-      color: color ?? this.color,
-      position: position ?? this.position,
+      metadata: metadata ?? this.metadata,
     );
   }
+}
 
-  @override
-  String toString() {
-    return 'PDFBookmark(id: $id, documentId: $documentId, pageNumber: $pageNumber, title: $title, createdAt: $createdAt, tags: $tags, note: $note, metadata: $metadata, isFavorite: $isFavorite, isSelected: $isSelected)';
+/// 북마크 유형을 문자열로 변환
+String _bookmarkTypeToString(PDFBookmarkType type) {
+  switch (type) {
+    case PDFBookmarkType.normal:
+      return 'normal';
+    case PDFBookmarkType.highlight:
+      return 'highlight';
+    case PDFBookmarkType.note:
+      return 'note';
+    case PDFBookmarkType.drawing:
+      return 'drawing';
+    case PDFBookmarkType.textSelection:
+      return 'textSelection';
+    default:
+      return 'normal';
   }
+}
 
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
+/// 문자열에서 북마크 유형 변환
+PDFBookmarkType _bookmarkTypeFromString(String? type) {
+  if (type == null) return PDFBookmarkType.normal;
   
-    return other is PDFBookmark &&
-      other.id == id &&
-      other.documentId == documentId &&
-      other.pageNumber == pageNumber &&
-      other.title == title &&
-      other.createdAt == createdAt &&
-      other.tags.length == tags.length &&
-      other.tags.every((item) => tags.contains(item)) &&
-      other.note == note &&
-      other.isFavorite == isFavorite &&
-      other.isSelected == isSelected;
-  }
-
-  @override
-  int get hashCode {
-    return id.hashCode ^
-      documentId.hashCode ^
-      pageNumber.hashCode ^
-      title.hashCode ^
-      createdAt.hashCode ^
-      tags.hashCode ^
-      note.hashCode ^
-      metadata.hashCode ^
-      isFavorite.hashCode ^
-      isSelected.hashCode;
+  switch (type.toLowerCase()) {
+    case 'highlight':
+      return PDFBookmarkType.highlight;
+    case 'note':
+      return PDFBookmarkType.note;
+    case 'drawing':
+      return PDFBookmarkType.drawing;
+    case 'textselection':
+      return PDFBookmarkType.textSelection;
+    case 'normal':
+    default:
+      return PDFBookmarkType.normal;
   }
 }
 
@@ -291,37 +243,19 @@ extension PDFBookmarkX on PDFBookmark {
   bool isValid() {
     return id.isNotEmpty &&
            documentId.isNotEmpty &&
-           pageNumber > 0 &&
-           createdAt.isBefore(DateTime.now()) &&
-           (DateTime.now().difference(createdAt)).inMinutes <= 5;
-  }
-  
-  /// 북마크가 활성 상태인지 검사합니다.
-  bool isActive() {
-    return isValid();
-  }
-  
-  /// 북마크의 공유 상태를 확인합니다.
-  bool isSharedAndValid() {
-    return false; // 공유 기능 제거
-  }
-  
-  /// 북마크의 공유 권한을 확인합니다.
-  bool hasPermission(String permission) {
-    return false; // 공유 기능 제거
+           page > 0;
   }
   
   /// 북마크의 색상을 ARGB 형식의 문자열로 반환합니다.
   String get colorString {
-    if (color.isNotEmpty) return color;
-    if (metadata.isEmpty) return '#FF0000';
-    return metadata['color'] ?? '#FF0000';
+    if (color != 0) return '#${color.toRadixString(16).padLeft(8, '0').toUpperCase()}';
+    return '#FFEB3B'; // 기본 노란색
   }
   
   /// 북마크의 마지막 접근 시간을 상대적 시간 문자열로 반환합니다.
   String get lastAccessedTimeAgo {
     final now = DateTime.now();
-    final difference = now.difference(createdAt);
+    final difference = now.difference(createdAt ?? DateTime.now());
     
     if (difference.inDays > 365) {
       return '${(difference.inDays / 365).floor()}년 전';
@@ -336,40 +270,5 @@ extension PDFBookmarkX on PDFBookmark {
     } else {
       return '방금 전';
     }
-  }
-  
-  /// 북마크의 메타데이터를 업데이트합니다.
-  PDFBookmark updateMetadata(Map<String, dynamic> newMetadata) {
-    return copyWith(
-      metadata: newMetadata,
-    );
-  }
-  
-  /// 북마크의 태그를 업데이트합니다.
-  PDFBookmark updateTags(List<String> newTags) {
-    return copyWith(
-      tags: newTags,
-    );
-  }
-  
-  /// 북마크의 색상을 업데이트합니다.
-  PDFBookmark updateColor(String newColor) {
-    return copyWith(
-      color: newColor,
-    );
-  }
-  
-  /// 북마크의 메모를 업데이트합니다.
-  PDFBookmark updateNote(String newNote) {
-    return copyWith(
-      note: newNote,
-    );
-  }
-  
-  /// 북마크의 페이지 번호를 업데이트합니다.
-  PDFBookmark updatePageNumber(int newPageNumber) {
-    return copyWith(
-      pageNumber: newPageNumber,
-    );
   }
 } 

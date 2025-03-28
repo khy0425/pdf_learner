@@ -16,12 +16,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/utils/config_utils.dart';
 
-// PayPal 설정 - .env 파일에서 로드하는 값으로 대체
-String get BASIC_PLAN_ID => ConfigUtils.getPayPalBasicPlanId();
-String get PREMIUM_PLAN_ID => ConfigUtils.getPayPalPremiumPlanId();
-String get PAYPAL_CLIENT_ID => ConfigUtils.getPayPalClientId();
-const String PAYPAL_MERCHANT_ID = 'RJWUGHMG9C6FQ';
-
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({Key? key}) : super(key: key);
   
@@ -30,6 +24,12 @@ class SubscriptionScreen extends StatefulWidget {
 }
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
+  // PayPal 설정
+  late final String _basicPlanId;
+  late final String _premiumPlanId;
+  late final String _paypalClientId;
+  late final String _paypalMerchantId;
+
   // 선택된 통화
   String _selectedCurrency = 'USD';
   // 통화별 가격 맵
@@ -71,7 +71,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   void initState() {
     super.initState();
     _localeViewModel = DependencyInjection.instance<LocaleViewModel>();
+    _initPayPalConfig();
     _initCurrency();
+  }
+  
+  void _initPayPalConfig() {
+    try {
+      _basicPlanId = ConfigUtils.getPayPalBasicPlanId();
+      _premiumPlanId = ConfigUtils.getPayPalPremiumPlanId();
+      _paypalClientId = ConfigUtils.getPayPalClientId();
+      _paypalMerchantId = ConfigUtils.getPayPalMerchantId();
+    } catch (e) {
+      debugPrint('PayPal 설정 초기화 실패: $e');
+      // 에러 처리
+    }
   }
   
   // 현재 로케일에 따라 통화 초기화
@@ -142,7 +155,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     try {
       // PayPal 구독 페이지로 이동
-      final planId = planType == 'basic' ? BASIC_PLAN_ID : PREMIUM_PLAN_ID;
+      final planId = planType == 'basic' ? _basicPlanId : _premiumPlanId;
       final planName = planType == 'basic' ? '베이직 플랜' : '프리미엄 플랜';
       
       if (planId.isEmpty) {
@@ -157,6 +170,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             planId: planId,
             planName: planName,
             planType: planType,
+            paypalClientId: _paypalClientId,
+            paypalMerchantId: _paypalMerchantId,
           ),
         ),
       );
@@ -256,6 +271,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     localizations.translate('cloud_sync'),
                   ],
                   onSubscribe: () => _processPayment('basic'),
+                  localizations: localizations,
                 ),
                 
                 // 프리미엄 플랜
@@ -271,6 +287,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     localizations.translate('priority_support'),
                   ],
                   onSubscribe: () => _processPayment('premium'),
+                  localizations: localizations,
                 ),
                 
                 // 멤버십 비교 (간소화)
@@ -335,6 +352,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     required String price,
     required List<String> features,
     required VoidCallback onSubscribe,
+    required AppLocalizations localizations,
     bool isPremium = false,
   }) {
     return Card(
@@ -448,12 +466,16 @@ class PayPalSubscriptionPage extends StatefulWidget {
   final String planId;
   final String planName;
   final String planType;
+  final String paypalClientId;
+  final String paypalMerchantId;
 
   const PayPalSubscriptionPage({
     Key? key,
     required this.planId,
     required this.planName,
     required this.planType,
+    required this.paypalClientId,
+    required this.paypalMerchantId,
   }) : super(key: key);
 
   @override
@@ -477,32 +499,26 @@ class _PayPalSubscriptionPageState extends State<PayPalSubscriptionPage> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            // 페이지 로딩 시작 시 호출
             setState(() {
               _isLoading = true;
             });
           },
           onPageFinished: (String url) {
-            // 페이지 로딩 완료 시 호출
             setState(() {
               _isLoading = false;
             });
-            // JavaScript 브릿지 설정 - 페이지 로드 후 실행
             _setupJavaScriptBridge();
           },
           onWebResourceError: (WebResourceError error) {
-            // 웹 리소스 오류 발생 시 호출
             debugPrint('WebView 오류: ${error.description}');
           },
           onNavigationRequest: (NavigationRequest request) {
-            // PayPal 관련 URL이나 앱 내 URL은 허용
             if (request.url.contains('paypal.com') ||
                 request.url.contains('localhost') ||
                 request.url.contains('127.0.0.1')) {
               debugPrint('허용된 URL로 이동: ${request.url}');
               return NavigationDecision.navigate;
             }
-            // 다른 URL은 차단
             debugPrint('차단된 URL로 이동 시도: ${request.url}');
             return NavigationDecision.prevent;
           },
@@ -514,21 +530,18 @@ class _PayPalSubscriptionPageState extends State<PayPalSubscriptionPage> {
           debugPrint('JS 채널 메시지 수신: ${message.message}');
           final String data = message.message;
           if (data.startsWith('log:')) {
-            // 로그 메시지만 출력하고 다른 액션 없음
             debugPrint('PayPal 로그: ${data.substring(4)}');
           } else if (data.startsWith('success:')) {
             final String subscriptionId = data.substring(8);
-            // 구독 성공 처리
             _handleSubscriptionSuccess(subscriptionId);
           } else if (data == 'cancel') {
-            // 구독 취소 처리
             Navigator.of(context).pop();
           } else {
             debugPrint('알 수 없는 메시지: $data');
           }
         },
       )
-      ..loadHtmlString(_getHtmlContent(PAYPAL_CLIENT_ID, PAYPAL_MERCHANT_ID));
+      ..loadHtmlString(_getHtmlContent(widget.paypalClientId, widget.paypalMerchantId));
       
     debugPrint('WebView 초기화 완료');
   }

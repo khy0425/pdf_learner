@@ -54,7 +54,7 @@ class HomePage extends StatelessWidget {
         ],
       ),
       body: Center(
-        child: Column(
+              child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // 콘텐츠
@@ -89,7 +89,7 @@ class HomePage extends StatelessWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
+            onPressed: () {
           // PDF 추가
         },
         tooltip: localizations.translate('add_pdf'),

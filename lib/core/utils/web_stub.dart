@@ -1,227 +1,248 @@
-// 웹 환경에서 File 및 Directory 클래스에 대한 스텁 구현
+// dart:html 웹 전용 API에 대한 스텁 클래스
+// Flutter 웹이 아닌 환경(Android, iOS 등)에서 컴파일 오류 방지를 위한 파일입니다.
+
+// 이 파일은 플랫폼에 따라 조건부로 가져오기 위해 사용됩니다.
+// web 환경에서는 dart:html을 실제로 사용하고,
+// 비 web 환경에서는 이 스텁 파일을 사용합니다.
+
 import 'dart:typed_data';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 
-/// 웹 환경용 dart:io 스텁
-
-/// 웹 환경을 위한 File 클래스 대체 구현
-class File {
-  final String path;
-  
-  File(this.path);
-  
-  /// 파일 존재 여부 확인 (웹에서는 항상 false 반환)
-  Future<bool> exists() async {
-    return false;
-  }
-  
-  /// 파일을 바이트로 읽기 (웹에서는 항상 예외 발생)
-  Future<Uint8List> readAsBytes() async {
-    throw UnsupportedError('Web environment does not support file operations');
-  }
-  
-  /// 파일에 바이트 쓰기 (웹에서는 항상 예외 발생)
-  Future<void> writeAsBytes(Uint8List bytes) async {
-    throw UnsupportedError('Web environment does not support file operations');
-  }
-  
-  /// 파일 복사
-  Future<File> copy(String newPath) async {
-    return File(newPath);
-  }
-  
-  /// 파일 삭제
-  Future<void> delete() async {}
-}
-
-/// 웹 환경을 위한 Directory 클래스 대체 구현
-class Directory {
-  final String path;
-  
-  Directory(this.path);
-  
-  /// 디렉토리 존재 여부 확인 (웹에서는 항상 false 반환)
-  Future<bool> exists() async {
-    return false;
-  }
-  
-  /// 디렉토리 생성 (웹에서는 항상 this 반환)
-  Future<Directory> create({bool recursive = false}) async {
-    return this;
-  }
-  
-  /// 임시 디렉토리 생성
-  static Future<Directory> systemTemp() async {
-    return Directory('/tmp');
-  }
-}
-
-/// 파일 시스템 엔티티 스텁
-class FileSystemEntity {
-  final String path;
-  
-  FileSystemEntity(this.path);
-  
-  static Future<bool> isDirectory(String path) async => false;
-  static Future<bool> isFile(String path) async => false;
-}
-
-// path_provider 스텁
-Future<Directory> getApplicationDocumentsDirectory() async {
-  if (!kIsWeb) {
-    throw UnsupportedError('getApplicationDocumentsDirectory in web_stub.dart should not be called on non-web platforms.');
-  }
-  return Directory('/documents');
-}
-
-Future<Directory> getTemporaryDirectory() async {
-  if (!kIsWeb) {
-    throw UnsupportedError('getTemporaryDirectory in web_stub.dart should not be called on non-web platforms.');
-  }
-  return Directory('/temp');
-}
-
-Future<Directory> getExternalStorageDirectory() async {
-  if (!kIsWeb) {
-    throw UnsupportedError('getExternalStorageDirectory in web_stub.dart should not be called on non-web platforms.');
-  }
-  return Directory('/storage');
-}
-
-class WebPathProvider {
-  static final WebPathProvider _instance = WebPathProvider._();
-  
-  static WebPathProvider get instance => _instance;
-  
-  WebPathProvider._();
-  
-  String getDocumentsPath() => '/documents';
-  String getTemporaryPath() => '/temp';
-}
-
-class FileSystemEntityType {
-  bool get isDirectory => false;
-  bool get isFile => true;
-  int get size => 0;
-  
-  @override
-  String toString() => 'File';
-}
-
-// html 스텁
+/// Storage 인터페이스의 간단한 구현
 class Storage {
-  void operator []=(String key, String value) {}
-  String? operator [](String key) => null;
-  void remove(String key) {}
-  void clear() {}
+  final Map<String, String> _data = <String, String>{};
+
+  /// 저장된 항목 수
+  int get length => _data.length;
+
+  /// 모든 키 목록 반환
+  Iterable<String> get keys => _data.keys;
+
+  /// 키로 값 가져오기 (연산자 방식)
+  String? operator [](String key) => _data[key];
+
+  /// 키에 값 저장하기 (연산자 방식)
+  void operator []=(String key, String value) {
+    _data[key] = value;
+  }
+
+  /// 키로 값 가져오기 (메서드 방식)
+  String? getItem(String key) => _data[key];
+  
+  /// 키에 값 저장하기 (메서드 방식)
+  void setItem(String key, String value) => _data[key] = value;
+
+  /// 키에 해당하는 값 제거 (메서드 방식)
+  void removeItem(String key) => _data.remove(key);
+  
+  /// 키에 해당하는 값 제거 (일반 방식)
+  void remove(String key) => _data.remove(key);
+
+  /// 모든 데이터 삭제
+  void clear() => _data.clear();
+
+  /// 지정된 인덱스의 키 반환
+  String key(int index) {
+    return _data.keys.elementAt(index);
+  }
+
+  /// 값 존재 여부 확인
+  bool containsKey(String key) => _data.containsKey(key);
 }
 
+/// Window 클래스 스텁
 class Window {
-  Storage get localStorage => Storage();
-  Storage get sessionStorage => Storage();
+  /// localStorage 인스턴스
+  final Storage localStorage = Storage();
+  
+  /// sessionStorage 인스턴스
+  final Storage sessionStorage = Storage();
+  
+  /// Location 인스턴스
+  final Location location = Location();
 }
 
-Window window = Window();
-
-/// 웹이 아닌 환경에서 사용하는 스텁 파일
-/// 
-/// dart:html 등 웹 전용 패키지를 대체하기 위한 스텁 클래스들을 제공합니다.
-
-/// 임시 디렉토리 관련 스텁
-class TemporaryDirectoryStub {
-  String get path => '';
+/// Location 스텁
+class Location {
+  String href = 'about:blank';
+  String host = 'localhost';
+  String hostname = 'localhost';
+  String origin = 'http://localhost';
+  String protocol = 'http:';
+  
+  void reload() {
+    // 스텁 - 아무 작업 안함
+  }
 }
 
-/// 외부 저장소 관련 스텁
-class ExternalStorageDirectoryStub {
-  String get path => '';
+/// window 전역 객체
+final Window window = Window();
+
+/// Document 클래스 스텁
+class Document {
+  /// body 요소
+  final Element body = Element();
+  
+  /// 요소 생성
+  Element createElement(String tagName) {
+    if (tagName == 'a') return AnchorElement();
+    if (tagName == 'input') return InputElement();
+    return Element();
+  }
+  
+  /// ID로 요소 가져오기
+  Element? getElementById(String id) {
+    return null;
+  }
 }
 
-/// 공통 저장소 관련 스텁
-class CommonDirectoryStub {
-  String? get path => null;
+/// document 전역 객체
+final Document document = Document();
+
+/// HTML 요소 스텁
+class Element {
+  /// 스타일 속성
+  final Map<String, String> style = {};
+  
+  /// 자식 요소 목록
+  final List<Element> children = [];
+  
+  /// 자식 요소 추가
+  void appendChild(Element child) {
+    children.add(child);
+  }
+  
+  /// 요소 제거
+  void remove() {
+    // 스텁 구현 - 아무 작업도 수행하지 않음
+  }
+  
+  /// 속성 설정
+  void setAttribute(String name, String value) {
+    // 스텁 구현 - 아무 작업도 수행하지 않음
+  }
+  
+  /// 클래스 추가
+  void addClass(String className) {
+    // 스텁 구현 - 아무 작업도 수행하지 않음
+  }
 }
 
-/// 애플리케이션 도큐먼트 디렉토리 관련 스텁
-class ApplicationDocumentsDirectoryStub {
-  String get path => '';
+/// a 태그 스텁
+class AnchorElement extends Element {
+  /// href 속성
+  String href = '';
+  
+  /// download 속성
+  String download = '';
+  
+  /// target 속성
+  String target = '';
+  
+  /// click 이벤트 발생
+  void click() {
+    // 스텁 구현 - 아무 작업도 수행하지 않음
+  }
 }
 
-/// 웹 유틸리티 관련 스텁 함수들
-
-/// 로컬 스토리지에서 데이터 로드
-dynamic loadFromLocalStorage(String key) {
-  return null;
+/// input 요소 스텁
+class InputElement extends Element {
+  String type = 'text';
+  String value = '';
+  bool multiple = false;
+  String accept = '';
+  
+  /// click 이벤트 발생
+  void click() {
+    // 스텁 구현 - 아무 작업도 수행하지 않음
+  }
+  
+  /// 이벤트 리스너
+  Stream<Event> get onChange => _onChange.stream;
+  final _onChange = StreamController<Event>.broadcast();
+  
+  /// 파일 목록
+  List<File>? get files => null;
 }
 
-/// 로컬 스토리지에 데이터 저장
-void saveToLocalStorage(String key, dynamic data) {
-  // 웹이 아닌 환경에서는 동작 안함
+/// 이벤트 스텁
+class Event {}
+
+/// 스트림 컨트롤러
+class StreamController<T> {
+  /// 생성자
+  StreamController.broadcast();
+  
+  /// 스트림 객체
+  Stream<T> get stream => Stream<T>.empty();
 }
 
-/// 로컬 스토리지에서 데이터 삭제
-void removeFromLocalStorage(String key) {
-  // 웹이 아닌 환경에서는 동작 안함
+/// 스트림 스텁
+class Stream<T> {
+  /// 빈 스트림 생성
+  Stream.empty();
+  
+  /// 리스너 등록
+  void listen(Function(T) onData, {Function? onError, Function? onDone}) {}
 }
 
-/// 로컬 스토리지 클리어
-void clearLocalStorage() {
-  // 웹이 아닌 환경에서는 동작 안함
+/// File 클래스 스텁
+class File {
+  /// 파일 이름
+  final String name;
+  
+  /// 파일 크기
+  final int size;
+  
+  /// 파일 타입
+  final String type;
+  
+  /// 생성자
+  File(this.name, this.size, this.type);
 }
 
-/// 클립보드에 텍스트 복사
-void copyToClipboard(String text) {
-  // 웹이 아닌 환경에서는 동작 안함
+/// 파일 리더 스텁
+class FileReader {
+  dynamic result;
+  
+  Stream<Event> get onLoad => Stream<Event>.empty();
+  Stream<Event> get onError => Stream<Event>.empty();
+  
+  void readAsText(File file) {}
+  void readAsArrayBuffer(File file) {}
 }
 
-/// 페이지 새로고침
-void refreshPage() {
-  // 웹이 아닌 환경에서는 동작 안함
+/// Blob 클래스 스텁
+class Blob {
+  final dynamic _data;
+  final String _type;
+  
+  Blob(this._data, this._type);
 }
 
-/// Blob URL 생성 
-String createBlobUrl(List<int> bytes, String mimeType) {
-  return '';
+/// HttpRequest 스텁
+class HttpRequest {
+  int status = 200;
+  dynamic response;
+  String responseText = '';
+  
+  static Future<HttpRequest> request(
+    String url, {
+    String method = 'GET',
+    String? responseType,
+    dynamic sendData,
+  }) async {
+    return HttpRequest();
+  }
 }
 
-/// IndexedDB 관련 함수
-Future<void> saveToIndexedDB(String dbName, String storeName, String key, dynamic value) async {
-  // 웹이 아닌 환경에서는 동작 안함
-}
-
-Future<dynamic> loadFromIndexedDB(String dbName, String storeName, String key) async {
-  return null;
-}
-
-Future<void> removeFromIndexedDB(String dbName, String storeName, String key) async {
-  // 웹이 아닌 환경에서는 동작 안함
-}
-
-Future<void> clearIndexedDB(String dbName, String storeName) async {
-  // 웹이 아닌 환경에서는 동작 안함
-}
-
-/// 파일 선택 관련 함수
-Future<Map<String, dynamic>?> pickFile(List<String> allowedExtensions) async {
-  return null;
-}
-
-Future<List<Map<String, dynamic>>?> pickMultipleFiles(List<String> allowedExtensions) async {
-  return null;
-}
-
-/// URL에서 파일 다운로드
-Future<void> downloadFileFromUrl(String url, String filename) async {
-  // 웹이 아닌 환경에서는 동작 안함
-}
-
-/// Base64에서 Blob URL 생성
-String createBlobUrlFromBase64(String base64Data, String mimeType) {
-  return '';
-}
-
-/// 바이트 배열에서 Blob URL 생성
-String createBlobUrlFromBytes(List<int> bytes, String mimeType) {
-  return '';
+/// URL 스텁
+class Url {
+  /// URL 생성
+  static String createObjectUrl(dynamic blob) => '';
+  
+  /// Blob에서 URL 생성
+  static String createObjectUrlFromBlob(Blob blob) => '';
+  
+  /// URL 해제
+  static void revokeObjectUrl(String url) {}
 } 

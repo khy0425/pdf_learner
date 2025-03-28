@@ -11,7 +11,9 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../models/result.dart';
+import 'package:pdf_learner_v2/core/base/result.dart';
+import 'package:uuid/uuid.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// 파일 관련 유틸리티 클래스
 class FileUtils {
@@ -82,7 +84,7 @@ class FileUtils {
   /// URL에서 파일 다운로드
   static Future<Result<String>> downloadFile(String url, String filename) async {
     if (url.isEmpty || url.trim().isEmpty) {
-      return Result.failure('다운로드할 URL이 비어 있습니다.');
+      return Result.failure(Exception('다운로드할 URL이 비어 있습니다.'));
     }
 
     try {
@@ -92,7 +94,7 @@ class FileUtils {
       if (response.statusCode == 200) {
         if (kIsWeb) {
           // 웹에서는 다운로드 제한 메시지 반환
-          return Result.failure('브라우저 제한으로 인해 다운로드 완료 후 별도 저장이 필요합니다.');
+          return Result.failure(Exception('브라우저 제한으로 인해 다운로드 완료 후 별도 저장이 필요합니다.'));
         } else {
           // 모바일/데스크톱에서는 파일로 저장
           final directory = await getTemporaryDirectory();
@@ -105,11 +107,11 @@ class FileUtils {
         }
       } else {
         return Result.failure(
-          '파일 다운로드 실패: HTTP 상태 코드 ${response.statusCode}',
+          Exception('파일 다운로드 실패: HTTP 상태 코드 ${response.statusCode}'),
         );
       }
     } catch (e) {
-      return Result.failure('파일 다운로드 중 오류: $e');
+      return Result.failure(Exception('파일 다운로드 중 오류: $e'));
     }
   }
   

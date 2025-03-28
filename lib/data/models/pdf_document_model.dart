@@ -1,5 +1,6 @@
 import '../../domain/models/pdf_document.dart';
 import 'dart:convert';
+import '../../core/base/result.dart';
 
 class PDFDocumentModel {
   final String id;
@@ -24,6 +25,12 @@ class PDFDocumentModel {
   final Map<String, dynamic> metadata;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String author;
+  final String url;
+  final double progress;
+  final int accessCount;
+  final String source;
+  final DateTime? lastAccessedAt;
 
   PDFDocumentModel({
     required this.id,
@@ -48,6 +55,12 @@ class PDFDocumentModel {
     this.metadata = const {},
     this.createdAt,
     this.updatedAt,
+    this.author = '',
+    this.url = '',
+    this.progress = 0.0,
+    this.accessCount = 0,
+    this.source = 'local',
+    this.lastAccessedAt,
   });
 
   factory PDFDocumentModel.fromJson(Map<String, dynamic> json) {
@@ -78,6 +91,14 @@ class PDFDocumentModel {
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String)
           : null,
+      author: json['author'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      accessCount: json['accessCount'] as int? ?? 0,
+      source: json['source'] as String? ?? 'local',
+      lastAccessedAt: json['lastAccessedAt'] != null
+          ? DateTime.parse(json['lastAccessedAt'] as String)
+          : null,
     );
   }
 
@@ -105,6 +126,12 @@ class PDFDocumentModel {
       'metadata': metadata,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'author': author,
+      'url': url,
+      'progress': progress,
+      'accessCount': accessCount,
+      'source': source,
+      'lastAccessedAt': lastAccessedAt?.toIso8601String(),
     };
   }
 
@@ -112,28 +139,38 @@ class PDFDocumentModel {
     return PDFDocument(
       id: id,
       title: title,
-      description: description,
+      author: author,
       filePath: filePath,
-      downloadUrl: downloadUrl,
-      pageCount: pageCount,
-      thumbnailUrl: thumbnailUrl,
+      url: url,
       totalPages: totalPages,
       currentPage: currentPage,
-      size: size,
-      fileSize: fileSize,
-      readingProgress: readingProgress,
-      readingTime: readingTime,
-      isFavorite: isFavorite,
-      isSelected: isSelected,
-      status: status,
-      importance: importance,
-      securityLevel: securityLevel,
-      tags: tags,
-      metadata: metadata,
+      progress: progress,
       createdAt: createdAt,
       updatedAt: updatedAt,
-      bookmarks: [], // 북마크는 별도로 관리
+      lastAccessedAt: lastAccessedAt ?? createdAt,
+      accessCount: accessCount,
+      source: source == 'remote'
+          ? PDFDocumentSource.remote
+          : PDFDocumentSource.local,
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'author': author,
+      'filePath': filePath,
+      'url': url,
+      'totalPages': totalPages,
+      'currentPage': currentPage,
+      'progress': progress,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'lastAccessedAt': (lastAccessedAt ?? createdAt).toIso8601String(),
+      'accessCount': accessCount,
+      'source': source,
+    };
   }
 
   static PDFDocumentModel fromDomain(PDFDocument document) {
@@ -160,6 +197,12 @@ class PDFDocumentModel {
       metadata: document.metadata,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
+      author: document.author,
+      url: document.url,
+      progress: document.progress,
+      accessCount: document.accessCount,
+      source: document.source == PDFDocumentSource.remote ? 'remote' : 'local',
+      lastAccessedAt: document.lastAccessedAt,
     );
   }
   
@@ -211,6 +254,64 @@ class PDFDocumentModel {
       case 'high': return PDFDocumentSecurityLevel.high;
       case 'restricted': return PDFDocumentSecurityLevel.restricted;
       default: return PDFDocumentSecurityLevel.none;
+    }
+  }
+
+  // Result 클래스를 사용하는 변환 메서드
+  static Result<PDFDocumentModel> fromDomainResult(PDFDocument document) {
+    try {
+      final model = PDFDocumentModel.fromDomain(document);
+      return Result.success(model);
+    } catch (e) {
+      return Result.failure(Exception('도메인 모델 변환 실패: $e'));
+    }
+  }
+  
+  Result<PDFDocument> toDomainResult() {
+    try {
+      final domain = toDomain();
+      return Result.success(domain);
+    } catch (e) {
+      return Result.failure(Exception('데이터 모델 변환 실패: $e'));
+    }
+  }
+  
+  static Result<List<PDFDocumentModel>> fromDomainListResult(List<PDFDocument> documents) {
+    try {
+      final models = documents.map((doc) => PDFDocumentModel.fromDomain(doc)).toList();
+      return Result.success(models);
+    } catch (e) {
+      return Result.failure(Exception('도메인 모델 리스트 변환 실패: $e'));
+    }
+  }
+  
+  static Result<List<PDFDocument>> toDomainListResult(List<PDFDocumentModel> models) {
+    try {
+      final domains = models.map((model) => model.toDomain()).toList();
+      return Result.success(domains);
+    } catch (e) {
+      return Result.failure(Exception('데이터 모델 리스트 변환 실패: $e'));
+    }
+  }
+  
+  // 문자열에서 변환
+  static Result<PDFDocumentModel> fromJsonStringResult(String jsonString) {
+    try {
+      final model = PDFDocumentModel.fromJsonString(jsonString);
+      return Result.success(model);
+    } catch (e) {
+      return Result.failure(Exception('JSON 문자열 변환 실패: $e'));
+    }
+  }
+  
+  // JSON 문자열로 변환
+  Result<String> toJsonStringResult() {
+    try {
+      final jsonMap = toJson();
+      final jsonString = jsonEncode(jsonMap);
+      return Result.success(jsonString);
+    } catch (e) {
+      return Result.failure(Exception('JSON 문자열 변환 실패: $e'));
     }
   }
 } 

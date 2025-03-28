@@ -8,7 +8,7 @@ import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import '../../core/models/result.dart';
+import '../../core/base/result.dart';
 
 /// PDF 서비스 인터페이스
 /// 
@@ -290,32 +290,29 @@ class PDFServiceImpl implements PDFService {
 
   @override
   Future<Result<String>> downloadPdf(String url) async {
-    // URL이 비어있는 경우 에러 처리
-    if (url.isEmpty || url.trim().isEmpty) {
-      return Result.failure('다운로드할 PDF URL이 비어 있습니다.');
+    if (url.isEmpty) {
+      return Result.failure(Exception('다운로드 URL이 비어 있습니다'));
     }
     
     try {
-      // 다운로드 경로 설정
-      final tempDir = await getTemporaryDirectory();
-      final fileName = 'download_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final filePath = '${tempDir.path}/$fileName';
-      
-      // HTTP 요청
       final response = await http.get(Uri.parse(url));
       
-      // 상태 확인
       if (response.statusCode != 200) {
-        return Result.failure('PDF 다운로드 실패: HTTP 상태 코드 ${response.statusCode}');
+        return Result.failure(Exception('PDF 다운로드 실패: 상태 코드 ${response.statusCode}'));
       }
       
-      // 파일 저장
+      final bytes = response.bodyBytes;
+      final fileName = const Uuid().v4() + '.pdf';
+      
+      final directory = await getTemporaryDirectory();
+      final filePath = path.join(directory.path, fileName);
+      
       final file = File(filePath);
-      await file.writeAsBytes(response.bodyBytes);
+      await file.writeAsBytes(bytes);
       
       return Result.success(filePath);
     } catch (e) {
-      return Result.failure('PDF 다운로드 중 오류 발생: $e');
+      return Result.failure(Exception('PDF 다운로드 실패: $e'));
     }
   }
 } 
