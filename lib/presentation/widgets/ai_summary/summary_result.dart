@@ -1,16 +1,30 @@
 import 'package:flutter/material.dart';
-import '../../models/ai_summary.dart';
+
+/// 간단한 AI 요약 결과 모델
+class SummaryModel {
+  final String content;
+  final String? title;
+  final int startPage;
+  final int endPage;
+  
+  SummaryModel({
+    required this.content,
+    this.title,
+    required this.startPage,
+    required this.endPage,
+  });
+}
 
 /// AI 요약 결과 표시 위젯
 class AiSummaryResult extends StatelessWidget {
-  final AiSummary summary;
+  final SummaryModel summary;
   final VoidCallback onNewSummary;
 
   const AiSummaryResult({
-    Key? key,
+    super.key,
     required this.summary,
     required this.onNewSummary,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +47,12 @@ class AiSummaryResult extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _buildSummarySection('주요 내용', summary.summary),
+          _buildSummarySection('주요 내용', summary.content),
           const SizedBox(height: 24),
-          _buildSummarySection('핵심 키워드', summary.keywords),
-          const SizedBox(height: 24),
-          _buildSummarySection('중요 개념', summary.keyPoints),
+          if (summary.title != null)
+            _buildSummarySection('제목', summary.title!),
+          const SizedBox(height: 16),
+          _buildSummarySection('페이지 범위', '${summary.startPage} - ${summary.endPage}'),
         ],
       ),
     );

@@ -27,6 +27,11 @@ class Result<T> {
         isSuccess = false;
   
   /// 문자열로부터 실패 결과 생성
+  factory Result.failureWithMessage(String message) {
+    return Result<T>.failure(ExceptionWrapper.fromString(message));
+  }
+  
+  /// 문자열로부터 실패 결과 생성 (이전 호환성용 정적 메서드)
   static Result<T> failureFromString<T>(String message) {
     return Result<T>.failure(ExceptionWrapper.fromString(message));
   }

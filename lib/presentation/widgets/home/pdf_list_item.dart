@@ -33,7 +33,7 @@ class PdfListItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withAlpha(13),
               blurRadius: 10,
               spreadRadius: 0,
               offset: const Offset(0, 2),
@@ -46,8 +46,8 @@ class PdfListItem extends StatelessWidget {
           child: InkWell(
             onTap: onOpen,
             borderRadius: BorderRadius.circular(20),
-            splashColor: colorScheme.primary.withOpacity(0.1),
-            highlightColor: colorScheme.primary.withOpacity(0.05),
+            splashColor: colorScheme.primary.withAlpha(26),
+            highlightColor: colorScheme.primary.withAlpha(13),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -80,7 +80,7 @@ class PdfListItem extends StatelessWidget {
                             Icon(
                               Icons.schedule,
                               size: 12,
-                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              color: colorScheme.onSurfaceVariant.withAlpha(179),
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -94,7 +94,7 @@ class PdfListItem extends StatelessWidget {
                             Icon(
                               Icons.data_usage,
                               size: 12,
-                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              color: colorScheme.onSurfaceVariant.withAlpha(179),
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -108,7 +108,7 @@ class PdfListItem extends StatelessWidget {
                         ),
                         
                         // 파일 경로 또는 URL (옵션)
-                        if (pdfInfo.url != null)
+                        if (pdfInfo.url.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Row(
@@ -116,7 +116,7 @@ class PdfListItem extends StatelessWidget {
                                 Icon(
                                   Icons.link,
                                   size: 12,
-                                  color: colorScheme.primary.withOpacity(0.7),
+                                  color: colorScheme.primary.withAlpha(179),
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
@@ -141,7 +141,7 @@ class PdfListItem extends StatelessWidget {
                   IconButton(
                     icon: Icon(
                       Icons.delete_outline,
-                      color: colorScheme.error.withOpacity(0.8),
+                      color: colorScheme.error.withAlpha(204),
                     ),
                     onPressed: () => onDelete(pdfInfo),
                     tooltip: '삭제',
@@ -162,7 +162,7 @@ class PdfListItem extends StatelessWidget {
       width: 50,
       height: 60,
       decoration: BoxDecoration(
-        color: colorScheme.primaryContainer.withOpacity(0.3),
+        color: colorScheme.primaryContainer.withAlpha(77),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Stack(

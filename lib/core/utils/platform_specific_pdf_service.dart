@@ -87,6 +87,7 @@ class PlatformSpecificPdfService {
         final result = await ConditionalFilePicker.pickFiles(
           type: FilePickerType.custom,
           allowedExtensions: ['pdf'],
+          allowMultiple: false,
         );
         
         if (result != null && result.files.isNotEmpty) {
@@ -109,6 +110,7 @@ class PlatformSpecificPdfService {
         final result = await ConditionalFilePicker.pickFiles(
           type: FilePickerType.custom,
           allowedExtensions: ['pdf'],
+          allowMultiple: false,
         );
         
         if (result != null && result.files.isNotEmpty && result.files.first.path != null) {
@@ -282,19 +284,19 @@ class PlatformSpecificPdfService {
 
     try {
       if (kIsWeb) {
-        // 웹에서는 AnchorElement를 사용하여 다운로드
-        final anchor = AnchorElement()
+        // 웹에서는 html.AnchorElement를 사용하여 다운로드
+        final anchor = html.AnchorElement()
           ..href = url
           ..download = filename;
         
         // body에 앵커 추가
-        document.body?.appendChild(anchor);
+        html.document.body?.appendChild(anchor);
         
         // 클릭 이벤트 발생
         anchor.click();
         
         // 앵커 제거
-        document.body?.removeChild(anchor);
+        html.document.body?.removeChild(anchor);
         
         return true;
       } else {
@@ -313,10 +315,10 @@ class PlatformSpecificPdfService {
     try {
       if (kIsWeb) {
         // 웹에서는 Blob URL을 생성하여 새 창에서 열기
-        final blob = bytes; // 실제로는 bytes를 Blob으로 변환
-        final url = Url.createObjectUrl(blob);
+        final blob = html.Blob([bytes]); // bytes를 Blob으로 변환
+        final url = html.Url.createObjectUrlFromBlob(blob);
         
-        final anchor = AnchorElement()
+        final anchor = html.AnchorElement()
           ..href = url
           ..target = '_blank';
         
@@ -324,7 +326,7 @@ class PlatformSpecificPdfService {
         anchor.click();
         
         // URL 해제
-        Url.revokeObjectUrl(url);
+        html.Url.revokeObjectUrl(url);
         
         return true;
       } else {

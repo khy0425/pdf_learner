@@ -14,6 +14,7 @@ class FilePickerService {
       final result = await ConditionalFilePicker.pickFiles(
         type: FilePickerType.custom,
         allowedExtensions: ['pdf'],
+        allowMultiple: false,
       );
 
       if (result != null && result.files.isNotEmpty) {

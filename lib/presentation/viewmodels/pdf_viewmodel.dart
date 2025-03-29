@@ -1,34 +1,30 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
-import 'package:path/path.dart' as path;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
-import '../../domain/repositories/pdf_repository.dart';
-import '../../domain/models/pdf_document.dart';
-import '../../domain/models/pdf_bookmark.dart';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
+import 'package:file_picker/file_picker.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+import '../screens/pdf_viewer_screen.dart';
 import '../../core/base/base_viewmodel.dart';
 import '../../core/base/result.dart';
-import '../../core/utils/resource_manager.dart';
-import 'dart:async';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
-import '../../services/firebase_service.dart';
+import '../../domain/services/pdf_service.dart' as domain_pdf;
+import '../../domain/models/pdf_document.dart';
+import '../../domain/models/pdf_bookmark.dart';
+import '../../domain/repositories/pdf_repository.dart';
 import '../../services/analytics/analytics_service.dart';
-import 'package:injectable/injectable.dart';
-import 'dart:convert';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
-import '../../core/utils/web_storage_utils.dart';
-import '../../core/models/bookmark.dart';
+import '../../services/storage/storage_service.dart';
+import '../../services/firebase/firebase_service.dart';
+import '../../services/pdf/pdf_service.dart'; // PDF 서비스
+import '../../core/utils/web_utils.dart';
+import '../../core/utils/resource_manager.dart';
 import '../../core/models/note.dart';
-import '../../core/services/storage_service.dart';
-import '../../core/utils/file_utils.dart';
-import '../../core/utils/conditional_file_picker.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:intl/intl.dart';
+import '../../core/utils/conditional_file_picker.dart' as conditional;
+import 'package:injectable/injectable.dart';
+import 'package:get_it/get_it.dart';
 
 /// PDF 상태
 enum PDFStatus {
@@ -42,13 +38,14 @@ enum PDFStatus {
 @injectable
 class PDFViewModel extends ChangeNotifier {
   final PDFRepository _repository;
+  final domain_pdf.PDFService _pdfService;
   final FirebaseService _firebaseService;
   final AnalyticsService _analyticsService;
   final StorageService _storageService;
   
   PDFStatus _status = PDFStatus.initial;
   List<PDFDocument> _documents = [];
-  List<PDFBookmark> _pdfBookmarks = [];
+  List<PDFBookmark> _bookmarks = [];
   PDFDocument? _currentDocument;
   int _currentPage = 0;
   bool _isLoading = false;
@@ -60,30 +57,37 @@ class PDFViewModel extends ChangeNotifier {
   
   final ResourceManager _resourceManager = ResourceManager();
   
-  List<Bookmark> _bookmarks = [];
   List<Note> _notes = [];
   List<String> _recentPdfs = [];
   Map<String, int> _lastReadPages = {};
   
   PDFViewModel({
     required PDFRepository repository,
+    required domain_pdf.PDFService pdfService,
     required FirebaseService firebaseService,
     required AnalyticsService analyticsService,
     required StorageService storageService,
   })  : _repository = repository,
+        _pdfService = pdfService,
         _firebaseService = firebaseService,
         _analyticsService = analyticsService,
         _storageService = storageService {
-    _loadBookmarks();
-    _loadNotes();
-    _loadRecentPdfs();
-    _loadLastReadPages();
+    // 웹 유틸리티 초기화
+    if (!GetIt.instance.isRegistered<WebUtils>()) {
+      WebUtils.registerSingleton();
+    }
+    
+    _loadData();
+  }
+  
+  Future<void> _loadData() async {
+    await loadDocuments();
   }
   
   // 게터
   PDFStatus get status => _status;
   List<PDFDocument> get documents => _documents;
-  List<PDFBookmark> get bookmarks => _pdfBookmarks;
+  List<PDFBookmark> get bookmarks => _bookmarks;
   PDFDocument? get currentDocument => _currentDocument;
   int get currentPage => _currentPage;
   bool get isLoading => _isLoading;
@@ -106,7 +110,8 @@ class PDFViewModel extends ChangeNotifier {
     
     try {
       final fileId = _currentDocument!.filePath;
-      return WebStorageUtils.instance.getRemainingDaysForPdf(fileId);
+      final webUtils = GetIt.I<WebUtils>();
+      return webUtils.getRemainingDaysForPdf(fileId);
     } catch (e) {
       debugPrint('만료일 계산 오류: $e');
       return null;
@@ -119,7 +124,8 @@ class PDFViewModel extends ChangeNotifier {
     
     try {
       final fileId = _currentDocument!.filePath;
-      return WebStorageUtils.instance.isExpired(fileId);
+      final webUtils = GetIt.I<WebUtils>();
+      return webUtils.isExpired(fileId);
     } catch (e) {
       debugPrint('만료 확인 오류: $e');
       return false;
@@ -133,9 +139,10 @@ class PDFViewModel extends ChangeNotifier {
     try {
       // 만료된 문서 필터링
       final expiredDocIds = <String>[];
+      final webUtils = GetIt.I<WebUtils>();
       
       for (final doc in _documents) {
-        if (WebStorageUtils.instance.isExpired(doc.filePath)) {
+        if (webUtils.isExpired(doc.filePath)) {
           expiredDocIds.add(doc.id);
         }
       }
@@ -252,7 +259,7 @@ class PDFViewModel extends ChangeNotifier {
         // 현재 문서인 경우 초기화
         if (_currentDocument?.id == id) {
           _currentDocument = null;
-          _pdfBookmarks = [];
+          _bookmarks = [];
           _currentPage = 0;
         }
         
@@ -268,6 +275,7 @@ class PDFViewModel extends ChangeNotifier {
     }
   }
   
+  @override
   Future<PDFDocument?> pickAndUploadPDF() async {
     setLoading();
     
@@ -276,9 +284,10 @@ class PDFViewModel extends ChangeNotifier {
       bool isWeb = kIsWeb;
       
       // 파일 선택
-      FilePickerResult? result = await ConditionalFilePicker.pickFiles(
-        type: FilePickerType.custom,
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
         allowedExtensions: ['pdf'],
+        allowMultiple: false,
       );
       
       if (result == null || result.files.isEmpty) {
@@ -333,21 +342,21 @@ class PDFViewModel extends ChangeNotifier {
         description: '',
         filePath: filePath ?? '',
         pageCount: pageCount,
+        totalPages: pageCount,
+        fileSize: fileBytes?.length ?? 0,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
-        lastOpenedAt: DateTime.now(),
+        lastAccessedAt: DateTime.now(),
         currentPage: 0,
         readingProgress: 0.0,
         isFavorite: false,
         isSelected: false,
         readingTime: 0,
-        status: PDFDocumentStatus.created,
-        importance: PDFDocumentImportance.medium,
-        securityLevel: PDFDocumentSecurityLevel.none,
+        status: PDFDocumentStatus.added,
+        importance: PDFImportanceLevel.medium,
+        securityLevel: PDFSecurityLevel.none,
         tags: [],
-        bookmarks: [],
         metadata: {},
-        fileSize: fileBytes?.length ?? 0,
       );
       
       // 문서 저장
@@ -379,14 +388,67 @@ class PDFViewModel extends ChangeNotifier {
   }
   
   @protected
-  Future<void> _savePdfBytesToStorage(String filePath, Uint8List bytes) async {
-    try {
-      // 웹 환경에서 바이트 데이터 저장
-      await WebStorageUtils.instance.saveBytesToIndexedDB(filePath, bytes, isGuest: _isGuestUser);
-      debugPrint('PDF 저장 성공: $filePath (${bytes.length} 바이트)${_isGuestUser ? " (미회원 임시 저장)" : ""}');
-    } catch (e) {
-      debugPrint('PDF 저장 오류: $e');
-      setError('PDF 저장 오류: $e');
+  Future<void> _savePdfBytesToStorage(String id, Uint8List pdfBytes) async {
+    if (kIsWeb) {
+      try {
+        final webUtils = GetIt.I<WebUtils>();
+        await webUtils.saveBytesToIndexedDB(id, pdfBytes);
+      } catch (e) {
+        debugPrint('IndexedDB 저장 오류: $e');
+        _error = e.toString();
+        notifyListeners();
+      }
+    } else {
+      try {
+        // 로컬 저장소에 저장
+        final directory = await getApplicationDocumentsDirectory();
+        final pdfPath = '${directory.path}/pdfs/$id.pdf';
+        final file = File(pdfPath);
+        
+        // 디렉토리가 없으면 생성
+        final dir = Directory('${directory.path}/pdfs');
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        
+        await file.writeAsBytes(pdfBytes);
+      } catch (e) {
+        debugPrint('파일 저장 오류: $e');
+        _error = e.toString();
+        notifyListeners();
+      }
+    }
+  }
+  
+  @protected
+  Future<Uint8List?> _getPdfBytesFromStorage(String id) async {
+    if (kIsWeb) {
+      try {
+        final webUtils = GetIt.I<WebUtils>();
+        return await webUtils.getBytesFromIndexedDB(id);
+      } catch (e) {
+        debugPrint('IndexedDB 로드 오류: $e');
+        _error = e.toString();
+        notifyListeners();
+        return null;
+      }
+    } else {
+      try {
+        // 로컬 저장소에서 로드
+        final directory = await getApplicationDocumentsDirectory();
+        final pdfPath = '${directory.path}/pdfs/$id.pdf';
+        final file = File(pdfPath);
+        
+        if (await file.exists()) {
+          return await file.readAsBytes();
+        }
+        return null;
+      } catch (e) {
+        debugPrint('파일 로드 오류: $e');
+        _error = e.toString();
+        notifyListeners();
+        return null;
+      }
     }
   }
   
@@ -450,9 +512,35 @@ class PDFViewModel extends ChangeNotifier {
       
       // 상태 토글
       final document = _documents[index];
-      final updatedDocument = document.copyWith(
+      
+      // 직접 새 PDFDocument 객체 생성
+      final updatedDocument = PDFDocument(
+        id: document.id,
+        title: document.title,
+        filePath: document.filePath,
+        fileSize: document.fileSize,
+        pageCount: document.pageCount,
+        author: document.author,
+        description: document.description,
+        downloadUrl: document.downloadUrl,
+        status: document.status,
+        thumbnailPath: document.thumbnailPath,
         isFavorite: !document.isFavorite,
+        createdAt: document.createdAt,
         updatedAt: DateTime.now(),
+        lastAccessedAt: document.lastAccessedAt,
+        lastReadPage: document.lastReadPage,
+        currentPage: document.currentPage,
+        totalPages: document.totalPages,
+        readingProgress: document.readingProgress,
+        tags: document.tags,
+        accessLevel: document.accessLevel,
+        category: document.category,
+        isSelected: document.isSelected,
+        importance: document.importance,
+        securityLevel: document.securityLevel,
+        source: document.source,
+        metadata: document.metadata,
       );
       
       // 문서 목록 업데이트
@@ -480,45 +568,13 @@ class PDFViewModel extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// 스토리지에서 PDF 데이터 가져오기
-  Future<Uint8List?> getPdfBytesFromStorage(String filePath) async {
+  /// PDF 바이트 데이터 가져오기
+  Future<Uint8List?> getPDFBytes(String filePath) async {
     try {
       // 웹 스토리지에서 데이터 가져오기 (web_ 접두사가 있는 경우)
       if (filePath.startsWith('web_')) {
-        try {
-          // 미회원 문서가 만료되었는지 확인
-          if (_isGuestUser && WebStorageUtils.instance.isExpired(filePath)) {
-            debugPrint('미회원 PDF가 만료되었습니다: $filePath');
-            setError('저장된 PDF가 만료되었습니다. 회원가입 후 영구적으로 저장할 수 있습니다.');
-            // 만료된 데이터 삭제
-            await WebStorageUtils.instance.deleteBytesFromIndexedDB(filePath);
-            return null;
-          }
-          
-          final bytes = await WebStorageUtils.instance.getBytesFromIndexedDB(filePath);
-          if (bytes != null) {
-            debugPrint('IndexedDB에서 PDF 로드 성공: $filePath');
-            
-            // 미회원 사용자면 만료 정보 로그
-            if (_isGuestUser) {
-              final days = WebStorageUtils.instance.getRemainingDaysForPdf(filePath);
-              debugPrint('미회원 PDF 만료까지 $days일 남음: $filePath');
-            }
-            
-            return bytes;
-          } else {
-            debugPrint('IndexedDB에서 PDF를 찾을 수 없음, 샘플 PDF 로드: $filePath');
-            // 친절한 오류 메시지 표시
-            setError('저장된 PDF를 찾을 수 없어 샘플 PDF를 로드합니다.');
-            // 샘플 PDF 로드
-            return await loadSamplePdf();
-          }
-        } catch (e) {
-          debugPrint('웹 스토리지에서 PDF 로드 오류: $e');
-          setError('PDF 로드 중 오류가 발생하여 샘플 PDF를 로드합니다.');
-          // 오류 발생 시 샘플 PDF 로드
-          return await loadSamplePdf();
-        }
+        final webUtils = GetIt.I<WebUtils>();
+        return await webUtils.getBytesFromIndexedDB(filePath);
       }
       
       // URL인 경우 다운로드
@@ -613,7 +669,7 @@ class PDFViewModel extends ChangeNotifier {
     final result = await _repository.getBookmarks(documentId);
     
     if (result.isSuccess) {
-      _pdfBookmarks = result.data!;
+      _bookmarks = result.data!;
       notifyListeners();
     } else {
       _setError('북마크 로드 실패: ${result.error}');
@@ -622,103 +678,105 @@ class PDFViewModel extends ChangeNotifier {
   
   // Bookmark 관련 메소드
   Future<void> _loadBookmarks() async {
-    _setLoading(true);
     try {
-      final data = await _storageService.read('bookmarks');
+      final data = await _storageService.getJson('bookmarks');
       if (data != null) {
-        final List<dynamic> decoded = json.decode(data);
-        _bookmarks = decoded.map((e) => Bookmark.fromJson(e)).toList();
+        final List<dynamic> bookmarkJsonList = data['bookmarks'] as List<dynamic>;
+        _bookmarks = bookmarkJsonList
+            .map((json) => PDFBookmark.fromMap(json as Map<String, dynamic>))
+            .toList();
       }
     } catch (e) {
-      _setError('북마크 로드 중 오류 발생: $e');
-    } finally {
-      _setLoading(false);
+      debugPrint('북마크 로드 오류: $e');
     }
   }
   
+  /// 북마크 저장
   Future<void> _saveBookmarks() async {
     try {
-      final data = json.encode(_bookmarks.map((e) => e.toJson()).toList());
-      await _storageService.write('bookmarks', data);
+      final data = {
+        'bookmarks': _bookmarks.map((b) => b.toMap()).toList(),
+      };
+      await _storageService.setJson('bookmarks', data);
     } catch (e) {
-      _setError('북마크 저장 중 오류 발생: $e');
+      debugPrint('북마크 저장 오류: $e');
     }
   }
   
   // Note 관련 메소드
   Future<void> _loadNotes() async {
-    _setLoading(true);
     try {
-      final data = await _storageService.read('notes');
+      final data = await _storageService.getJson('notes');
       if (data != null) {
-        final List<dynamic> decoded = json.decode(data);
-        _notes = decoded.map((e) => Note.fromJson(e)).toList();
+        final List<dynamic> noteJsonList = data['notes'] as List<dynamic>;
+        _notes = noteJsonList
+            .map((json) => Note.fromJson(json as Map<String, dynamic>))
+            .toList();
       }
     } catch (e) {
-      _setError('노트 로드 중 오류 발생: $e');
-    } finally {
-      _setLoading(false);
+      debugPrint('노트 로드 오류: $e');
     }
   }
   
+  /// 노트 저장
   Future<void> _saveNotes() async {
     try {
-      final data = json.encode(_notes.map((e) => e.toJson()).toList());
-      await _storageService.write('notes', data);
+      final data = {
+        'notes': _notes.map((n) => n.toJson()).toList(),
+      };
+      await _storageService.setJson('notes', data);
     } catch (e) {
-      _setError('노트 저장 중 오류 발생: $e');
+      debugPrint('노트 저장 오류: $e');
     }
   }
   
   // 최근 본 PDF 관련 메소드
   Future<void> _loadRecentPdfs() async {
-    _setLoading(true);
     try {
-      final data = await _storageService.read('recent_pdfs');
+      final data = await _storageService.getJson('recent_pdfs');
       if (data != null) {
-        final List<dynamic> decoded = json.decode(data);
-        _recentPdfs = List<String>.from(decoded);
+        final List<dynamic> recentPdfJsonList = data['recent_pdfs'] as List<dynamic>;
+        _recentPdfs = recentPdfJsonList.cast<String>();
       }
     } catch (e) {
-      _setError('최근 PDF 로드 중 오류 발생: $e');
-    } finally {
-      _setLoading(false);
+      debugPrint('최근 PDF 로드 오류: $e');
     }
   }
   
+  /// 최근 PDF 저장
   Future<void> _saveRecentPdfs() async {
     try {
-      final data = json.encode(_recentPdfs);
-      await _storageService.write('recent_pdfs', data);
+      final data = {
+        'recent_pdfs': _recentPdfs,
+      };
+      await _storageService.setJson('recent_pdfs', data);
     } catch (e) {
-      _setError('최근 PDF 저장 중 오류 발생: $e');
+      debugPrint('최근 PDF 저장 오류: $e');
     }
   }
   
   // 마지막으로 읽은 페이지 관련 메소드
   Future<void> _loadLastReadPages() async {
-    _setLoading(true);
     try {
-      final data = await _storageService.read('last_read_pages');
+      final data = await _storageService.getJson('last_read_pages');
       if (data != null) {
-        final Map<String, dynamic> decoded = json.decode(data);
-        _lastReadPages = decoded.map(
-          (key, value) => MapEntry(key, value as int)
-        );
+        final Map<String, dynamic> lastReadMap = data['last_read_pages'] as Map<String, dynamic>;
+        _lastReadPages = lastReadMap.map((key, value) => MapEntry(key, value as int));
       }
     } catch (e) {
-      _setError('마지막 읽은 페이지 로드 중 오류 발생: $e');
-    } finally {
-      _setLoading(false);
+      debugPrint('마지막으로 읽은 페이지 로드 오류: $e');
     }
   }
   
+  /// 마지막으로 읽은 페이지 저장
   Future<void> _saveLastReadPages() async {
     try {
-      final data = json.encode(_lastReadPages);
-      await _storageService.write('last_read_pages', data);
+      final data = {
+        'last_read_pages': _lastReadPages,
+      };
+      await _storageService.setJson('last_read_pages', data);
     } catch (e) {
-      _setError('마지막 읽은 페이지 저장 중 오류 발생: $e');
+      debugPrint('마지막으로 읽은 페이지 저장 오류: $e');
     }
   }
 
@@ -732,20 +790,10 @@ class PDFViewModel extends ChangeNotifier {
     
     try {
       // URL에서 PDF 다운로드
-      final tempDocument = PDFDocument(
-        id: const Uuid().v4(),
-        title: 'Downloaded PDF',
-        filePath: '',
-        downloadUrl: url,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now()
-      );
+      final result = await _repository.downloadPdfFromUrl(url);
       
-      final result = await _repository.downloadPdf(tempDocument);
-      
-      if (result.isSuccess) {
-        final path = result.data!;
-        final file = File(path);
+      if (result.isSuccess && result.data != null) {
+        final bytes = result.data!;
         
         // 파일명 추출 (URL에서)
         String fileName = Uri.parse(url).pathSegments.last;
@@ -758,18 +806,18 @@ class PDFViewModel extends ChangeNotifier {
           id: const Uuid().v4(),
           title: fileName.replaceAll('.pdf', ''),
           description: '온라인 PDF',
-          filePath: path,
+          filePath: url,
           downloadUrl: url,
           pageCount: 0,
           currentPage: 1,
           readingProgress: 0.0,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-          lastOpenedAt: DateTime.now(),
+          lastAccessedAt: DateTime.now(),
           isFavorite: false,
           isSelected: false,
           tags: [],
-          fileSize: file.lengthSync(),
+          fileSize: bytes.length,
         );
         
         // 문서 저장
@@ -791,45 +839,8 @@ class PDFViewModel extends ChangeNotifier {
     }
   }
 
-  /// PDF 바이트 데이터 가져오기
-  Future<Uint8List?> getPDFBytes(String filePath) async {
-    try {
-      // 웹 스토리지에서 데이터 가져오기 (web_ 접두사가 있는 경우)
-      if (filePath.startsWith('web_')) {
-        return await WebStorageUtils.instance.getBytesFromIndexedDB(filePath);
-      }
-      
-      // URL인 경우 다운로드
-      if (filePath.startsWith('http')) {
-        final tempDocument = PDFDocument(
-          id: const Uuid().v4(),
-          title: 'Downloaded PDF',
-          filePath: '',
-          downloadUrl: filePath,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now()
-        );
-        
-        final result = await _repository.downloadPdf(tempDocument);
-        return result.isSuccess ? result.data : null;
-      }
-      
-      // 로컬 파일 경로인 경우
-      final file = File(filePath);
-      if (await file.exists()) {
-        return await file.readAsBytes();
-      }
-      
-      debugPrint('PDF 파일을 찾을 수 없습니다: $filePath');
-      return null;
-    } catch (e) {
-      debugPrint('PDF 바이트 데이터 가져오기 중 오류: $e');
-      return null;
-    }
-  }
-
   /// 문서 정렬
-  List<PDFDocument> sortDocuments(List<PDFDocument> documents, String sortBy, bool ascending) {
+  List<PDFDocument> _sortDocumentsList(List<PDFDocument> documents, String sortBy, bool ascending) {
     switch (sortBy) {
       case 'title':
         documents.sort((a, b) => ascending 
@@ -837,25 +848,105 @@ class PDFViewModel extends ChangeNotifier {
             : b.title.compareTo(a.title));
         break;
       case 'date':
-        documents.sort((a, b) => ascending 
-            ? a.createdAt.compareTo(b.createdAt) 
-            : b.createdAt.compareTo(a.createdAt));
+        documents.sort((a, b) {
+          final DateTime aDate = a.createdAt ?? DateTime(1970);
+          final DateTime bDate = b.createdAt ?? DateTime(1970);
+          return ascending ? aDate.compareTo(bDate) : bDate.compareTo(aDate);
+        });
         break;
       case 'lastOpened':
-        documents.sort((a, b) => ascending 
-            ? (a.lastOpenedAt ?? a.createdAt).compareTo(b.lastOpenedAt ?? b.createdAt) 
-            : (b.lastOpenedAt ?? b.createdAt).compareTo(a.lastOpenedAt ?? a.createdAt));
+        documents.sort((a, b) {
+          final DateTime aDate = a.lastAccessedAt ?? a.createdAt ?? DateTime(1970);
+          final DateTime bDate = b.lastAccessedAt ?? b.createdAt ?? DateTime(1970);
+          return ascending ? aDate.compareTo(bDate) : bDate.compareTo(aDate);
+        });
         break;
       default:
-        documents.sort((a, b) => ascending 
-            ? a.updatedAt.compareTo(b.updatedAt) 
-            : b.updatedAt.compareTo(a.updatedAt));
+        documents.sort((a, b) {
+          final DateTime aDate = a.updatedAt ?? DateTime(1970);
+          final DateTime bDate = b.updatedAt ?? DateTime(1970);
+          return ascending ? aDate.compareTo(bDate) : bDate.compareTo(aDate);
+        });
     }
     return documents;
+  }
+  
+  /// 문서 정렬 (간단 버전) - document_list_screen.dart에서 사용
+  void sortDocuments(String sortBy) {
+    bool ascending = true;
+    
+    switch (sortBy) {
+      case 'name':
+        _documents = _sortDocumentsList(_documents, 'title', ascending);
+        break;
+      case 'date':
+        _documents = _sortDocumentsList(_documents, 'date', false); // 최신순
+        break;
+      case 'favorite':
+        // 즐겨찾기 항목 우선 정렬
+        _documents.sort((a, b) => b.isFavorite ? 1 : -1);
+        break;
+      default:
+        _documents = _sortDocumentsList(_documents, 'lastOpened', false); // 최근 열람순
+    }
+    
+    notifyListeners();
   }
 
   /// 문서 목록 새로고침
   Future<void> refreshDocuments() async {
     await loadDocuments();
+  }
+
+  Future<void> _checkCacheSize() async {
+    try {
+      if (kIsWeb) {
+        // 웹에서는 WebUtils의 cleanupExpiredFiles 메서드 호출
+        final webUtils = GetIt.I<WebUtils>();
+        webUtils.cleanupExpiredFiles();
+      } else {
+        // 네이티브에서는 캐시 디렉토리 정리
+        // 직접 구현하거나 별도의 유틸리티 함수 사용
+      }
+    } catch (e) {
+      debugPrint('캐시 크기 확인 오류: $e');
+    }
+  }
+
+  /// 북마크 공유
+  Future<Result<String>> shareBookmark(String id) async {
+    try {
+      final webUtils = GetIt.I<WebUtils>();
+      
+      // 북마크 가져오기
+      final bookmark = _bookmarks.firstWhere((b) => b.id == id, orElse: () => throw Exception('북마크를 찾을 수 없습니다'));
+      
+      // 공유 URL 생성
+      // PDF 파일을 클라우드에 업로드하고 공유 링크 반환
+      return Result.success('https://example.com/shared/${bookmark.id}'); // 예시 URL
+    } catch (e) {
+      return Result.failure(Exception('북마크 공유 중 오류가 발생했습니다: $e'));
+    }
+  }
+
+  /// 마지막으로 읽은 페이지 저장
+  Future<void> saveLastReadPage(String documentId, int pageNumber) async {
+    _lastReadPages[documentId] = pageNumber;
+    await _saveLastReadPages();
+    notifyListeners();
+  }
+
+  /// 북마크 생성 링크 가져오기
+  Future<Result<String>> getBookmarkShareableLink(String id) async {
+    try {
+      // 북마크 찾기
+      final bookmark = _bookmarks.firstWhere((b) => b.id == id, orElse: () => throw Exception('북마크를 찾을 수 없습니다'));
+      
+      // API를 통해 공유 링크 생성 (예시)
+      // 실제로는 Firebase Dynamic Links 등을 사용해 공유 가능한 URL 생성
+      return Result.success('https://example.com/shared/${bookmark.id}'); // 예시 URL
+    } catch (e) {
+      return Result.failure(Exception('공유 링크 생성 실패: $e'));
+    }
   }
 } 

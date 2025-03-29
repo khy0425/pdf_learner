@@ -5,7 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import '../../core/base/result.dart';
-import 'package:pdf_learner_v2/domain/models/pdf_document.dart';
+import '../../domain/models/pdf_document.dart';
+import '../../services/storage/storage_service.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:injectable/injectable.dart';
 import 'package:uuid/uuid.dart';
@@ -15,6 +16,8 @@ import 'pdf_service.dart';
 /// PDFService 구현체
 @Injectable(as: PDFService)
 class PDFServiceImpl implements PDFService {
+  final StorageService _storageService;
+  
   // PDF 문서 캐싱을 위한 맵
   final Map<String, PDFDocument> _documentCache = {};
   
@@ -26,6 +29,9 @@ class PDFServiceImpl implements PDFService {
   // UUID 생성
   final _uuid = const Uuid();
   
+  PDFServiceImpl({required StorageService storageService})
+    : _storageService = storageService;
+  
   @override
   Future<PDFDocument> openDocument(String filePath) async {
     try {
@@ -33,7 +39,7 @@ class PDFServiceImpl implements PDFService {
         return _documentCache[filePath]!;
       }
       
-      final tempPdfPath = filePath;
+      String tempPdfPath = filePath;
       Uint8List? bytes;
       
       if (filePath.startsWith('http')) {
@@ -272,7 +278,7 @@ class PDFServiceImpl implements PDFService {
       return Result.success(filePath);
     } catch (e) {
       debugPrint('PDF 다운로드 오류: $e');
-      return Result.failure(e);
+      return Result.failure(Exception('PDF 다운로드 오류: $e'));
     }
   }
   

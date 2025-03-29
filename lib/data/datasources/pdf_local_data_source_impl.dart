@@ -1,42 +1,31 @@
 import 'dart:convert';
-import 'dart:io' if (dart.library.html) 'package:pdf_learner_v2/core/utils/web_stub.dart';
-import 'dart:typed_data';
+import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
-import 'package:injectable/injectable.dart';
-import 'package:json_annotation/json_annotation.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:injectable/injectable.dart';
+import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/base/result.dart';
-import '../../core/utils/web_storage_utils.dart';
 import '../../domain/models/pdf_document.dart';
 import '../../domain/models/pdf_bookmark.dart';
-import '../models/pdf_document_model.dart';
-import '../models/pdf_bookmark_model.dart';
-import 'pdf_local_data_source.dart';
 import '../../services/storage/storage_service.dart';
+import 'pdf_local_data_source.dart';
 
 /// PDF 로컬 데이터 소스 구현 클래스
 /// 
 /// [PDFLocalDataSource] 인터페이스의 기본 구현을 제공합니다.
 @Injectable(as: PDFLocalDataSource)
 class PDFLocalDataSourceImpl implements PDFLocalDataSource {
-  final SharedPreferences _sharedPreferences;
   final StorageService _storageService;
-  static const _documentsKey = 'pdf_documents';
-  static const _bookmarksKey = 'pdf_bookmarks';
-  static const _searchHistoryKey = 'pdf_search_history';
-  static const _lastReadPagePrefix = 'pdf_last_read_page_';
-  final _uuid = const Uuid();
-
-  PDFLocalDataSourceImpl({
-    required SharedPreferences prefs,
-    required StorageService storageService,
-  }) : _sharedPreferences = prefs,
-       _storageService = storageService;
+  final SharedPreferences _sharedPreferences;
+  
+  static const String _documentsKey = 'pdf_documents';
+  static const String _bookmarksKey = 'pdf_bookmarks';
+  static const String _searchHistoryKey = 'search_history';
+  static const String _lastReadPagePrefix = 'last_read_page_';
+  
+  PDFLocalDataSourceImpl(this._storageService, this._sharedPreferences);
 
   @override
   Future<Result<List<PDFDocument>>> getDocuments() async {
@@ -203,7 +192,7 @@ class PDFLocalDataSourceImpl implements PDFLocalDataSource {
   }
 
   @override
-  Future<Result<PDFDocument>> importPDF(File file) async {
+  Future<Result<PDFDocument>> importPDF(io.File file) async {
     try {
       final targetDir = await _storageService.getDocumentsDirectory();
       final fileName = path.basename(file.path);
@@ -517,52 +506,57 @@ class PDFLocalDataSourceImpl implements PDFLocalDataSource {
   }
 
   @override
-  Future<void> clearCache() async {
+  Future<Result<void>> clearCache() async {
     try {
       await _storageService.clearCache();
+      return Result.success(null);
     } catch (e) {
       debugPrint('캐시 정리 실패: $e');
-      throw Exception('캐시 정리 실패: $e');
+      return Result.failure(Exception('캐시 정리 실패: $e'));
     }
   }
 
   @override
-  Future<String> saveFile(String path, Uint8List bytes) async {
+  Future<Result<String>> saveFile(String path, Uint8List bytes) async {
     try {
-      return await _storageService.saveFile(bytes, path);
+      final savedPath = await _storageService.saveFile(bytes, path);
+      return Result.success(savedPath);
     } catch (e) {
       debugPrint('파일 저장 실패: $e');
-      throw Exception('파일 저장 실패: $e');
+      return Result.failure(Exception('파일 저장 실패: $e'));
     }
   }
 
   @override
-  Future<bool> deleteFile(String path) async {
+  Future<Result<bool>> deleteFile(String path) async {
     try {
-      return await _storageService.deleteFile(path);
+      await _storageService.deleteFile(path);
+      return Result.success(true);
     } catch (e) {
       debugPrint('파일 삭제 실패: $e');
-      return false;
+      return Result.failure(Exception('파일 삭제 실패: $e'));
     }
   }
 
   @override
-  Future<bool> fileExists(String path) async {
+  Future<Result<bool>> fileExists(String path) async {
     try {
-      return await _storageService.fileExists(path);
+      final exists = await _storageService.fileExists(path);
+      return Result.success(exists);
     } catch (e) {
       debugPrint('파일 존재 확인 실패: $e');
-      return false;
+      return Result.failure(Exception('파일 존재 확인 실패: $e'));
     }
   }
 
   @override
-  Future<int> getFileSize(String path) async {
+  Future<Result<int>> getFileSize(String path) async {
     try {
-      return await _storageService.getFileSize(path);
+      final size = await _storageService.getFileSize(path);
+      return Result.success(size);
     } catch (e) {
       debugPrint('파일 크기 확인 실패: $e');
-      return 0;
+      return Result.failure(Exception('파일 크기 확인 실패: $e'));
     }
   }
 

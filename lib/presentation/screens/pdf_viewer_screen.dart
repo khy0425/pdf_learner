@@ -191,7 +191,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                     onPressed: () {
                       _pdfViewerController.searchText(
                         _searchTextController.text,
-                        searchOption: TextSearchOption.previous,
                       );
                     },
                   ),
@@ -200,7 +199,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                     onPressed: () {
                       _pdfViewerController.searchText(
                         _searchTextController.text,
-                        searchOption: TextSearchOption.next,
                       );
                     },
                   ),

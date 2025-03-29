@@ -1,35 +1,22 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
-import '../models/pdf_document.dart';
-import '../services/ai_service.dart';
-import '../services/pdf_repository.dart';
-import '../utils/rate_limiter.dart';
 
 class PdfChatViewModel extends ChangeNotifier {
   final String documentId;
   final bool showAds;
   final bool showRewardButton;
-  final PDFRepository _pdfRepository;
-  final AiService _aiService;
-  final RateLimiter _rateLimiter;
 
-  List<ChatMessage> _messages = [];
+  final List<ChatMessage> _messages = [];
   bool _isLoading = false;
   String? _errorMessage;
-  PDFDocument? _document;
   int _remainingRequests = 0;
 
   PdfChatViewModel({
     required this.documentId,
     required this.showAds,
     required this.showRewardButton,
-    PDFRepository? pdfRepository,
-    AiService? aiService,
-    RateLimiter? rateLimiter,
-  })  : _pdfRepository = pdfRepository ?? PDFRepository(),
-        _aiService = aiService ?? AiService(),
-        _rateLimiter = rateLimiter ?? RateLimiter();
+  });
 
   List<ChatMessage> get messages => _messages;
   bool get isLoading => _isLoading;
@@ -38,11 +25,7 @@ class PdfChatViewModel extends ChangeNotifier {
 
   Future<void> initialize() async {
     try {
-      _document = await _pdfRepository.getDocument(documentId);
-      if (_document == null) {
-        throw Exception('문서를 찾을 수 없습니다.');
-      }
-      _remainingRequests = _rateLimiter.getRemainingRequests('pdf_chat');
+      _remainingRequests = 5; // 임시로 5회로 설정
       notifyListeners();
     } catch (e) {
       _errorMessage = e.toString();
@@ -51,15 +34,7 @@ class PdfChatViewModel extends ChangeNotifier {
   }
 
   Future<void> sendMessage(String content) async {
-    if (_document == null) {
-      _errorMessage = '문서를 찾을 수 없습니다.';
-      notifyListeners();
-      return;
-    }
-
-    if (!_rateLimiter.checkRequest('pdf_chat')) {
-      _errorMessage = '요청 제한에 도달했습니다. 잠시 후 다시 시도해주세요.';
-      notifyListeners();
+    if (!_checkRemainingRequests()) {
       return;
     }
 
@@ -75,10 +50,9 @@ class PdfChatViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _aiService.chatWithDocument(
-        documentId: documentId,
-        message: content,
-      );
+      // 실제 API 호출 대신 임시 응답
+      await Future.delayed(const Duration(seconds: 2));
+      final response = "이것은 임시 응답입니다. 실제 AI 서비스와 연결되지 않았습니다.";
 
       final aiMessage = ChatMessage(
         id: const Uuid().v4(),
@@ -87,7 +61,7 @@ class PdfChatViewModel extends ChangeNotifier {
       );
 
       _messages.add(aiMessage);
-      _remainingRequests = _rateLimiter.getRemainingRequests('pdf_chat');
+      _remainingRequests--;
     } catch (e) {
       final errorMessage = ChatMessage(
         id: const Uuid().v4(),
@@ -101,6 +75,15 @@ class PdfChatViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  bool _checkRemainingRequests() {
+    if (_remainingRequests <= 0) {
+      _errorMessage = '요청 제한에 도달했습니다. 잠시 후 다시 시도해주세요.';
+      notifyListeners();
+      return false;
+    }
+    return true;
   }
 
   Future<void> retryLastMessage() async {
@@ -120,14 +103,8 @@ class PdfChatViewModel extends ChangeNotifier {
   }
 
   Future<void> watchAdForMoreRequests() async {
-    // TODO: 광고 시청 로직 구현
+    // 광고 시청 로직 구현 (임시)
     _remainingRequests += 5; // 임시로 5회 추가
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _rateLimiter.dispose();
-    super.dispose();
   }
 } 

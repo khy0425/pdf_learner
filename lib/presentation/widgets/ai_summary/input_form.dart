@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../domain/models/summarize_option.dart';
+import '../../viewmodels/pdf_viewmodel.dart';
+import '../circular_loader.dart';
 
 /// AI 요약 입력 폼 위젯
 class AiSummaryInputForm extends StatelessWidget {

@@ -10,8 +10,8 @@ class AuthException implements Exception {
   final dynamic originalException;
   
   /// 인증 예외 생성자
-  AuthException(
-    this.message, {
+  AuthException({
+    required this.message,
     this.code,
     this.originalException,
   });

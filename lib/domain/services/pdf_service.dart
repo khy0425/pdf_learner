@@ -1,5 +1,6 @@
 import 'dart:typed_data';
-import 'package:pdf_learner_v2/domain/models/pdf_document.dart';
+import '../models/pdf_document.dart';
+import '../../core/base/result.dart';
 
 /// PDF 서비스 인터페이스
 abstract class PDFService {
@@ -29,4 +30,11 @@ abstract class PDFService {
   
   /// 리소스를 정리합니다.
   void dispose();
+  
+  /// PDF 파일을 다운로드합니다.
+  /// 
+  /// [url]에 지정된 URL에서 PDF 파일을 다운로드하여 로컬에 저장합니다.
+  /// 성공 시 파일 경로를 포함한 [Result.success]를 반환하고,
+  /// 실패 시 오류를 포함한 [Result.failure]를 반환합니다.
+  Future<Result<String>> downloadPdf(String url);
 } 

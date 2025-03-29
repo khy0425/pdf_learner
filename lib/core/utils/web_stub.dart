@@ -47,6 +47,11 @@ class Storage {
 
   /// 값 존재 여부 확인
   bool containsKey(String key) => _data.containsKey(key);
+  
+  /// 키-값 쌍에 대해 forEach 적용
+  void forEach(void Function(String key, String value) f) {
+    _data.forEach(f);
+  }
 }
 
 /// Window 클래스 스텁
@@ -59,6 +64,9 @@ class Window {
   
   /// Location 인스턴스
   final Location location = Location();
+  
+  /// Navigator 인스턴스
+  final Navigator navigator = Navigator();
 }
 
 /// Location 스텁
@@ -74,6 +82,33 @@ class Location {
   }
 }
 
+/// Navigator 스텁
+class Navigator {
+  /// 클립보드 API
+  final Clipboard? clipboard = Clipboard();
+  
+  /// Share API
+  final dynamic shareData = ShareData();
+  
+  /// Share API 사용 가능 여부 확인
+  bool get canShare => false;
+  
+  /// 공유 메서드
+  Future<bool> shareContent(Map<String, dynamic> data) async => false;
+}
+
+/// Clipboard 스텁
+class Clipboard {
+  /// 텍스트 쓰기
+  Future<void> writeText(String text) async {}
+  
+  /// 텍스트 읽기
+  Future<String> readText() async => '';
+  
+  /// 데이터 복사
+  Future<void> write(Map<String, dynamic> data) async {}
+}
+
 /// window 전역 객체
 final Window window = Window();
 
@@ -86,6 +121,7 @@ class Document {
   Element createElement(String tagName) {
     if (tagName == 'a') return AnchorElement();
     if (tagName == 'input') return InputElement();
+    if (tagName == 'canvas') return CanvasElement();
     return Element();
   }
   
@@ -164,6 +200,87 @@ class InputElement extends Element {
   List<File>? get files => null;
 }
 
+/// Canvas 엘리먼트
+class CanvasElement extends Element {
+  int width = 0;
+  int height = 0;
+  
+  /// Canvas 렌더링 컨텍스트 가져오기
+  CanvasRenderingContext2D getContext(String contextId, [Map<String, dynamic>? options]) {
+    return CanvasRenderingContext2D();
+  }
+  
+  /// Canvas 렌더링 컨텍스트 가져오기 (2d)
+  CanvasRenderingContext2D getContext2d() {
+    return CanvasRenderingContext2D();
+  }
+  
+  /// 데이터 URL로 변환
+  String toDataUrl([String type = 'image/png', num quality = 0.92]) {
+    return '';
+  }
+}
+
+/// Canvas 2D 렌더링 컨텍스트
+class CanvasRenderingContext2D {
+  /// 폰트 설정
+  String font = '10px sans-serif';
+  
+  /// 텍스트 정렬
+  String textAlign = 'start';
+  
+  /// 채우기 스타일
+  String fillStyle = '#000000';
+  
+  /// 선 스타일
+  String strokeStyle = '#000000';
+  
+  /// 선 굵기
+  double lineWidth = 1.0;
+  
+  void drawImage(Element image, int x, int y, [int? width, int? height]) {}
+  void putImageData(ImageData imageData, int x, int y) {}
+  void clearRect(int x, int y, int width, int height) {}
+  void fillRect(int x, int y, int width, int height) {}
+  void strokeRect(int x, int y, int width, int height) {}
+  void fillText(String text, double x, double y, [double? maxWidth]) {}
+  void strokeText(String text, double x, double y, [double? maxWidth]) {}
+  
+  ImageData getImageData(int x, int y, int width, int height) {
+    return ImageData();
+  }
+  
+  ImageData createImageData(int width, int height) {
+    return ImageData();
+  }
+  
+  /// 경로 시작
+  void beginPath() {}
+  
+  /// 경로 닫기
+  void closePath() {}
+  
+  /// 선 그리기
+  void stroke() {}
+  
+  /// 채우기
+  void fill() {}
+  
+  /// 경로 이동
+  void moveTo(double x, double y) {}
+  
+  /// 선 그리기
+  void lineTo(double x, double y) {}
+  
+  /// 원호 그리기
+  void arc(double x, double y, double radius, double startAngle, double endAngle, [bool anticlockwise = false]) {}
+}
+
+/// 이미지 데이터
+class ImageData {
+  Uint8List get data => Uint8List(0);
+}
+
 /// 이벤트 스텁
 class Event {}
 
@@ -196,8 +313,31 @@ class File {
   /// 파일 타입
   final String type;
   
-  /// 생성자
-  File(this.name, this.size, this.type);
+  /// 마지막 수정 시간
+  final DateTime lastModified;
+  
+  File({this.name = '', this.size = 0, this.type = '', DateTime? lastModified}) 
+    : lastModified = lastModified ?? DateTime.now();
+  
+  /// 파일 존재 여부 확인
+  Future<bool> exists() async => false;
+  
+  /// 파일 읽기
+  Future<Uint8List> readAsBytes() async => Uint8List(0);
+  
+  /// 파일 텍스트 읽기
+  Future<String> readAsString() async => '';
+  
+  /// 파일 쓰기
+  Future<void> writeAsBytes(List<int> bytes) async {}
+  
+  /// 파일 텍스트 쓰기
+  Future<void> writeAsString(String contents) async {}
+}
+
+/// 파일 업로드 엘리먼트
+class FileUploadInputElement extends InputElement {
+  // 추가 구현 없음
 }
 
 /// 파일 리더 스텁
@@ -216,33 +356,162 @@ class Blob {
   final dynamic _data;
   final String _type;
   
-  Blob(this._data, this._type);
+  Blob(this._data, [this._type = '']);
 }
 
 /// HttpRequest 스텁
 class HttpRequest {
+  /// 상태 코드
   int status = 200;
-  dynamic response;
-  String responseText = '';
   
-  static Future<HttpRequest> request(
-    String url, {
-    String method = 'GET',
-    String? responseType,
-    dynamic sendData,
-  }) async {
+  /// 응답 데이터
+  dynamic response;
+  
+  /// HTTP 요청 전송
+  static Future<HttpRequest> request(String url, {String method = 'GET', String? responseType, dynamic send}) async {
     return HttpRequest();
   }
 }
 
-/// URL 스텁
+/// Url 유틸리티 스텁
 class Url {
-  /// URL 생성
-  static String createObjectUrl(dynamic blob) => '';
-  
-  /// Blob에서 URL 생성
+  /// Blob에서 Object URL 생성
   static String createObjectUrlFromBlob(Blob blob) => '';
   
-  /// URL 해제
+  /// Object URL 해제
   static void revokeObjectUrl(String url) {}
+}
+
+/// ShareData 인터페이스
+class ShareData {
+  /// URL 공유
+  final String? url;
+  
+  /// 제목 공유
+  final String? title;
+  
+  /// 텍스트 공유
+  final String? text;
+  
+  /// 파일 공유
+  final List<File>? files;
+  
+  ShareData({this.url, this.title, this.text, this.files});
+  
+  /// Map으로 변환
+  Map<String, dynamic> toMap() => {
+    if (url != null) 'url': url,
+    if (title != null) 'title': title,
+    if (text != null) 'text': text,
+  };
+}
+
+/// PDF 관련 클래스들
+/// PdfPage 스텁
+class PdfPage {
+  final int width;
+  final int height;
+  
+  PdfPage({this.width = 0, this.height = 0});
+  
+  Size get size => Size(width.toDouble(), height.toDouble());
+  
+  /// 페이지 텍스트
+  Future<String> get text async => '';
+  
+  /// 페이지를 이미지로 변환
+  Future<PdfPageImage?> render({int? width, int? height}) async {
+    final renderWidth = width ?? this.width;
+    final renderHeight = height ?? this.height;
+    return PdfPageImage(
+      width: renderWidth, 
+      height: renderHeight,
+      bytes: Uint8List(0),
+    );
+  }
+  
+  /// 이미지 생성
+  Future<PdfBitmap?> createImage({int? width, int? height}) async {
+    final image = await render(width: width, height: height);
+    if (image == null) return null;
+    return PdfBitmap(image.bytes);
+  }
+}
+
+/// PdfDocument 스텁
+class PdfDocument {
+  /// 페이지 목록
+  final List<PdfPage> pages;
+  
+  /// 페이지 수
+  int get pageCount => pages.length;
+  
+  /// 문서 로드 함수
+  PdfDocument({Uint8List? inputBytes}) : pages = [] {
+    // 더미 페이지 추가
+    pages.add(PdfPage(width: 595, height: 842));
+    pages.add(PdfPage(width: 595, height: 842));
+  }
+  
+  /// 페이지 가져오기
+  Future<PdfPage> getPage(int pageNumber) async {
+    final index = pageNumber - 1;
+    if (index < 0 || index >= pages.length) {
+      throw RangeError('페이지 번호가 유효하지 않습니다: $pageNumber');
+    }
+    return pages[index];
+  }
+  
+  /// 문서 데이터로 열기
+  static Future<PdfDocument> openData(Uint8List data) async {
+    return PdfDocument(inputBytes: data);
+  }
+  
+  /// 문서 닫기
+  void dispose() {
+    // 리소스 정리
+  }
+}
+
+/// PdfBitmap 스텁
+class PdfBitmap {
+  /// 이미지 데이터
+  final Uint8List _bytes;
+  
+  /// 이미지 너비
+  final int width;
+  
+  /// 이미지 높이
+  final int height;
+  
+  PdfBitmap(this._bytes, {this.width = 100, this.height = 100});
+  
+  /// 이미지 바이트 데이터
+  Future<Uint8List> get bytes async => _bytes;
+}
+
+/// PDF 페이지 이미지 클래스
+class PdfPageImage {
+  /// 이미지 너비
+  final int width;
+  
+  /// 이미지 높이
+  final int height;
+  
+  /// 이미지 바이트 데이터
+  final Uint8List bytes;
+  
+  PdfPageImage({
+    required this.width, 
+    required this.height, 
+    Uint8List? bytes
+  }) : bytes = bytes ?? Uint8List(0);
+}
+
+/// Size 클래스
+class Size {
+  final double width;
+  final double height;
+  
+  Size(this.width, this.height);
 } 

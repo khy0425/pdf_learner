@@ -2,36 +2,77 @@ import '../../domain/models/pdf_document.dart';
 import 'dart:convert';
 import '../../core/base/result.dart';
 
-class PDFDocumentModel {
-  final String id;
-  final String title;
-  final String description;
-  final String filePath;
-  final String downloadUrl;
-  final int pageCount;
-  final String thumbnailUrl;
-  final int totalPages;
-  final int currentPage;
-  final int size;
-  final int fileSize;
-  final double readingProgress;
-  final int readingTime;
-  final bool isFavorite;
-  final bool isSelected;
-  final PDFDocumentStatus status;
-  final PDFDocumentImportance importance;
-  final PDFDocumentSecurityLevel securityLevel;
-  final List<String> tags;
-  final Map<String, dynamic> metadata;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
-  final String author;
-  final String url;
-  final double progress;
-  final int accessCount;
-  final String source;
-  final DateTime? lastAccessedAt;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// PDF 문서 데이터 모델
+class PDFDocumentModel {
+  /// 문서 ID
+  final String id;
+  
+  /// 문서 제목
+  final String title;
+  
+  /// 문서 설명
+  final String description;
+  
+  /// 파일 경로
+  final String filePath;
+  
+  /// 다운로드 URL
+  final String downloadUrl;
+  
+  /// 썸네일 경로
+  final String thumbnailPath;
+  
+  /// 작성자
+  final String author;
+  
+  /// 파일 크기 (바이트)
+  final int fileSize;
+  
+  /// 페이지 수
+  final int pageCount;
+  
+  /// 총 페이지 수
+  final int totalPages;
+  
+  /// 현재 페이지
+  final int currentPage;
+  
+  /// 상태
+  final PDFDocumentStatus status;
+  
+  /// 생성 시간
+  final DateTime? createdAt;
+  
+  /// 업데이트 시간
+  final DateTime? updatedAt;
+  
+  /// 마지막 접근 시간
+  final DateTime? lastAccessedAt;
+  
+  /// 중요도
+  final PDFImportanceLevel importance;
+  
+  /// 보안 수준
+  final PDFSecurityLevel securityLevel;
+  
+  /// 즐겨찾기 여부
+  final bool isFavorite;
+  
+  /// 선택됨 여부
+  final bool isSelected;
+  
+  /// 태그 목록
+  final List<String> tags;
+  
+  /// 메타데이터
+  final Map<String, dynamic> metadata;
+  
+  /// 출처
+  final String source;
+  
+  /// 생성자
   PDFDocumentModel({
     required this.id,
     required this.title,
@@ -39,141 +80,72 @@ class PDFDocumentModel {
     required this.filePath,
     required this.downloadUrl,
     required this.pageCount,
-    this.thumbnailUrl = '',
+    this.thumbnailPath = '',
     this.totalPages = 0,
     this.currentPage = 0,
-    this.size = 0,
     this.fileSize = 0,
-    this.readingProgress = 0.0,
-    this.readingTime = 0,
-    this.isFavorite = false,
-    this.isSelected = false,
-    this.status = PDFDocumentStatus.initial,
-    this.importance = PDFDocumentImportance.medium,
-    this.securityLevel = PDFDocumentSecurityLevel.none,
-    this.tags = const [],
-    this.metadata = const {},
+    this.author = '',
     this.createdAt,
     this.updatedAt,
-    this.author = '',
-    this.url = '',
-    this.progress = 0.0,
-    this.accessCount = 0,
-    this.source = 'local',
     this.lastAccessedAt,
+    this.isFavorite = false,
+    this.isSelected = false,
+    this.status = PDFDocumentStatus.added,
+    this.importance = PDFImportanceLevel.medium,
+    this.securityLevel = PDFSecurityLevel.none,
+    this.tags = const [],
+    this.metadata = const {},
+    this.source = 'local',
   });
-
+  
+  /// JSON 맵에서 모델 생성
   factory PDFDocumentModel.fromJson(Map<String, dynamic> json) {
     return PDFDocumentModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      filePath: json['filePath'] as String,
-      downloadUrl: json['downloadUrl'] as String,
-      pageCount: json['pageCount'] as int,
-      thumbnailUrl: json['thumbnailUrl'] as String? ?? '',
+      filePath: json['filePath'] as String? ?? '',
+      downloadUrl: json['downloadUrl'] as String? ?? '',
+      pageCount: json['pageCount'] as int? ?? 0,
+      thumbnailPath: json['thumbnailPath'] as String? ?? '',
       totalPages: json['totalPages'] as int? ?? 0,
       currentPage: json['currentPage'] as int? ?? 0,
-      size: json['size'] as int? ?? 0,
       fileSize: json['fileSize'] as int? ?? 0,
-      readingProgress: (json['readingProgress'] as num?)?.toDouble() ?? 0.0,
-      readingTime: json['readingTime'] as int? ?? 0,
       isFavorite: json['isFavorite'] as bool? ?? false,
       isSelected: json['isSelected'] as bool? ?? false,
       status: _parseStatus(json['status']),
       importance: _parseImportance(json['importance']),
       securityLevel: _parseSecurityLevel(json['securityLevel']),
-      tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? [],
-      metadata: json['metadata'] as Map<String, dynamic>? ?? {},
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      tags: json['tags'] != null ? List<String>.from(json['tags']) : [],
+      metadata: json['metadata'] != null ? Map<String, dynamic>.from(json['metadata']) : {},
+      source: json['source'] as String? ?? 'local',
+      createdAt: json['createdAt'] != null 
+          ? (json['createdAt'] is Timestamp 
+              ? (json['createdAt'] as Timestamp).toDate() 
+              : DateTime.tryParse(json['createdAt'].toString()))
           : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: json['updatedAt'] != null 
+          ? (json['updatedAt'] is Timestamp 
+              ? (json['updatedAt'] as Timestamp).toDate() 
+              : DateTime.tryParse(json['updatedAt'].toString()))
           : null,
       author: json['author'] as String? ?? '',
-      url: json['url'] as String? ?? '',
-      progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
-      accessCount: json['accessCount'] as int? ?? 0,
-      source: json['source'] as String? ?? 'local',
-      lastAccessedAt: json['lastAccessedAt'] != null
-          ? DateTime.parse(json['lastAccessedAt'] as String)
+      lastAccessedAt: json['lastAccessedAt'] != null 
+          ? (json['lastAccessedAt'] is Timestamp 
+              ? (json['lastAccessedAt'] as Timestamp).toDate() 
+              : DateTime.tryParse(json['lastAccessedAt'].toString()))
           : null,
     );
   }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'filePath': filePath,
-      'downloadUrl': downloadUrl,
-      'pageCount': pageCount,
-      'thumbnailUrl': thumbnailUrl,
-      'totalPages': totalPages,
-      'currentPage': currentPage,
-      'size': size,
-      'fileSize': fileSize,
-      'readingProgress': readingProgress,
-      'readingTime': readingTime,
-      'isFavorite': isFavorite,
-      'isSelected': isSelected,
-      'status': status.toString().split('.').last,
-      'importance': importance.toString().split('.').last,
-      'securityLevel': securityLevel.toString().split('.').last,
-      'tags': tags,
-      'metadata': metadata,
-      'createdAt': createdAt?.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
-      'author': author,
-      'url': url,
-      'progress': progress,
-      'accessCount': accessCount,
-      'source': source,
-      'lastAccessedAt': lastAccessedAt?.toIso8601String(),
-    };
+  
+  /// JSON 문자열에서 모델 생성
+  factory PDFDocumentModel.fromJsonString(String jsonString) {
+    final Map<String, dynamic> json = jsonDecode(jsonString);
+    return PDFDocumentModel.fromJson(json);
   }
-
-  PDFDocument toDomain() {
-    return PDFDocument(
-      id: id,
-      title: title,
-      author: author,
-      filePath: filePath,
-      url: url,
-      totalPages: totalPages,
-      currentPage: currentPage,
-      progress: progress,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      lastAccessedAt: lastAccessedAt ?? createdAt,
-      accessCount: accessCount,
-      source: source == 'remote'
-          ? PDFDocumentSource.remote
-          : PDFDocumentSource.local,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'author': author,
-      'filePath': filePath,
-      'url': url,
-      'totalPages': totalPages,
-      'currentPage': currentPage,
-      'progress': progress,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'lastAccessedAt': (lastAccessedAt ?? createdAt).toIso8601String(),
-      'accessCount': accessCount,
-      'source': source,
-    };
-  }
-
-  static PDFDocumentModel fromDomain(PDFDocument document) {
+  
+  /// 도메인 모델에서 데이터 모델 생성
+  factory PDFDocumentModel.fromDomain(PDFDocument document) {
     return PDFDocumentModel(
       id: document.id,
       title: document.title,
@@ -181,13 +153,14 @@ class PDFDocumentModel {
       filePath: document.filePath,
       downloadUrl: document.downloadUrl,
       pageCount: document.pageCount,
-      thumbnailUrl: document.thumbnailUrl,
+      thumbnailPath: document.thumbnailPath,
       totalPages: document.totalPages,
       currentPage: document.currentPage,
-      size: document.size,
       fileSize: document.fileSize,
-      readingProgress: document.readingProgress,
-      readingTime: document.readingTime,
+      author: document.author,
+      createdAt: document.createdAt,
+      updatedAt: document.updatedAt,
+      lastAccessedAt: document.lastAccessedAt,
       isFavorite: document.isFavorite,
       isSelected: document.isSelected,
       status: document.status,
@@ -195,78 +168,92 @@ class PDFDocumentModel {
       securityLevel: document.securityLevel,
       tags: document.tags,
       metadata: document.metadata,
-      createdAt: document.createdAt,
-      updatedAt: document.updatedAt,
-      author: document.author,
-      url: document.url,
-      progress: document.progress,
-      accessCount: document.accessCount,
-      source: document.source == PDFDocumentSource.remote ? 'remote' : 'local',
-      lastAccessedAt: document.lastAccessedAt,
+      source: document.source.toString().split('.').last,
     );
   }
   
-  // String으로 된 JSON을 파싱하여 모델 생성
-  static PDFDocumentModel fromJsonString(String json) {
-    return PDFDocumentModel.fromJson(jsonDecode(json) as Map<String, dynamic>);
+  /// 도메인 모델로 변환
+  PDFDocument toDomain() {
+    return PDFDocument(
+      id: id,
+      title: title,
+      description: description,
+      filePath: filePath,
+      downloadUrl: downloadUrl,
+      pageCount: pageCount,
+      thumbnailPath: thumbnailPath,
+      totalPages: totalPages,
+      currentPage: currentPage,
+      fileSize: fileSize,
+      author: author,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      lastAccessedAt: lastAccessedAt,
+      isFavorite: isFavorite,
+      isSelected: isSelected,
+      status: status,
+      importance: importance,
+      securityLevel: securityLevel,
+      tags: tags,
+      metadata: metadata,
+      source: _sourceFromString(source),
+      readingProgress: 0.0,
+      readingTime: 0,
+      lastReadPage: 0,
+      accessCount: 0,
+      accessLevel: PDFAccessLevel.private,
+      category: PDFCategory.document,
+      progress: 0.0,
+      url: downloadUrl,
+      thumbnailUrl: thumbnailPath,
+    );
   }
   
-  /// 상태 문자열 파싱
-  static PDFDocumentStatus _parseStatus(dynamic status) {
-    if (status == null) return PDFDocumentStatus.initial;
+  /// JSON 맵으로 변환
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = {
+      'id': id,
+      'title': title,
+      'description': description,
+      'filePath': filePath,
+      'downloadUrl': downloadUrl,
+      'pageCount': pageCount,
+      'thumbnailPath': thumbnailPath,
+      'totalPages': totalPages,
+      'currentPage': currentPage,
+      'fileSize': fileSize,
+      'author': author,
+      'isFavorite': isFavorite,
+      'isSelected': isSelected,
+      'status': _statusToString(status),
+      'importance': _importanceToString(importance),
+      'securityLevel': _securityLevelToString(securityLevel),
+      'tags': tags,
+      'metadata': metadata,
+      'source': source,
+    };
     
-    final statusStr = status.toString().toLowerCase();
-    switch (statusStr) {
-      case 'initial': return PDFDocumentStatus.initial;
-      case 'downloading': return PDFDocumentStatus.downloading;
-      case 'downloaded': return PDFDocumentStatus.downloaded;
-      case 'reading': return PDFDocumentStatus.reading;
-      case 'completed': return PDFDocumentStatus.completed;
-      case 'created': return PDFDocumentStatus.created;
-      case 'deleted': return PDFDocumentStatus.deleted;
-      default: return PDFDocumentStatus.initial;
+    if (createdAt != null) {
+      data['createdAt'] = createdAt!.toIso8601String();
     }
-  }
-  
-  /// 중요도 문자열 파싱
-  static PDFDocumentImportance _parseImportance(dynamic importance) {
-    if (importance == null) return PDFDocumentImportance.medium;
     
-    final importanceStr = importance.toString().toLowerCase();
-    switch (importanceStr) {
-      case 'low': return PDFDocumentImportance.low;
-      case 'medium': return PDFDocumentImportance.medium;
-      case 'high': return PDFDocumentImportance.high;
-      case 'critical': return PDFDocumentImportance.critical;
-      default: return PDFDocumentImportance.medium;
+    if (updatedAt != null) {
+      data['updatedAt'] = updatedAt!.toIso8601String();
     }
-  }
-  
-  /// 보안 수준 문자열 파싱
-  static PDFDocumentSecurityLevel _parseSecurityLevel(dynamic level) {
-    if (level == null) return PDFDocumentSecurityLevel.none;
     
-    final levelStr = level.toString().toLowerCase();
-    switch (levelStr) {
-      case 'none': return PDFDocumentSecurityLevel.none;
-      case 'low': return PDFDocumentSecurityLevel.low;
-      case 'medium': return PDFDocumentSecurityLevel.medium;
-      case 'high': return PDFDocumentSecurityLevel.high;
-      case 'restricted': return PDFDocumentSecurityLevel.restricted;
-      default: return PDFDocumentSecurityLevel.none;
+    if (lastAccessedAt != null) {
+      data['lastAccessedAt'] = lastAccessedAt!.toIso8601String();
     }
-  }
-
-  // Result 클래스를 사용하는 변환 메서드
-  static Result<PDFDocumentModel> fromDomainResult(PDFDocument document) {
-    try {
-      final model = PDFDocumentModel.fromDomain(document);
-      return Result.success(model);
-    } catch (e) {
-      return Result.failure(Exception('도메인 모델 변환 실패: $e'));
-    }
+    
+    return data;
   }
   
+  /// JSON 문자열로 변환
+  String toJsonString() {
+    return jsonEncode(toJson());
+  }
+  
+  /// Result 클래스를 사용한 도메인 변환
   Result<PDFDocument> toDomainResult() {
     try {
       final domain = toDomain();
@@ -276,6 +263,28 @@ class PDFDocumentModel {
     }
   }
   
+  /// Result 클래스를 사용한 JSON 문자열 변환
+  Result<String> toJsonStringResult() {
+    try {
+      final jsonMap = toJson();
+      final jsonString = jsonEncode(jsonMap);
+      return Result.success(jsonString);
+    } catch (e) {
+      return Result.failure(Exception('JSON 문자열 변환 실패: $e'));
+    }
+  }
+  
+  /// 도메인 모델에서 데이터 모델로 변환 (Result 반환)
+  static Result<PDFDocumentModel> fromDomainResult(PDFDocument document) {
+    try {
+      final model = PDFDocumentModel.fromDomain(document);
+      return Result.success(model);
+    } catch (e) {
+      return Result.failure(Exception('도메인 모델 변환 실패: $e'));
+    }
+  }
+  
+  /// 도메인 모델 리스트에서 데이터 모델 리스트로 변환
   static Result<List<PDFDocumentModel>> fromDomainListResult(List<PDFDocument> documents) {
     try {
       final models = documents.map((doc) => PDFDocumentModel.fromDomain(doc)).toList();
@@ -285,6 +294,7 @@ class PDFDocumentModel {
     }
   }
   
+  /// 데이터 모델 리스트에서 도메인 모델 리스트로 변환
   static Result<List<PDFDocument>> toDomainListResult(List<PDFDocumentModel> models) {
     try {
       final domains = models.map((model) => model.toDomain()).toList();
@@ -294,7 +304,7 @@ class PDFDocumentModel {
     }
   }
   
-  // 문자열에서 변환
+  /// JSON 문자열에서 모델 생성 (Result 반환)
   static Result<PDFDocumentModel> fromJsonStringResult(String jsonString) {
     try {
       final model = PDFDocumentModel.fromJsonString(jsonString);
@@ -303,15 +313,159 @@ class PDFDocumentModel {
       return Result.failure(Exception('JSON 문자열 변환 실패: $e'));
     }
   }
+}
+
+/// 상태 문자열 파싱
+PDFDocumentStatus _parseStatus(dynamic status) {
+  if (status == null) return PDFDocumentStatus.added;
   
-  // JSON 문자열로 변환
-  Result<String> toJsonStringResult() {
-    try {
-      final jsonMap = toJson();
-      final jsonString = jsonEncode(jsonMap);
-      return Result.success(jsonString);
-    } catch (e) {
-      return Result.failure(Exception('JSON 문자열 변환 실패: $e'));
-    }
+  final String statusStr = status.toString().toLowerCase();
+  
+  switch (statusStr) {
+    case 'added':
+      return PDFDocumentStatus.added;
+    case 'reading':
+      return PDFDocumentStatus.reading;
+    case 'completed':
+      return PDFDocumentStatus.completed;
+    case 'archived':
+      return PDFDocumentStatus.archived;
+    case 'deleted':
+      return PDFDocumentStatus.deleted;
+    case 'downloaded':
+      return PDFDocumentStatus.downloaded;
+    case 'initial':
+      return PDFDocumentStatus.initial;
+    case 'downloading':
+      return PDFDocumentStatus.downloading;
+    case 'created':
+      return PDFDocumentStatus.created;
+    default:
+      return PDFDocumentStatus.added;
+  }
+}
+
+/// 중요도 문자열 파싱
+PDFImportanceLevel _parseImportance(dynamic importance) {
+  if (importance == null) return PDFImportanceLevel.medium;
+  
+  final String importanceStr = importance.toString().toLowerCase();
+  
+  switch (importanceStr) {
+    case 'low':
+      return PDFImportanceLevel.low;
+    case 'medium':
+      return PDFImportanceLevel.medium;
+    case 'high':
+      return PDFImportanceLevel.high;
+    case 'critical':
+      return PDFImportanceLevel.critical;
+    default:
+      return PDFImportanceLevel.medium;
+  }
+}
+
+/// 보안 수준 문자열 파싱
+PDFSecurityLevel _parseSecurityLevel(dynamic securityLevel) {
+  if (securityLevel == null) return PDFSecurityLevel.none;
+  
+  final String securityLevelStr = securityLevel.toString().toLowerCase();
+  
+  switch (securityLevelStr) {
+    case 'none':
+      return PDFSecurityLevel.none;
+    case 'low':
+      return PDFSecurityLevel.low;
+    case 'medium':
+      return PDFSecurityLevel.medium;
+    case 'high':
+      return PDFSecurityLevel.high;
+    case 'public':
+      return PDFSecurityLevel.public;
+    case 'restricted':
+      return PDFSecurityLevel.restricted;
+    case 'confidential':
+      return PDFSecurityLevel.confidential;
+    case 'secret':
+      return PDFSecurityLevel.secret;
+    default:
+      return PDFSecurityLevel.none;
+  }
+}
+
+/// 상태를 문자열로 변환
+String _statusToString(PDFDocumentStatus status) {
+  switch (status) {
+    case PDFDocumentStatus.added:
+      return 'added';
+    case PDFDocumentStatus.reading:
+      return 'reading';
+    case PDFDocumentStatus.completed:
+      return 'completed';
+    case PDFDocumentStatus.archived:
+      return 'archived';
+    case PDFDocumentStatus.deleted:
+      return 'deleted';
+    case PDFDocumentStatus.downloaded:
+      return 'downloaded';
+    case PDFDocumentStatus.initial:
+      return 'initial';
+    case PDFDocumentStatus.downloading:
+      return 'downloading';
+    case PDFDocumentStatus.created:
+      return 'created';
+    default:
+      return 'added';
+  }
+}
+
+/// 중요도를 문자열로 변환
+String _importanceToString(PDFImportanceLevel importance) {
+  switch (importance) {
+    case PDFImportanceLevel.low:
+      return 'low';
+    case PDFImportanceLevel.medium:
+      return 'medium';
+    case PDFImportanceLevel.high:
+      return 'high';
+    case PDFImportanceLevel.critical:
+      return 'critical';
+    default:
+      return 'medium';
+  }
+}
+
+/// 보안 수준을 문자열로 변환
+String _securityLevelToString(PDFSecurityLevel securityLevel) {
+  switch (securityLevel) {
+    case PDFSecurityLevel.none:
+      return 'none';
+    case PDFSecurityLevel.low:
+      return 'low';
+    case PDFSecurityLevel.medium:
+      return 'medium';
+    case PDFSecurityLevel.high:
+      return 'high';
+    case PDFSecurityLevel.public:
+      return 'public';
+    case PDFSecurityLevel.restricted:
+      return 'restricted';
+    case PDFSecurityLevel.confidential:
+      return 'confidential';
+    case PDFSecurityLevel.secret:
+      return 'secret';
+    default:
+      return 'none';
+  }
+}
+
+/// 소스 문자열에서 PDFDocumentSource 변환
+PDFDocumentSource _sourceFromString(String source) {
+  switch (source.toLowerCase()) {
+    case 'remote':
+      return PDFDocumentSource.remote;
+    case 'local':
+    default:
+      return PDFDocumentSource.local;
   }
 } 

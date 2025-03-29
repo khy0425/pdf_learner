@@ -103,12 +103,12 @@ class PdfFileInfo {
     this.readingProgress = 0.0,
     String? formattedSize,
   }) : 
-    this.createdAt = createdAt ?? DateTime.now(),
-    this.lastAccessedAt = lastAccessedAt ?? DateTime.now(),
-    this.bookmarks = bookmarks ?? [],
-    this.annotations = annotations ?? [],
-    this.fileSize = fileSize ?? size,
-    this.formattedSize = formattedSize ?? _formatFileSize(fileSize ?? size);
+    createdAt = createdAt ?? DateTime.now(),
+    lastAccessedAt = lastAccessedAt ?? DateTime.now(),
+    bookmarks = bookmarks ?? [],
+    annotations = annotations ?? [],
+    fileSize = fileSize ?? size,
+    formattedSize = formattedSize ?? _formatFileSize(fileSize ?? size);
   
   /// 파일 크기를 사람이 읽기 쉬운 형태로 변환
   static String _formatFileSize(int bytes) {
@@ -272,9 +272,9 @@ class PdfFileInfo {
 
   /// 마지막 접근 시간 업데이트
   PdfFileInfo updateLastAccessed() {
-    return this.copyWith(
+    return copyWith(
       lastAccessedAt: DateTime.now(),
-      accessCount: this.accessCount + 1,
+      accessCount: accessCount + 1,
     );
   }
 } 

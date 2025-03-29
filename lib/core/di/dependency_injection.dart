@@ -1,401 +1,205 @@
+import 'dart:typed_data';
 import 'package:get_it/get_it.dart';
-import 'package:injectable/injectable.dart';
+// import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// import 'package:flutter/material.dart';
 
-import '../../services/firebase_service.dart';
-import '../../domain/repositories/auth_repository.dart';
-import '../../data/repositories/auth_repository_impl.dart';
-import '../../domain/repositories/pdf_repository.dart';
-import '../../data/repositories/pdf_repository_impl.dart';
-import '../../services/pdf/pdf_service.dart';
-import '../../presentation/viewmodels/auth_viewmodel.dart';
-import '../../presentation/viewmodels/pdf_viewmodel.dart';
-import '../../presentation/viewmodels/pdf_list_viewmodel.dart';
-import '../../presentation/viewmodels/pdf_viewer_viewmodel.dart';
-import '../../presentation/viewmodels/theme_viewmodel.dart';
-import '../../presentation/viewmodels/settings_viewmodel.dart';
-import '../../presentation/viewmodels/pdf_file_viewmodel.dart';
-import '../../presentation/viewmodels/locale_viewmodel.dart';
 import '../../data/datasources/pdf_local_data_source.dart';
 import '../../data/datasources/pdf_local_data_source_impl.dart';
 import '../../data/datasources/pdf_remote_data_source.dart';
 import '../../data/datasources/pdf_remote_data_source_impl.dart';
+import '../../data/repositories/pdf_repository_impl.dart';
+import '../../domain/repositories/pdf_repository.dart';
+import '../../domain/models/pdf_document.dart';
+import '../../domain/services/pdf_service.dart' as domain_pdf;
+import '../../core/base/result.dart';
+import '../../presentation/viewmodels/auth_viewmodel.dart';
+import '../../presentation/viewmodels/pdf_viewmodel.dart';
+import '../../presentation/viewmodels/pdf_file_viewmodel.dart';
+import '../../services/analytics/analytics_service.dart';
+import '../../services/analytics/analytics_service_impl.dart' as analytics_impl;
+import '../../services/firebase/firebase_service.dart';
+import '../../services/firebase/firebase_service_impl.dart';
 import '../../services/storage/storage_service.dart';
+import '../../services/storage/storage_service_impl.dart' as storage_impl;
+import '../../services/pdf/pdf_service.dart';
+import '../../services/pdf/pdf_service_impl.dart' as pdf_impl;
 import '../../services/storage/thumbnail_service.dart';
-import '../utils/web_storage_utils.dart';
-// TODO: 인터페이스 임포트 필요
-// import '../../data/datasources/auth_data_source.dart';
-// import '../../data/datasources/auth_data_source_impl.dart';
+import '../../core/utils/web_utils.dart';
 
-/// 의존성 주입을 관리하는 클래스
-/// 싱글톤으로 구현되어 전역적으로 접근 가능
+final getIt = GetIt.instance;
+
+/// 의존성 주입 관리 클래스
 class DependencyInjection {
-  static final GetIt _getIt = GetIt.instance;
-  
-  /// GetIt 인스턴스 접근자
-  static GetIt get getItInstance => _getIt;
+  /// GetIt 인스턴스
+  static GetIt get instance => getIt;
   
   /// 의존성 초기화
   static Future<void> init() async {
-    await _registerExternalDependencies();
-    _registerFirebaseServices();
-    _registerServices();
-    _registerDataSources();
-    _registerRepositories();
-    _registerViewModels();
+    await setupDependencies();
   }
+}
+
+/// 애플리케이션의 의존성을 설정합니다.
+Future<void> setupDependencies() async {
+  // 선행 의존성 초기화
+  await _initializeDependencies();
   
-  /// 외부 라이브러리 의존성 등록
-  static Future<void> _registerExternalDependencies() async {
-    // SharedPreferences
-    final sharedPreferences = await SharedPreferences.getInstance();
-    _getIt.registerSingleton(sharedPreferences);
+  _registerServices();
+  _registerDataSources();
+  _registerRepositories();
+  _registerViewModels();
+}
 
-    // Firebase
-    _getIt.registerSingleton(FirebaseFirestore.instance);
-    _getIt.registerSingleton(FirebaseStorage.instance);
-    _getIt.registerSingleton(FirebaseAuth.instance);
-    _getIt.registerLazySingleton<GoogleSignIn>(() => GoogleSignIn());
-
-    // Flutter Secure Storage
-    _getIt.registerSingleton<FlutterSecureStorage>(FlutterSecureStorage());
-  }
+/// 선행 의존성 초기화
+Future<void> _initializeDependencies() async {
+  // SharedPreferences 초기화
+  final sharedPreferences = await SharedPreferences.getInstance();
+  getIt.registerSingleton<SharedPreferences>(sharedPreferences);
   
-  /// 서비스 등록
-  static void _registerServices() {
-    // PDF 서비스
-    _getIt.registerSingleton<PDFService>(PDFServiceImpl());
-    
-    // 썸네일 서비스
-    _getIt.registerSingleton<ThumbnailService>(
-      ThumbnailServiceImpl(_getIt<StorageService>())
-    );
-  }
+  // WebUtils 초기화
+  WebUtils.registerSingleton();
+}
+
+/// 서비스 의존성을 등록합니다.
+void _registerServices() {
+  // FirebaseService 먼저 등록 (다른 서비스가 의존하기 때문)
+  getIt.registerLazySingleton<FirebaseService>(() {
+    final service = FirebaseServiceImpl();
+    service.initialize();
+    return service;
+  });
   
-  /// 서비스 등록
-  static void _registerFirebaseServices() {
-    // Firebase 서비스 래퍼
-    _getIt.registerSingleton<FirebaseService>(
-      FirebaseService(
-        auth: _getIt<FirebaseAuth>(),
-        firestore: _getIt<FirebaseFirestore>(),
-        storage: _getIt<FirebaseStorage>()
-      )
-    );
-  }
-
-  /// 데이터 소스 등록
-  static void _registerDataSources() {
-    // 로컬 스토리지 서비스
-    _getIt.registerSingleton<StorageService>(
-      StorageServiceImpl(
-        _getIt<SharedPreferences>()
-      ),
-    );
-    
-    // PDF 로컬 데이터 소스
-    _getIt.registerSingleton<PDFLocalDataSource>(
-      PDFLocalDataSourceImpl(
-        storageService: _getIt<StorageService>(),
-        prefs: _getIt<SharedPreferences>()
-      ),
-    );
-    
-    // PDF 원격 데이터 소스
-    _getIt.registerSingleton<PDFRemoteDataSource>(
-      FirebasePDFRemoteDataSource(
-        firestore: _getIt<FirebaseFirestore>(),
-        storage: _getIt<FirebaseStorage>(),
-        firebaseService: _getIt<FirebaseService>()
-      ),
-    );
-  }
-
-  /// 리포지토리 등록
-  static void _registerRepositories() {
-    // PDF 레포지토리
-    _getIt.registerSingleton<PDFRepository>(
-      PDFRepositoryImpl(
-        localDataSource: _getIt<PDFLocalDataSource>(),
-        remoteDataSource: _getIt<PDFRemoteDataSource>(),
-        storageService: _getIt<StorageService>(),
-        firebaseService: _getIt<FirebaseService>(),
-        sharedPreferences: _getIt<SharedPreferences>()
-      ),
-    );
-    
-    // 인증 레포지토리
-    _getIt.registerSingleton<AuthRepository>(
-      AuthRepositoryImpl(
-        _getIt<FirebaseService>(),
-        _getIt<GoogleSignIn>()
-      ),
-    );
-  }
-
-  /// 뷰모델 등록
-  static void _registerViewModels() {
-    // ViewModel 등록
-    _getIt.registerSingleton<ThemeViewModel>(
-      ThemeViewModel(
-        sharedPreferences: _getIt<SharedPreferences>()
-      ),
-    );
-    
-    _getIt.registerSingleton<LocaleViewModel>(
-      LocaleViewModel(
-        sharedPreferences: _getIt<SharedPreferences>()
-      ),
-    );
-    
-    _getIt.registerSingleton<AuthViewModel>(
-      AuthViewModel(
-        repository: _getIt<AuthRepository>()
-      ),
-    );
-    
-    _getIt.registerSingleton<PDFViewModel>(
-      PDFViewModel(
-        repository: _getIt<PDFRepository>(),
-        pdfService: _getIt<PDFService>()
-      ),
-    );
-    
-    _getIt.registerFactory<PDFViewerViewModel>(
-      () => PDFViewerViewModel(
-        pdfRepository: _getIt<PDFRepository>(),
-        pdfViewModel: _getIt<PDFViewModel>(),
-        authViewModel: _getIt<AuthViewModel>(),
-        pdfService: _getIt<PDFService>(),
-        localDataSource: _getIt<PDFLocalDataSource>()
-      ),
-    );
-    
-    _getIt.registerSingleton<PDFFileViewModel>(
-      PDFFileViewModel(
-        repository: _getIt<PDFRepository>(),
-        pdfService: _getIt<PDFService>()
-      ),
-    );
-    
-    _getIt.registerSingleton<PDFListViewModel>(
-      PDFListViewModel(
-        repository: _getIt<PDFRepository>()
-      ),
-    );
-    
-    _getIt.registerSingleton<SettingsViewModel>(
-      SettingsViewModel(
-        sharedPreferences: _getIt<SharedPreferences>()
-      ),
-    );
-  }
+  // AnalyticsService 등록
+  getIt.registerLazySingleton<AnalyticsService>(() => 
+    analytics_impl.AnalyticsServiceImpl(
+      firebaseService: getIt<FirebaseService>(),
+    )
+  );
   
-  /// 타입 T의 인스턴스 가져오기
-  static T instance<T extends Object>() {
-    return _getIt<T>();
-  }
-}
-
-@module
-abstract class FirebaseInjectableModule {
-  @lazySingleton
-  FirebaseFirestore get firestore => FirebaseFirestore.instance;
-
-  @lazySingleton
-  FirebaseStorage get storage => FirebaseStorage.instance;
-
-  @lazySingleton
-  FirebaseAuth get auth => FirebaseAuth.instance;
-}
-
-@module
-abstract class ExternalServicesModule {
-  @preResolve
-  Future<SharedPreferences> get prefs => SharedPreferences.getInstance();
-
-  @lazySingleton
-  FlutterSecureStorage get secureStorage => const FlutterSecureStorage();
-}
-
-@module
-abstract class AppModule {
-  @singleton
-  PDFService providePDFService() => PDFServiceImpl();
-
-  @lazySingleton
-  StorageService storageService(SharedPreferences prefs) => StorageServiceImpl(prefs);
+  // StorageService 등록
+  getIt.registerLazySingleton<StorageService>(() => 
+    storage_impl.StorageServiceImpl(
+      preferences: getIt<SharedPreferences>(),
+    )
+  );
   
-  @lazySingleton
-  ThumbnailService provideThumbnailService(StorageService storageService) => 
-      ThumbnailServiceImpl(storageService);
-}
-
-@module
-abstract class DataSourceModule {
-  @lazySingleton
-  PDFLocalDataSource providePDFLocalDataSource(
-    StorageService storageService,
-    SharedPreferences prefs,
-  ) =>
-      PDFLocalDataSourceImpl(
-        storageService: storageService,
-        prefs: prefs,
-      );
-
-  @lazySingleton
-  PDFRemoteDataSource providePDFRemoteDataSource(
-    FirebaseFirestore firestore,
-    FirebaseStorage storage,
-    FirebaseService firebaseService,
-  ) =>
-      FirebasePDFRemoteDataSource(
-        firestore: firestore,
-        storage: storage,
-        firebaseService: firebaseService,
-      );
-
-  // TODO: AuthDataSource 인터페이스와 FirebaseAuthDataSource 클래스 구현 후 주석 해제
-  /*
-  @lazySingleton
-  AuthDataSource provideAuthDataSource(
-    FirebaseAuth auth,
-    SharedPreferences prefs,
-    FlutterSecureStorage secureStorage,
-  ) =>
-      FirebaseAuthDataSource(
-        auth: auth,
-        prefs: prefs,
-        secureStorage: secureStorage,
-      );
-  */
-}
-
-@module
-abstract class RepositoryModule {
-  @lazySingleton
-  PDFRepository providePDFRepository(
-    PDFLocalDataSource localDataSource,
-    PDFRemoteDataSource remoteDataSource,
-    StorageService storageService,
-    FirebaseService firebaseService,
-    SharedPreferences sharedPreferences,
-  ) =>
-      PDFRepositoryImpl(
-        localDataSource: localDataSource,
-        remoteDataSource: remoteDataSource,
-        storageService: storageService,
-        firebaseService: firebaseService,
-        sharedPreferences: sharedPreferences,
-      );
-
-  @lazySingleton
-  AuthRepository provideAuthRepository(
-    FirebaseService firebaseService,
-    GoogleSignIn googleSignIn
-  ) =>
-      AuthRepositoryImpl(
-        firebaseService,
-        googleSignIn
-      );
-}
-
-@module
-abstract class ServiceModule {
-  @singleton
-  FirebaseService provideFirebaseService(
-    FirebaseAuth auth,
-    FirebaseFirestore firestore,
-    FirebaseStorage storage
-  ) =>
-      FirebaseService(
-        auth: auth,
-        firestore: firestore,
-        storage: storage
-      );
-}
-
-@module
-abstract class ViewModelModule {
-  @lazySingleton
-  PDFViewModel providePDFViewModel(
-    PDFRepository repository,
-    PDFService pdfService,
-  ) =>
-      PDFViewModel(
-        repository: repository,
-        pdfService: pdfService,
-      );
-
-  @lazySingleton
-  AuthViewModel provideAuthViewModel(
-    AuthRepository repository,
-  ) =>
-      AuthViewModel(
-        repository: repository,
-      );
-
-  @lazySingleton
-  ThemeViewModel provideThemeViewModel(
-    SharedPreferences sharedPreferences,
-  ) =>
-      ThemeViewModel(
-        sharedPreferences: sharedPreferences,
-      );
-
-  @lazySingleton
-  LocaleViewModel provideLocaleViewModel(
-    SharedPreferences sharedPreferences,
-  ) =>
-      LocaleViewModel(
-        sharedPreferences: sharedPreferences,
-      );
-
-  @factory
-  PDFViewerViewModel providePDFViewerViewModel(
-    PDFRepository pdfRepository,
-    PDFViewModel pdfViewModel,
-    AuthViewModel authViewModel,
-    PDFService pdfService,
-    PDFLocalDataSource localDataSource,
-  ) =>
-      PDFViewerViewModel(
-        pdfRepository: pdfRepository,
-        pdfViewModel: pdfViewModel,
-        authViewModel: authViewModel,
-        pdfService: pdfService,
-        localDataSource: localDataSource,
-      );
-
-  @lazySingleton
-  PDFFileViewModel providePDFFileViewModel(
-    PDFRepository repository,
-    PDFService pdfService,
-  ) =>
-      PDFFileViewModel(
-        repository: repository,
-        pdfService: pdfService,
-      );
+  // ThumbnailService 등록
+  getIt.registerLazySingleton<ThumbnailService>(() => 
+    ThumbnailServiceImpl(getIt<StorageService>())
+  );
   
-  @lazySingleton
-  PDFListViewModel providePDFListViewModel(
-    PDFRepository repository,
-  ) =>
-      PDFListViewModel(
-        repository: repository,
-      );
-      
-  @lazySingleton
-  SettingsViewModel provideSettingsViewModel(
-    SharedPreferences sharedPreferences,
-  ) =>
-      SettingsViewModel(
-        sharedPreferences: sharedPreferences,
-      );
+  // PDFService 등록
+  getIt.registerLazySingleton<PDFService>(() => 
+    pdf_impl.PDFServiceImpl(
+      storageService: getIt<StorageService>(),
+    )
+  );
+  
+  // 도메인 PDFService 등록 (PDFService를 도메인 PDFService 인터페이스로 어댑팅)
+  getIt.registerLazySingleton<domain_pdf.PDFService>(() => 
+    PDFServiceAdapter(getIt<PDFService>())
+  );
+}
+
+/// 데이터 소스 의존성을 등록합니다.
+void _registerDataSources() {
+  // PDF 로컬 데이터 소스 등록
+  getIt.registerLazySingleton<PDFLocalDataSource>(() => 
+    PDFLocalDataSourceImpl(
+      getIt<StorageService>(), 
+      getIt<SharedPreferences>()
+    )
+  );
+  
+  // PDF 원격 데이터 소스 등록
+  getIt.registerLazySingleton<PDFRemoteDataSource>(() => 
+    PDFRemoteDataSourceImpl(
+      firebaseService: getIt<FirebaseService>()
+    )
+  );
+}
+
+/// 레포지토리 의존성을 등록합니다.
+void _registerRepositories() {
+  // PDF 레포지토리 등록
+  getIt.registerLazySingleton<PDFRepository>(() => 
+    PDFRepositoryImpl(
+      localDataSource: getIt<PDFLocalDataSource>(),
+      remoteDataSource: getIt<PDFRemoteDataSource>(),
+      sharedPreferences: getIt<SharedPreferences>(),
+      firebaseService: getIt<FirebaseService>(),
+      storageService: getIt<StorageService>(),
+      webUtils: getIt<WebUtils>(),
+    )
+  );
+}
+
+/// 뷰모델 의존성을 등록합니다.
+void _registerViewModels() {
+  // 인증 뷰모델 등록
+  getIt.registerFactory<AuthViewModel>(() => 
+    AuthViewModel(
+      firebaseService: getIt<FirebaseService>(),
+    )
+  );
+  
+  // PDF 뷰모델 등록
+  getIt.registerFactory<PDFViewModel>(() => 
+    PDFViewModel(
+      repository: getIt<PDFRepository>(),
+      pdfService: getIt<domain_pdf.PDFService>(),
+      analyticsService: getIt<AnalyticsService>(),
+      firebaseService: getIt<FirebaseService>(),
+      storageService: getIt<StorageService>(),
+    )
+  );
+  
+  // PDF 파일 뷰모델 등록
+  getIt.registerFactory<PdfFileViewModel>(() => 
+    PdfFileViewModel(
+      repository: getIt<PDFRepository>(),
+      pdfService: getIt<domain_pdf.PDFService>(),
+      thumbnailService: getIt<ThumbnailService>(),
+      storageService: getIt<StorageService>(),
+    )
+  );
+}
+
+/// 서비스 어댑터 - 서비스 구현을 도메인 인터페이스에 맞게 변환
+class PDFServiceAdapter implements domain_pdf.PDFService {
+  final PDFService _service;
+  
+  PDFServiceAdapter(this._service);
+  
+  @override
+  Future<PDFDocument> openDocument(String path) => _service.openDocument(path);
+  
+  @override
+  Future<void> closeDocument(String id) => _service.closeDocument(id);
+  
+  @override
+  Future<Uint8List> renderPage(String id, int pageNumber, {int width = 800, int height = 1200}) => 
+    _service.renderPage(id, pageNumber, width: width, height: height);
+    
+  @override
+  Future<Uint8List> generateThumbnail(String id) => _service.generateThumbnail(id);
+  
+  @override
+  Future<String> extractText(String id, int pageNumber) => _service.extractText(id, pageNumber);
+  
+  @override
+  Future<Map<String, dynamic>> extractMetadata(String id) => _service.extractMetadata(id);
+  
+  @override
+  Future<int> getPageCount(String id) => _service.getPageCount(id);
+  
+  @override
+  Future<Result<String>> downloadPdf(String url) => _service.downloadPdf(url);
+  
+  @override
+  Future<List<Map<String, dynamic>>> searchText(String id, String query) => _service.searchText(id, query);
+  
+  @override
+  void dispose() => _service.dispose();
 } 

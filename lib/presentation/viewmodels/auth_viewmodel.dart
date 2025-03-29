@@ -1,12 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/base/base_viewmodel.dart';
-import '../../core/base/result.dart';
-import '../../services/firebase_service.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../../services/firebase/firebase_service.dart';
+import '../../services/analytics/analytics_service.dart';
 import '../../domain/models/user_model.dart';
 
 /// 인증 상태
@@ -66,14 +66,37 @@ class AuthViewModel extends BaseViewModel {
   /// 현재 사용자 getter
   User? get currentUser => _currentUser;
   
+  /// 사용자 모델 getter
+  UserModel? get user {
+    if (_currentUser == null && !_isGuestMode) return null;
+    
+    if (_isGuestMode) {
+      return UserModel.guest();
+    }
+    
+    return UserModel(
+      id: _currentUser!.uid,
+      email: _currentUser!.email ?? '',
+      displayName: _currentUser!.displayName ?? '사용자',
+      photoURL: _currentUser!.photoURL ?? '',
+      createdAt: DateTime.now(),
+      settings: UserSettings.createDefault(),
+      isPremium: false,
+    );
+  }
+  
   /// 오류 메시지 getter
+  @override
   String get errorMessage => _errorMessage;
   
   /// 오류 메시지 getter (별칭)
   String? get error => _errorMessage.isEmpty ? null : _errorMessage;
   
   /// 사용자 인증 여부
-  bool get isAuthenticated => _status == AuthStatus.authenticated && _currentUser != null;
+  bool get isAuthenticated => _status == AuthStatus.authenticated && (_currentUser != null || _isGuestMode);
+  
+  /// 로그인 상태 여부
+  bool get isLoggedIn => _currentUser != null || _isGuestMode;
   
   /// 게스트 모드 여부
   bool get isGuestMode => _isGuestMode;
@@ -101,6 +124,7 @@ class AuthViewModel extends BaseViewModel {
   bool get canUseMindmap => !_isGuestMode || _mindmapUsageCount > 0;
   
   /// 에러 상태
+  @override
   bool get hasError => _errorMessage.isNotEmpty;
   
   /// 인증 상태 설정
@@ -116,6 +140,7 @@ class AuthViewModel extends BaseViewModel {
   }
   
   /// 오류 지우기
+  @override
   void clearError() {
     _errorMessage = '';
     notifyListeners();
@@ -333,7 +358,4 @@ class AuthViewModel extends BaseViewModel {
       debugPrint('사용량 불러오기 오류: $e');
     }
   }
-
-  /// 로그인 상태 여부
-  bool get isLoggedIn => _currentUser != null;
 } 

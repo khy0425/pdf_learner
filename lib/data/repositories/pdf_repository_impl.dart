@@ -1,899 +1,666 @@
-import 'dart:io' if (dart.library.html) 'package:pdf_learner_v2/core/utils/web_stub.dart';
-import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import 'package:injectable/injectable.dart';
-import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/base/result.dart';
-import '../../core/utils/web_storage_utils.dart';
-import '../../core/utils/conditional_file_picker.dart';
-import '../../data/datasources/pdf_local_data_source.dart';
-import '../../data/datasources/pdf_remote_data_source.dart';
-import '../../services/storage/storage_service.dart';
-import '../../data/models/pdf_document_model.dart';
-import '../../domain/models/pdf_document.dart';
-import '../../domain/models/pdf_bookmark.dart';
-import '../../domain/repositories/pdf_repository.dart';
-import '../../services/firebase_service.dart';
-import '../../data/models/pdf_bookmark_model.dart';
+import 'package:path/path.dart' as path;
+import 'package:uuid/uuid.dart';
+import 'package:path_provider/path_provider.dart';
 
+import '../../core/base/result.dart';
+import '../../domain/models/pdf_bookmark.dart';
+import '../../domain/models/pdf_document.dart';
+import '../../domain/repositories/pdf_repository.dart';
+import '../../services/firebase/firebase_service.dart';
+import '../../services/storage/storage_service.dart';
+import '../../core/utils/web_utils.dart';
+import '../datasources/pdf_local_data_source.dart';
+import '../datasources/pdf_remote_data_source.dart';
+
+/// PDF 저장소 구현체
 @Injectable(as: PDFRepository)
 class PDFRepositoryImpl implements PDFRepository {
-  final FirebaseService _firebaseService;
-  final SharedPreferences _sharedPreferences;
   final PDFLocalDataSource _localDataSource;
   final PDFRemoteDataSource _remoteDataSource;
   final StorageService _storageService;
+  final FirebaseService _firebaseService;
+  final SharedPreferences _sharedPreferences;
+  final WebUtils _webUtils;
 
-  PDFRepositoryImpl(
-    this._firebaseService,
-    this._sharedPreferences,
-    this._localDataSource,
-    this._remoteDataSource,
-    this._storageService,
-  );
+  PDFRepositoryImpl({
+    required PDFLocalDataSource localDataSource,
+    required PDFRemoteDataSource remoteDataSource,
+    required StorageService storageService,
+    required FirebaseService firebaseService,
+    required SharedPreferences sharedPreferences,
+    required WebUtils webUtils,
+  }) : _localDataSource = localDataSource,
+       _remoteDataSource = remoteDataSource,
+       _storageService = storageService,
+       _firebaseService = firebaseService,
+       _sharedPreferences = sharedPreferences,
+       _webUtils = webUtils;
 
   @override
   Future<Result<List<PDFDocument>>> getDocuments() async {
     try {
-      final documents = await _localDataSource.getDocuments();
-      
-      if (documents.isEmpty) {
-        try {
-          final remoteDocuments = await _remoteDataSource.getDocuments();
-          if (remoteDocuments.isNotEmpty) {
-            // 원격에서 가져온 문서 로컬에 저장
-            for (final document in remoteDocuments) {
-              await _localDataSource.saveDocument(document);
-            }
-            return Result.success(remoteDocuments);
-          }
-        } catch (e) {
-          debugPrint('원격 문서 가져오기 오류: $e');
-          // 원격 가져오기 실패 시 로컬 데이터 사용
-        }
+      final result = await _localDataSource.getDocuments();
+      if (result.isFailure) {
+        return result;
       }
-      
-      return Result.success(documents);
+      return Result.success(result.data ?? []);
     } catch (e) {
-      debugPrint('문서 목록 조회 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('문서 목록을 가져오는 중 오류: $e'));
     }
   }
 
   @override
-  Future<Result<PDFDocument>> getDocument(String id) async {
+  Future<Result<PDFDocument?>> getDocument(String id) async {
     try {
-      // 로컬에서 먼저 조회
-      final localDocument = await _localDataSource.getDocument(id);
-      
-      if (localDocument != null) {
-        return Result.success(localDocument);
+      final result = await _localDataSource.getDocument(id);
+      if (result.isFailure) {
+        return result;
       }
-      
-      // 로컬에 없으면, 원격에서 조회
-      try {
-        final remoteDocument = await _remoteDataSource.getDocument(id);
-        
-        if (remoteDocument != null) {
-          // 로컬에 저장
-          await _localDataSource.saveDocument(remoteDocument);
-          return Result.success(remoteDocument);
-        } else {
-          return Result.failure(Exception('문서를 찾을 수 없습니다.'));
-        }
-      } catch (e) {
-        return Result.failure(Exception(e.toString()));
-      }
+      return Result.success(result.data);
     } catch (e) {
-      debugPrint('문서 조회 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('문서를 가져오는 중 오류: $e'));
     }
   }
-  
+
   @override
   Future<Result<PDFDocument>> saveDocument(PDFDocument document) async {
     try {
-      // 로컬 저장
-      await _localDataSource.saveDocument(document);
-      
-      // 원격 저장 시도
-      try {
-        await _remoteDataSource.saveDocument(document);
-      } catch (e) {
-        debugPrint('원격 저장 실패: $e');
-        // 원격 저장 실패해도 로컬 저장은 성공으로 처리
+      final result = await _localDataSource.saveDocument(document);
+      if (result.isFailure) {
+        return Result.failure(result.error);
       }
+      
+      // 클라우드 동기화 (백그라운드)
+      _syncDocumentToCloud(document);
       
       return Result.success(document);
     } catch (e) {
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('문서 저장 중 오류: $e'));
     }
   }
-  
+
+  Future<void> _syncDocumentToCloud(PDFDocument document) async {
+    try {
+      await _remoteDataSource.addDocument(document);
+    } catch (e) {
+      debugPrint('문서 클라우드 동기화 실패: $e');
+    }
+  }
+
   @override
   Future<Result<PDFDocument>> updateDocument(PDFDocument document) async {
     try {
-      // 로컬에 저장
-      await _localDataSource.saveDocument(document);
-
-      // 원격에 저장
-      try {
-        await _remoteDataSource.updateDocument(document);
-      } catch (e) {
-        debugPrint('원격 문서 업데이트 오류: $e');
-        // 원격 저장 실패해도 로컬 저장은 성공으로 처리
+      final result = await _localDataSource.saveDocument(document);
+      if (result.isFailure) {
+        return Result.failure(result.error);
       }
+      
+      // 클라우드 동기화 (백그라운드)
+      _syncDocumentToCloud(document);
       
       return Result.success(document);
     } catch (e) {
-      debugPrint('문서 업데이트 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('문서 업데이트 중 오류: $e'));
     }
   }
-  
+
   @override
-  Future<Result<bool>> deleteDocument(String documentId) async {
+  Future<Result<bool>> deleteDocument(String id) async {
     try {
-      // 로컬에서 먼저 삭제
-      await _localDataSource.deleteDocument(documentId);
-      
-      // 원격에서 삭제 시도
-      try {
-        await _remoteDataSource.deleteDocument(documentId);
-      } catch (e) {
-        debugPrint('원격 문서 삭제 오류: $e');
-        // 원격 삭제 실패해도 로컬 삭제는 성공으로 처리
+      final result = await _localDataSource.deleteDocument(id);
+      if (result.isFailure) {
+        return Result.failure(result.error);
       }
+      
+      // 클라우드 동기화 (백그라운드)
+      _deleteDocumentFromCloud(id);
       
       return Result.success(true);
     } catch (e) {
-      debugPrint('문서 삭제 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('문서 삭제 중 오류: $e'));
     }
   }
-  
+
+  Future<void> _deleteDocumentFromCloud(String id) async {
+    try {
+      await _remoteDataSource.deleteDocument(id);
+    } catch (e) {
+      debugPrint('문서 클라우드 삭제 실패: $e');
+    }
+  }
+
   @override
   Future<Result<List<PDFBookmark>>> getBookmarks(String documentId) async {
     try {
-      // 로컬에서 북마크 목록 조회
-      final bookmarks = await _localDataSource.getBookmarks(documentId);
-      
-      // 로컬에 북마크가 없으면 원격에서 조회 시도
-      if (bookmarks.isEmpty) {
-        try {
-          final remoteBookmarks = await _remoteDataSource.getBookmarks(documentId);
-          
-          if (remoteBookmarks.isNotEmpty) {
-            // 원격에서 가져온 북마크 로컬에 저장
-            for (final bookmark in remoteBookmarks) {
-              await _localDataSource.saveBookmark(bookmark);
-            }
-            
-            return Result.success(remoteBookmarks);
-          }
-        } catch (e) {
-          debugPrint('원격 북마크 가져오기 오류: $e');
-          // 원격 가져오기 실패 시 로컬 데이터 사용
-        }
+      final result = await _localDataSource.getBookmarks(documentId);
+      if (result.isFailure) {
+        return result;
       }
-      
-      return Result.success(bookmarks);
+      return Result.success(result.data ?? []);
     } catch (e) {
-      debugPrint('북마크 목록 조회 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<Uint8List>> downloadPdf(String url) async {
-    try {
-      // 웹 환경에서는 WebStorageUtils 사용
-      if (kIsWeb) {
-        // 로컬 스토리지에 저장된 PDF인지 확인
-        if (url.startsWith('web_')) {
-          final pdfBytes = await WebStorageUtils.instance.getBytesFromIndexedDB(url);
-          if (pdfBytes != null) {
-            return Result.success(pdfBytes);
-          }
-        }
-        
-        // URL이 실제 웹 주소인 경우 HTTP 요청
-        if (url.startsWith('http')) {
-          final response = await http.get(Uri.parse(url));
-          if (response.statusCode == 200) {
-            // 웹 환경에서는 다운로드한 PDF를 WebStorage에 저장
-            final bytes = response.bodyBytes;
-            final fileId = 'web_${DateTime.now().millisecondsSinceEpoch}';
-            await WebStorageUtils.instance.saveBytesToIndexedDB(fileId, bytes);
-            return Result.success(bytes);
-          } else {
-            return Result.failure(Exception('PDF 다운로드 실패: HTTP ${response.statusCode}'));
-          }
-        }
-      } else {
-        // 네이티브 환경에서는 파일 시스템 사용
-        if (url.startsWith('http')) {
-          // URL에서 다운로드
-          final response = await http.get(Uri.parse(url));
-          if (response.statusCode == 200) {
-            return Result.success(response.bodyBytes);
-          } else {
-            return Result.failure(Exception('PDF 다운로드 실패: HTTP ${response.statusCode}'));
-          }
-        } else if (await File(url).exists()) {
-          // 로컬 파일 경로인 경우
-          return Result.success(await File(url).readAsBytes());
-        }
-      }
-      
-      return Result.failure(Exception('PDF를 다운로드할 수 없는 형식: $url'));
-    } catch (e) {
-      debugPrint('PDF 다운로드 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<String>> savePdfFile(Uint8List bytes, String fileName) async {
-    try {
-      // 웹 환경에서는 다른 로직을 사용
-      if (kIsWeb) {
-        // 웹에서는 메모리에 저장
-        // 웹 환경에서는 임시 URL을 생성하여 반환할 수 있음
-        return Result.success('memory://temp_${DateTime.now().millisecondsSinceEpoch}.pdf');
-      }
-      
-      final tempPath = await _storageService.getTempFilePath(fileName);
-      
-      // 파일 저장
-      final savedPath = await _storageService.saveFile(bytes, tempPath);
-      
-      if (savedPath.isNotEmpty) {
-        return Result.success(tempPath);
-      } else {
-        return Result.failure(Exception('PDF 파일 저장 실패'));
-      }
-    } catch (e) {
-      debugPrint('PDF 파일 저장 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<List<PDFDocument>>> searchDocuments(String query) async {
-    try {
-      final allDocuments = await _localDataSource.getDocuments();
-      
-      // 검색어가 비어있으면 모든 문서 반환
-      if (query.trim().isEmpty) {
-        final documents = allDocuments.map((model) => model.toDomain()).toList();
-        return Result.success(documents);
-      }
-      
-      // 제목, 설명, 태그 등을 기준으로 검색
-      final filteredDocuments = allDocuments.where((doc) {
-        final title = doc.title.toLowerCase();
-        final description = doc.description.toLowerCase();
-        final queryLower = query.toLowerCase();
-        
-        // 제목 또는 설명에 검색어 포함
-        if (title.contains(queryLower) || description.contains(queryLower)) {
-          return true;
-        }
-        
-        // 태그에 검색어 포함
-        for (final tag in doc.tags) {
-          if (tag.toLowerCase().contains(queryLower)) {
-            return true;
-          }
-        }
-        
-        return false;
-      }).toList();
-      
-      // 변환 후 반환
-      final documents = filteredDocuments.map((model) => model.toDomain()).toList();
-      return Result.success(documents);
-    } catch (e) {
-      debugPrint('문서 검색 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<List<PDFDocument>>> getRecentDocuments(int limit) async {
-    try {
-      final allDocuments = await _localDataSource.getDocuments();
-      
-      // 최근 문서 정렬 (updatedAt 기준 내림차순)
-      final sortedDocuments = List<PDFDocumentModel>.from(allDocuments);
-      
-      // 날짜 비교 시 null 안전하게 처리
-      sortedDocuments.sort((a, b) {
-        final aDate = a.updatedAt ?? a.createdAt;
-        final bDate = b.updatedAt ?? b.createdAt;
-        
-        if (aDate == null && bDate == null) return 0;
-        if (aDate == null) return 1; // null은 마지막으로
-        if (bDate == null) return -1;
-        
-        return bDate.compareTo(aDate); // 최신순
-      });
-      
-      // 개수 제한
-      final recentDocuments = sortedDocuments.take(limit).toList();
-      
-      // 도메인 객체로 변환
-      final documents = recentDocuments.map((model) => model.toDomain()).toList();
-      return Result.success(documents);
-    } catch (e) {
-      debugPrint('최근 문서 조회 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<List<PDFDocument>>> getFavoriteDocuments() async {
-    try {
-      final allDocuments = await _localDataSource.getDocuments();
-      
-      // 즐겨찾기된 문서만 필터링
-      final favoriteDocuments = allDocuments.where((doc) => doc.isFavorite).toList();
-      
-      // 도메인 객체로 변환
-      final documents = favoriteDocuments.map((model) => model.toDomain()).toList();
-      return Result.success(documents);
-    } catch (e) {
-      debugPrint('즐겨찾기 문서 조회 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('북마크 목록을 가져오는 중 오류: $e'));
     }
   }
 
   @override
-  Future<Result<String>> uploadPDFFile(Uint8List file) async {
+  Future<Result<PDFBookmark?>> getBookmark(String id) async {
     try {
-      final fileName = 'pdf_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      
-      // 웹 환경에서는 로컬 스토리지에 저장
-      if (kIsWeb) {
-        final webFileName = 'web_$fileName';
-        
-        // 웹 환경에서는 IndexedDB 또는 localStorage에 바이트 데이터 저장 (예시 코드)
-        final prefs = await SharedPreferences.getInstance();
-        final base64Data = base64Encode(file);
-        await prefs.setString(webFileName, base64Data);
-        
-        // 웹 환경에서는 메모리 경로 반환
-        return Result.success(webFileName);
+      final result = await _localDataSource.getBookmark(id);
+      if (result.isFailure) {
+        return result;
       }
-      
-      // 네이티브 환경에서는 Firebase Storage에 업로드
-      final path = await _firebaseService.uploadBytes(file, 'pdfs/$fileName');
-      return Result.success(path);
+      return Result.success(result.data);
     } catch (e) {
-      debugPrint('PDF 파일 업로드 중 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('북마크를 가져오는 중 오류: $e'));
     }
   }
-  
+
   @override
-  Future<Result<void>> deletePDFFile(String filePath) async {
+  Future<Result<PDFBookmark>> saveBookmark(PDFBookmark bookmark) async {
     try {
-      await _firebaseService.deleteFile(filePath);
-      return Result.success(null);
+      final result = await _localDataSource.saveBookmark(bookmark);
+      if (result.isFailure) {
+        return Result.failure(result.error);
+      }
+      
+      // 클라우드 동기화 (백그라운드)
+      _syncBookmarkToCloud(bookmark);
+      
+      return Result.success(bookmark);
     } catch (e) {
-      debugPrint('PDF 파일 삭제 중 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('북마크 저장 중 오류: $e'));
     }
   }
-  
-  @override
-  Future<Result<int>> getPageCount(String filePath) async {
+
+  Future<void> _syncBookmarkToCloud(PDFBookmark bookmark) async {
     try {
-      // 네트워크 파일
-      if (filePath.startsWith('http')) {
-        try {
-          final response = await http.get(Uri.parse(filePath));
-          if (response.statusCode == 200) {
-            final document = PdfDocument(inputBytes: response.bodyBytes);
-            final count = document.pages.count;
-            document.dispose();
-            return Result.success(count);
-          } else {
-            return Result.failure(Exception('PDF 파일을 다운로드할 수 없습니다.'));
-          }
-        } catch (e) {
-          debugPrint('네트워크 PDF 페이지 수 오류: $e');
-          return Result.failure(Exception('페이지 수 계산 오류: $e'));
-        }
+      await _remoteDataSource.addBookmark(bookmark);
+    } catch (e) {
+      debugPrint('북마크 클라우드 동기화 실패: $e');
+    }
+  }
+
+  @override
+  Future<Result<bool>> deleteBookmark(String id) async {
+    try {
+      final result = await _localDataSource.deleteBookmark(id);
+      if (result.isFailure) {
+        return Result.failure(result.error);
       }
       
-      // 메모리 파일 (웹 환경)
-      if (kIsWeb || filePath.startsWith('memory://')) {
-        return Result.success(1); // 웹 환경에서는 기본값 반환
-      }
+      // 클라우드 동기화 (백그라운드)
+      _deleteBookmarkFromCloud(id);
       
-      // 로컬 파일 (모바일/데스크톱)
-      final file = File(filePath);
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        final document = PdfDocument(inputBytes: bytes);
-        final count = document.pages.count;
-        document.dispose();
-        return Result.success(count);
+      return Result.success(true);
+    } catch (e) {
+      return Result.failure(Exception('북마크 삭제 중 오류: $e'));
+    }
+  }
+
+  Future<void> _deleteBookmarkFromCloud(String id) async {
+    try {
+      // 북마크에서 문서 ID 가져오기
+      final bookmarkResult = await _localDataSource.getBookmark(id);
+      
+      if (bookmarkResult.isSuccess && bookmarkResult.data != null) {
+        final documentId = bookmarkResult.data!.documentId;
+        await _remoteDataSource.deleteBookmark(documentId, id);
       } else {
-        return Result.failure(Exception('파일을 찾을 수 없습니다.'));
+        debugPrint('북마크를 찾을 수 없습니다: $id');
       }
     } catch (e) {
-      debugPrint('페이지 수 계산 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  Future<Result<String>> extractText(String filePath, int pageNumber) async {
-    Uint8List? bytes;
-    
-    try {
-      // 네트워크 파일
-      if (filePath.startsWith('http')) {
-        try {
-          final response = await http.get(Uri.parse(filePath));
-          if (response.statusCode == 200) {
-            bytes = response.bodyBytes;
-          } else {
-            return Result.failure(Exception('PDF 파일을 다운로드할 수 없습니다.'));
-          }
-        } catch (e) {
-          return Result.failure(Exception('PDF 다운로드 오류: $e'));
-        }
-      } 
-      // 웹 환경 또는 메모리 파일
-      else if (kIsWeb || filePath.startsWith('memory://')) {
-        return Result.success('웹 환경에서는 텍스트 추출이 지원되지 않습니다.');
-      }
-      // 로컬 파일 (모바일/데스크톱)
-      else {
-        final file = File(filePath);
-        if (await file.exists()) {
-          bytes = await file.readAsBytes();
-        } else {
-          return Result.failure(Exception('파일을 찾을 수 없습니다.'));
-        }
-      }
-      
-      if (bytes != null) {
-        final document = PdfDocument(inputBytes: bytes);
-        
-        if (pageNumber < 1 || pageNumber > document.pages.count) {
-          document.dispose();
-          return Result.failure(Exception('유효하지 않은 페이지 번호입니다.'));
-        }
-        
-        final page = document.pages[pageNumber - 1];
-        final text = PdfTextExtractor(document).extractText(startPageIndex: pageNumber - 1, endPageIndex: pageNumber - 1);
-        document.dispose();
-        
-        return Result.success(text);
-      } else {
-        return Result.failure(Exception('PDF 데이터를 로드할 수 없습니다.'));
-      }
-    } catch (e) {
-      debugPrint('텍스트 추출 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      debugPrint('북마크 클라우드 삭제 실패: $e');
     }
   }
 
-  @override
-  Future<Result<Map<String, dynamic>>> getMetadata(String filePath) async {
-    Uint8List? bytes;
-    
-    try {
-      // 네트워크 파일
-      if (filePath.startsWith('http')) {
-        try {
-          final response = await http.get(Uri.parse(filePath));
-          if (response.statusCode == 200) {
-            bytes = response.bodyBytes;
-          } else {
-            return Result.failure(Exception('PDF 파일을 다운로드할 수 없습니다.'));
-          }
-        } catch (e) {
-          return Result.failure(Exception('PDF 다운로드 오류: $e'));
-        }
-      } 
-      // 웹 환경 또는 메모리 파일
-      else if (kIsWeb || filePath.startsWith('memory://')) {
-        // 웹 환경에서는 기본 메타데이터 반환
-        return Result.success({
-          'title': '문서',
-          'author': '알 수 없음',
-          'creator': '알 수 없음',
-          'keywords': '',
-          'producer': '',
-          'subject': '',
-          'creationDate': DateTime.now().toString(),
-          'modificationDate': DateTime.now().toString(),
-        });
-      }
-      // 로컬 파일 (모바일/데스크톱)
-      else {
-        final file = File(filePath);
-        if (await file.exists()) {
-          bytes = await file.readAsBytes();
-        } else {
-          return Result.failure(Exception('파일을 찾을 수 없습니다.'));
-        }
-      }
-      
-      if (bytes != null) {
-        final document = PdfDocument(inputBytes: bytes);
-        final Map<String, dynamic> metadata = {};
-        
-        metadata['pageCount'] = document.pages.count;
-        
-        if (document.documentInformation != null) {
-          final info = document.documentInformation!;
-          metadata['title'] = info.title ?? '문서';
-          metadata['author'] = info.author ?? '알 수 없음';
-          metadata['creator'] = info.creator ?? '알 수 없음';
-          metadata['keywords'] = info.keywords ?? '';
-          metadata['producer'] = info.producer ?? '';
-          metadata['subject'] = info.subject ?? '';
-          metadata['creationDate'] = info.creationDate?.toString() ?? '';
-          metadata['modificationDate'] = info.modificationDate?.toString() ?? '';
-        }
-        
-        document.dispose();
-        return Result.success(metadata);
-      } else {
-        return Result.failure(Exception('PDF 데이터를 로드할 수 없습니다.'));
-      }
-    } catch (e) {
-      debugPrint('메타데이터 추출 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
-  @override
-  void dispose() {
-    // 리소스 정리
-  }
-
-  @override
-  Future<Result<PDFDocument?>> pickAndUploadPDF() async {
-    try {
-      Uint8List? bytes;
-      String? fileName;
-      
-      // 파일 선택
-      final result = await ConditionalFilePicker.pickFiles(
-        type: FilePickerType.custom,
-        allowedExtensions: ['pdf'],
-        allowMultiple: false,
-      );
-      
-      if (result == null || result.files.isEmpty) {
-        return Result.failure(Exception('파일이 선택되지 않았습니다.'));
-      }
-      
-      final file = result.files.first;
-      
-      // 파일 이름 정리
-      fileName = file.name;
-      if (!fileName.toLowerCase().endsWith('.pdf')) {
-        fileName = '$fileName.pdf';
-      }
-      
-      // 웹 환경
-      if (kIsWeb) {
-        bytes = file.bytes;
-        if (bytes == null) {
-          return Result.failure(Exception('파일 데이터를 읽을 수 없습니다.'));
-        }
-      } 
-      // 모바일/데스크톱 환경
-      else {
-        if (file.path == null) {
-          return Result.failure(Exception('파일 경로가 유효하지 않습니다.'));
-        }
-        
-        final pdfFile = File(file.path!);
-        bytes = await pdfFile.readAsBytes();
-      }
-      
-      if (bytes == null) {
-        return Result.failure(Exception('파일 데이터를 읽을 수 없습니다.'));
-      }
-      
-      // 파일 크기 체크
-      if (bytes.length > 10 * 1024 * 1024) { // 10MB 제한
-        return Result.failure(Exception('파일 크기가 10MB를 초과합니다.'));
-      }
-      
-      // 파일 업로드 및 문서 생성
-      final uploadResult = await uploadPDFFile(bytes);
-      
-      final filePath = await uploadResult.when(
-        success: (path) => path,
-        failure: (error) => throw error,
-      );
-      
-      // 문서 모델 생성
-      final document = PDFDocument(
-        id: const Uuid().v4(),
-        title: fileName.replaceAll('.pdf', ''),
-        description: '',
-        filePath: filePath,
-        thumbnailUrl: '',
-        pageCount: 0,
-        currentPage: 1,
-        readingProgress: 0.0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        isFavorite: false,
-        isSelected: false,
-        tags: [],
-        fileSize: bytes.length,
-      );
-      
-      // 문서 저장
-      final saveResult = await saveDocument(document);
-      
-      return saveResult.when(
-        success: (doc) => Result.success(doc),
-        failure: (error) => Result.failure(error),
-      );
-    } catch (e) {
-      debugPrint('PDF 가져오기 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-
-  @override
-  Future<Result<PDFDocument>> createDocument(PDFDocument document) async {
-    try {
-      // 로컬에 저장
-      final documentModel = PDFDocumentModel.fromDomain(document);
-      await _localDataSource.saveDocument(documentModel);
-      
-      // 원격에 저장
-      try {
-        final remoteResult = await _remoteDataSource.createDocument(documentModel);
-        
-        if (remoteResult.isFailure) {
-          debugPrint('원격 문서 생성 실패: ${remoteResult.error}');
-          // 원격 저장 실패해도 로컬 저장은 성공으로 처리
-        }
-      } catch (e) {
-        debugPrint('원격 문서 생성 오류: $e');
-        // 원격 저장 실패해도 로컬 저장은 성공으로 처리
-      }
-      
-      return Result.success(document);
-    } catch (e) {
-      debugPrint('문서 생성 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-
-  @override
-  Future<Result<List<PDFBookmark>>> getBookmarksForDocument(String documentId) async {
-    try {
-      final result = await _firebaseService.getBookmarksForDocument(documentId);
-      return result;
-    } catch (e) {
-      return Result.failure(Exception('문서 북마크 목록 조회 실패: $e'));
-    }
-  }
-  
-  @override
-  Future<Result<int>> saveLastReadPage(String documentId, int page) async {
-    try {
-      await _localDataSource.saveLastReadPage(documentId, page);
-      
-      try {
-        // 원격 저장소에도 저장 시도 (선택적)
-        await _remoteDataSource.saveLastReadPage(documentId, page);
-      } catch (e) {
-        debugPrint('원격 마지막 읽은 페이지 저장 오류: $e');
-        // 원격 저장 실패해도 로컬 저장은 성공으로 처리
-      }
-      
-      return Result.success(page);
-    } catch (e) {
-      debugPrint('마지막 읽은 페이지 저장 오류: $e');
-      return Result.failure(Exception(e.toString()));
-    }
-  }
-  
   @override
   Future<Result<int>> getLastReadPage(String documentId) async {
     try {
-      final lastPage = await _localDataSource.getLastReadPage(documentId);
-      return Result.success(lastPage);
+      return await _localDataSource.getLastReadPage(documentId);
     } catch (e) {
-      return Result.failure(Exception('마지막 읽은 페이지 조회 실패: $e'));
-    }
-  }
-  
-  @override
-  Future<Result<List<PDFDocument>>> sortDocuments(
-    List<PDFDocument> documents,
-    String sortBy,
-    bool ascending,
-  ) async {
-    try {
-      final sortedDocuments = List<PDFDocument>.from(documents);
-      
-      switch (sortBy) {
-        case 'title':
-          sortedDocuments.sort((a, b) => 
-            ascending ? a.title.compareTo(b.title) : b.title.compareTo(a.title)
-          );
-          break;
-        
-        case 'createdAt':
-          sortedDocuments.sort((a, b) {
-            final aDate = a.createdAt;
-            final bDate = b.createdAt;
-            
-            if (aDate == null && bDate == null) return 0;
-            if (aDate == null) return ascending ? -1 : 1; 
-            if (bDate == null) return ascending ? 1 : -1;
-            
-            return ascending 
-              ? aDate.compareTo(bDate) 
-              : bDate.compareTo(aDate);
-          });
-          break;
-        
-        case 'updatedAt':
-          sortedDocuments.sort((a, b) {
-            final aDate = a.updatedAt ?? a.createdAt;
-            final bDate = b.updatedAt ?? b.createdAt;
-            
-            if (aDate == null && bDate == null) return 0;
-            if (aDate == null) return ascending ? -1 : 1; 
-            if (bDate == null) return ascending ? 1 : -1;
-            
-            return ascending 
-              ? aDate.compareTo(bDate) 
-              : bDate.compareTo(aDate);
-          });
-          break;
-        
-        case 'size':
-          sortedDocuments.sort((a, b) => 
-            ascending ? a.size.compareTo(b.size) : b.size.compareTo(a.size)
-          );
-          break;
-          
-        case 'importance':
-          sortedDocuments.sort((a, b) => 
-            ascending 
-              ? a.importance.index.compareTo(b.importance.index) 
-              : b.importance.index.compareTo(a.importance.index)
-          );
-          break;
-          
-        default:
-          // 기본 정렬은 제목 (오름차순)
-          sortedDocuments.sort((a, b) => a.title.compareTo(b.title));
-      }
-      
-      return Result.success(sortedDocuments);
-    } catch (e) {
-      debugPrint('문서 정렬 오류: $e');
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('마지막 읽은 페이지 가져오기 실패: $e'));
     }
   }
 
   @override
-  Future<Result<PDFBookmark>> getBookmark(String id) async {
+  Future<Result<void>> saveLastReadPage(String documentId, int page) async {
     try {
-      // 로컬에서 먼저 조회
-      final bookmark = await _localDataSource.getBookmark(id);
-      
-      if (bookmark != null) {
-        return Result.success(bookmark.toDomain());
+      return await _localDataSource.saveLastReadPage(documentId, page);
+    } catch (e) {
+      return Result.failure(Exception('마지막 읽은 페이지 저장 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<bool>> toggleFavorite(String id) async {
+    try {
+      final documentResult = await _localDataSource.getDocument(id);
+      if (documentResult.isFailure) {
+        return Result.failure(documentResult.error);
       }
       
-      // 로컬에 없으면 원격에서 조회
-      try {
-        final remoteResult = await _remoteDataSource.getBookmark(id);
+      final document = documentResult.data;
+      if (document == null) {
+        return Result.failure(Exception('문서를 찾을 수 없습니다'));
+      }
+      
+      final updatedDocument = document.copyWith(
+        isFavorite: !document.isFavorite,
+        updatedAt: DateTime.now(),
+      );
+      
+      final saveResult = await _localDataSource.saveDocument(updatedDocument);
+      if (saveResult.isFailure) {
+        return Result.failure(saveResult.error);
+      }
+      
+      // 클라우드 동기화 (백그라운드)
+      _syncDocumentToCloud(updatedDocument);
+      
+      return Result.success(updatedDocument.isFavorite);
+    } catch (e) {
+      return Result.failure(Exception('즐겨찾기 토글 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<PDFDocument>>> getFavoriteDocuments() async {
+    try {
+      final documentsResult = await _localDataSource.getDocuments();
+      if (documentsResult.isFailure) {
+        return documentsResult;
+      }
+      
+      final documents = documentsResult.data ?? [];
+      final favoriteDocuments = documents.where((doc) => doc.isFavorite).toList();
+      
+      return Result.success(favoriteDocuments);
+    } catch (e) {
+      return Result.failure(Exception('즐겨찾기 문서 가져오기 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<PDFDocument>>> getRecentDocuments([int limit = 10]) async {
+    try {
+      final documentsResult = await _localDataSource.getDocuments();
+      if (documentsResult.isFailure) {
+        return documentsResult;
+      }
+      
+      final documents = documentsResult.data ?? [];
+      // 마지막 접근 시간 기준으로 정렬 (최신순)
+      documents.sort((a, b) {
+        final dateA = a.lastAccessedAt ?? a.createdAt ?? DateTime(1970);
+        final dateB = b.lastAccessedAt ?? b.createdAt ?? DateTime(1970);
+        return dateB.compareTo(dateA);
+      });
+      
+      // 지정된 개수만큼 반환
+      final recentDocuments = documents.take(limit).toList();
+      
+      return Result.success(recentDocuments);
+    } catch (e) {
+      return Result.failure(Exception('최근 문서 가져오기 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<String>>> getSearchHistory() async {
+    try {
+      // 검색 기록 가져오기
+      final searchHistoryJson = _sharedPreferences.getStringList('search_history') ?? [];
+      return Result.success(searchHistoryJson);
+    } catch (e) {
+      return Result.failure(Exception('검색 기록 가져오기 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> addSearchQuery(String query) async {
+    try {
+      // 중복 제거 및 최신 검색어를 앞으로
+      final currentHistory = _sharedPreferences.getStringList('search_history') ?? [];
+      final newHistory = [
+        query,
+        ...currentHistory.where((item) => item != query),
+      ];
+      
+      // 최대 20개까지만 유지
+      final trimmedHistory = newHistory.take(20).toList();
+      
+      // 저장
+      await _sharedPreferences.setStringList('search_history', trimmedHistory);
+      
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(Exception('검색 쿼리 추가 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> clearSearchHistory() async {
+    try {
+      await _sharedPreferences.remove('search_history');
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(Exception('검색 기록 삭제 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> syncWithRemote() async {
+    try {
+      final localDocsResult = await _localDataSource.getDocuments();
+      if (localDocsResult.isFailure) {
+        return Result.failure(localDocsResult.error);
+      }
+      
+      final localDocs = localDocsResult.data ?? [];
+      
+      // 북마크도 동기화
+      final localBookmarksResult = await _localDataSource.getAllBookmarks();
+      if (localBookmarksResult.isFailure) {
+        return Result.failure(localBookmarksResult.error);
+      }
+      
+      final localBookmarks = localBookmarksResult.data ?? [];
+      
+      // 원격 동기화 수행
+      final syncResult = await _remoteDataSource.syncWithRemote(localDocs, localBookmarks);
+      if (syncResult.isFailure) {
+        return Result.failure(syncResult.error);
+      }
+      
+      // 동기화된 문서 로컬에 저장
+      final syncedDocs = syncResult.data ?? [];
+      for (final doc in syncedDocs) {
+        await _localDataSource.saveDocument(doc);
+      }
+      
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(Exception('원격 동기화 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<Uint8List>> downloadPdf(PDFDocument document) async {
+    try {
+      if (document.downloadUrl.isEmpty) {
+        return Result.failure(Exception('다운로드 URL이 없습니다'));
+      }
+      
+      // 이미 로컬에 파일이 있는지 확인
+      final existsResult = await fileExists(document.filePath);
+      if (existsResult.isSuccess && existsResult.data) {
+        // 로컬 파일이 있으면 그대로 반환
+        return getPdfBytes(document.filePath);
+      }
+      
+      // 로컬에 없으면 다운로드
+      final response = await http.get(Uri.parse(document.downloadUrl));
+      
+      if (response.statusCode == 200) {
+        // 파일 저장
+        final fileName = path.basename(document.downloadUrl);
+        final directory = await getTemporaryDirectory();
+        final filePath = path.join(directory.path, fileName);
         
-        if (remoteResult.isSuccess && remoteResult.data != null) {
-          // 로컬에 저장
-          await _localDataSource.saveBookmark(remoteResult.data!);
-          return Result.success(remoteResult.data!.toDomain());
-        } else {
-          return Result.failure(Exception('북마크를 찾을 수 없습니다.'));
+        final file = io.File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+        
+        return Result.success(response.bodyBytes);
+      } else {
+        return Result.failure(
+          Exception('다운로드 실패: HTTP 상태 코드 ${response.statusCode}')
+        );
+      }
+    } catch (e) {
+      return Result.failure(Exception('PDF 다운로드 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<Uint8List>> downloadPdfFromUrl(String url) async {
+    try {
+      if (kIsWeb) {
+        // 웹 환경에서의 처리
+        try {
+          final response = await http.get(Uri.parse(url));
+          
+          if (response.statusCode == 200) {
+            // 웹 저장소에 저장
+            final fileId = 'web_${DateTime.now().millisecondsSinceEpoch}';
+            await _webUtils.saveBytesToIndexedDB(fileId, response.bodyBytes);
+            
+            return Result.success(response.bodyBytes);
+          } else {
+            return Result.failure(
+              Exception('다운로드 실패: HTTP 상태 코드 ${response.statusCode}')
+            );
+          }
+        } catch (e) {
+          return Result.failure(Exception('URL에서 PDF 다운로드 중 오류: $e'));
         }
-      } catch (e) {
-        return Result.failure(Exception(e.toString()));
+      } else {
+        // 네이티브 환경에서의 처리
+        final response = await http.get(Uri.parse(url));
+        
+        if (response.statusCode == 200) {
+          return Result.success(response.bodyBytes);
+        } else {
+          return Result.failure(
+            Exception('다운로드 실패: HTTP 상태 코드 ${response.statusCode}')
+          );
+        }
       }
     } catch (e) {
-      return Result.failure(Exception(e.toString()));
+      return Result.failure(Exception('URL에서 PDF 다운로드 중 오류: $e'));
     }
   }
 
   @override
-  Future<Uint8List?> loadSamplePdf() async {
+  Future<Result<String>> saveFile(Uint8List bytes, String fileName, {String? directory}) async {
+    try {
+      final io.Directory appDocDir = await getApplicationDocumentsDirectory();
+      final String targetDir = directory ?? path.join(appDocDir.path, 'pdfs');
+      
+      // 디렉토리 생성
+      final dir = io.Directory(targetDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      
+      // 파일 저장
+      final filePath = path.join(targetDir, fileName);
+      final file = io.File(filePath);
+      await file.writeAsBytes(bytes);
+      
+      return Result.success(filePath);
+    } catch (e) {
+      return Result.failure(Exception('파일 저장 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<bool>> deleteFile(String path) async {
+    try {
+      final file = io.File(path);
+      if (await file.exists()) {
+        await file.delete();
+        return Result.success(true);
+      }
+      return Result.success(false);
+    } catch (e) {
+      return Result.failure(Exception('파일 삭제 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<bool>> fileExists(String path) async {
+    try {
+      final file = io.File(path);
+      final exists = await file.exists();
+      return Result.success(exists);
+    } catch (e) {
+      return Result.failure(Exception('파일 존재 여부 확인 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<int>> getFileSize(String path) async {
+    try {
+      final file = io.File(path);
+      if (!await file.exists()) {
+        return Result.failure(Exception('파일이 존재하지 않습니다'));
+      }
+      
+      final fileSize = await file.length();
+      return Result.success(fileSize);
+    } catch (e) {
+      return Result.failure(Exception('파일 크기 조회 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> clearCache() async {
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      
+      // 디렉토리 삭제 후 재생성
+      final directory = io.Directory(cacheDir.path);
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+        await directory.create();
+      }
+      
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(Exception('캐시 초기화 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<PDFDocument>> importPDF(io.File file) async {
+    try {
+      if (kIsWeb) {
+        // 웹 환경에서는 다른 방식으로 처리 필요
+        final fileName = path.basename(file.path);
+        final fileId = const Uuid().v4();
+        
+        try {
+          final bytes = await file.readAsBytes();
+          
+          // 웹 스토리지에 저장
+          await _webUtils.saveBytesToIndexedDB(fileId, bytes);
+          
+          // 문서 메타데이터 생성
+          final document = PDFDocument(
+            id: fileId,
+            title: fileName.replaceAll('.pdf', ''),
+            filePath: fileId, // 웹에서는 ID를 경로로 사용
+            fileSize: bytes.length,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          
+          // 문서 저장
+          await _localDataSource.saveDocument(document);
+          
+          return Result.success(document);
+        } catch (e) {
+          return Result.failure(Exception('웹 환경에서 PDF 가져오기 실패: $e'));
+        }
+      } else {
+        return await _localDataSource.importPDF(file);
+      }
+    } catch (e) {
+      return Result.failure(Exception('PDF 가져오기 실패: $e'));
+    }
+  }
+
+  @override
+  Future<Result<Uint8List>> loadSamplePdf() async {
     try {
       final asset = 'assets/sample.pdf';
       final data = await rootBundle.load(asset);
-      return data.buffer.asUint8List();
+      final bytes = data.buffer.asUint8List();
+      return Result.success(bytes);
     } catch (e) {
-      debugPrint('샘플 PDF 로드 오류: $e');
-      return null;
+      return Result.failure(Exception('샘플 PDF 로드 중 오류: $e'));
     }
   }
 
   @override
-  Future<Uint8List?> loadLocalPdf(String filePath) async {
+  Future<Result<Uint8List>> getPdfBytes(String filePath) async {
     try {
-      // 웹 환경 또는 메모리 파일
-      if (kIsWeb || filePath.startsWith('memory://') || filePath.startsWith('http')) {
-        debugPrint('웹 환경에서는 로컬 PDF 로드가 지원되지 않습니다.');
-        return null;
-      }
-      
-      // 로컬 파일 (모바일/데스크톱)
-      final file = File(filePath);
-      if (await file.exists()) {
-        return await file.readAsBytes();
-      }
-      return null;
-    } catch (e) {
-      debugPrint('로컬 PDF 로드 오류: $e');
-      return null;
-    }
-  }
-
-  @override
-  Future<Result<Uint8List>> getPDFData(String url) async {
-    try {
-      // URL이 http로 시작하면 네트워크에서 가져오기
-      if (url.startsWith('http')) {
+      // 웹 URL 처리
+      if (filePath.startsWith('http')) {
         try {
-          final response = await http.get(Uri.parse(url));
+          final response = await http.get(Uri.parse(filePath));
+          
           if (response.statusCode == 200) {
             return Result.success(response.bodyBytes);
           } else {
-            return Result.failure(Exception('PDF 데이터를 가져오는데 실패했습니다. 상태 코드: ${response.statusCode}'));
+            return Result.failure(
+              Exception('PDF 다운로드 실패: HTTP 상태 코드 ${response.statusCode}')
+            );
           }
         } catch (e) {
-          debugPrint('네트워크 PDF 다운로드 오류: $e');
-          return Result.failure(Exception('PDF 다운로드 오류: $e'));
+          return Result.failure(Exception('URL에서 PDF 다운로드 중 오류: $e'));
         }
       }
       
-      // 웹 환경에서 로컬 파일 접근 시 예외처리
-      if (kIsWeb) {
-        return Result.failure(Exception('웹 환경에서는 로컬 파일 접근이 불가능합니다.'));
+      // 로컬 파일 처리
+      final file = io.File(filePath);
+      
+      if (!await file.exists()) {
+        return Result.failure(Exception('파일이 존재하지 않습니다: $filePath'));
       }
       
-      // 로컬 파일인 경우
-      final file = File(url);
-      if (await file.exists()) {
-        return Result.success(await file.readAsBytes());
-      } else {
-        return Result.failure(Exception('파일을 찾을 수 없습니다: $url'));
-      }
+      final bytes = await file.readAsBytes();
+      return Result.success(bytes);
     } catch (e) {
-      debugPrint('PDF 데이터 로드 오류: $e');
-      return Result.failure(Exception('PDF 다운로드 오류: $e'));
+      return Result.failure(Exception('PDF 파일 읽기 중 오류: $e'));
+    }
+  }
+
+  @override
+  Future<Result<List<PDFDocument>>> searchDocuments(String query) async {
+    try {
+      final documentsResult = await _localDataSource.getDocuments();
+      if (documentsResult.isFailure) {
+        return documentsResult;
+      }
+      
+      final documents = documentsResult.data ?? [];
+      final lowercaseQuery = query.toLowerCase();
+      
+      // 제목, 설명 등에서 검색
+      final filteredDocuments = documents.where((doc) {
+        return doc.title.toLowerCase().contains(lowercaseQuery) ||
+               (doc.description?.toLowerCase().contains(lowercaseQuery) ?? false) ||
+               (doc.author?.toLowerCase().contains(lowercaseQuery) ?? false) ||
+               doc.tags.any((tag) => tag.toLowerCase().contains(lowercaseQuery));
+      }).toList();
+      
+      // 검색 기록 저장
+      final addResult = await addSearchQuery(query);
+      if (addResult.isFailure) {
+        debugPrint('검색 기록 저장 실패: ${addResult.error}');
+      }
+      
+      return Result.success(filteredDocuments);
+    } catch (e) {
+      return Result.failure(Exception('문서 검색 중 오류: $e'));
     }
   }
 } 

@@ -63,6 +63,18 @@ class PDFBookmark extends Equatable {
   /// 메타데이터
   final Map<String, dynamic> metadata;
   
+  /// 하이라이트 표시 여부
+  final bool isHighlighted;
+  
+  /// 텍스트 내용
+  final String textContent;
+  
+  /// 메모 (추가 내용)
+  final String note;
+  
+  /// 페이지 번호 (추가 필드, page와 동일한 값)
+  final int pageNumber;
+  
   /// 북마크 생성자
   const PDFBookmark({
     required this.id,
@@ -77,7 +89,11 @@ class PDFBookmark extends Equatable {
     this.updatedAt,
     this.isFavorite = false,
     this.metadata = const {},
-  });
+    this.isHighlighted = false,
+    this.textContent = '',
+    this.note = '',
+    int? pageNumber,
+  }) : this.pageNumber = pageNumber ?? page;
   
   /// JSON에서 생성
   factory PDFBookmark.fromJson(String json) {
@@ -109,6 +125,10 @@ class PDFBookmark extends Equatable {
       metadata: map['metadata'] != null 
           ? Map<String, dynamic>.from(map['metadata'] as Map) 
           : {},
+      isHighlighted: map['isHighlighted'] as bool? ?? false,
+      textContent: map['textContent'] as String? ?? '',
+      note: map['note'] as String? ?? '',
+      pageNumber: map['pageNumber'] as int? ?? map['page'] as int? ?? 0,
     );
   }
   
@@ -127,6 +147,10 @@ class PDFBookmark extends Equatable {
     updatedAt,
     isFavorite,
     metadata,
+    isHighlighted,
+    textContent,
+    note,
+    pageNumber,
   ];
   
   /// JSON으로 변환
@@ -145,6 +169,10 @@ class PDFBookmark extends Equatable {
       'color': color,
       'type': _bookmarkTypeToString(type),
       'isFavorite': isFavorite,
+      'isHighlighted': isHighlighted,
+      'textContent': textContent,
+      'note': note,
+      'pageNumber': pageNumber,
     };
     
     if (content != null) {
@@ -168,6 +196,9 @@ class PDFBookmark extends Equatable {
     return map;
   }
   
+  /// 도메인 객체로 변환 (자기 자신 반환)
+  PDFBookmark toDomain() => this;
+  
   /// 복사하여 새 인스턴스 생성
   PDFBookmark copyWith({
     String? id,
@@ -182,6 +213,10 @@ class PDFBookmark extends Equatable {
     DateTime? updatedAt,
     bool? isFavorite,
     Map<String, dynamic>? metadata,
+    bool? isHighlighted,
+    String? textContent,
+    String? note,
+    int? pageNumber,
   }) {
     return PDFBookmark(
       id: id ?? this.id,
@@ -196,6 +231,10 @@ class PDFBookmark extends Equatable {
       updatedAt: updatedAt ?? this.updatedAt,
       isFavorite: isFavorite ?? this.isFavorite,
       metadata: metadata ?? this.metadata,
+      isHighlighted: isHighlighted ?? this.isHighlighted,
+      textContent: textContent ?? this.textContent,
+      note: note ?? this.note,
+      pageNumber: pageNumber ?? this.pageNumber,
     );
   }
 }

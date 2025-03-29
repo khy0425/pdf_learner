@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:platform/platform.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:io' if (dart.library.html) 'package:pdf_learner_v2/utils/web_stub.dart' as io;
+import 'dart:io' if (dart.library.html) 'package:pdf_learner_v2/core/utils/web_stub.dart' as io;
 
 /// 플랫폼별 설정 및 기능을 제공하는 클래스
 class PlatformConfig {

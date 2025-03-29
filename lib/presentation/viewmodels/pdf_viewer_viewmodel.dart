@@ -70,6 +70,15 @@ class PDFViewerViewModel extends BaseViewModel {
   /// 총 페이지 수
   int _totalPages = 0;
   
+  /// 선택된 텍스트
+  String _selectedText = '';
+  
+  /// 선택된 페이지
+  int _selectedPage = 0;
+  
+  /// 노트 목록
+  List<PDFBookmark> _notes = [];
+  
   /// 뷰어 상태
   PDFViewerStatus _status = PDFViewerStatus.initial;
   
@@ -114,6 +123,7 @@ class PDFViewerViewModel extends BaseViewModel {
   PDFViewerStatus get status => _status;
   
   /// 에러 메시지 getter
+  @override
   String get errorMessage => _errorMessage;
   
   bool get isFullScreen => _isFullScreen;
@@ -236,6 +246,7 @@ class PDFViewerViewModel extends BaseViewModel {
     required String title,
     required String note,
     required String selectedText,
+    required int page,
   }) async {
     if (_document == null) {
       return Result.failure(Exception('문서가 없습니다.'));
@@ -248,8 +259,8 @@ class PDFViewerViewModel extends BaseViewModel {
         documentId: _document!.id,
         title: title,
         note: note,
-        pageNumber: _currentPage,
-        selectedText: selectedText,
+        page: page,
+        textContent: selectedText,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -772,5 +783,60 @@ class PDFViewerViewModel extends BaseViewModel {
       debugPrint('북마크 로드 오류: $e');
       _bookmarks = [];
     }
+  }
+
+  // 텍스트 선택 메서드
+  void selectText(String selectedText, int pageNumber) {
+    _selectedText = selectedText;
+    _selectedPage = pageNumber;
+    debugPrint('선택된 텍스트: $selectedText, 페이지: $pageNumber');
+    notifyListeners();
+  }
+  
+  // 노트 추가 메서드
+  Future<bool> addNote({
+    required String documentId,
+    required String title,
+    required String content,
+    required int page,
+    required String selectedText,
+    Color color = Colors.yellow,
+  }) async {
+    try {
+      if (selectedText.isEmpty) {
+        return false;
+      }
+      
+      final bookmark = PDFBookmark(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        documentId: documentId,
+        title: title,
+        page: page,
+        content: content,
+        textContent: selectedText,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        type: PDFBookmarkType.note,
+        color: color.value,
+      );
+      
+      await _repository.saveBookmark(bookmark);
+      // 노트 목록 업데이트
+      if (_documentId != null && _documentId!.isNotEmpty) {
+        final result = await _repository.getBookmarks(_documentId!);
+        _notes = result.data?.where((b) => b.type == PDFBookmarkType.note).toList() ?? [];
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+  
+  /// 노트 저장
+  Future<void> _saveNotes() async {
+    // 노트는 북마크로 저장되므로 별도 구현 불필요
   }
 } 

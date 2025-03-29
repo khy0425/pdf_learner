@@ -6,6 +6,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:mime/mime.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart' as file_picker;
 
 /// 파일 피커 타입
 enum FilePickerType {
@@ -54,130 +55,57 @@ class PlatformFile {
   bool isSizeAllowed([int maxSize = 10 * 1024 * 1024]) => size <= maxSize;
 }
 
-/// 플랫폼에 따라 적절한 파일 선택 기능을 제공하는 클래스
+/// 웹 환경과 모바일 환경에서 다르게 동작하는 파일 선택기
 class ConditionalFilePicker {
   static const MethodChannel _channel = MethodChannel('com.example.pdf_learner_v2/file_picker');
   
-  /// 파일 선택 메서드
-  static Future<FilePickerResult?> pickFiles({
+  /// FilePickerType을 file_picker.FileType으로 변환
+  static file_picker.FileType _convertFileType(FilePickerType type) {
+    switch (type) {
+      case FilePickerType.any:
+        return file_picker.FileType.any;
+      case FilePickerType.image:
+        return file_picker.FileType.image;
+      case FilePickerType.video:
+        return file_picker.FileType.video;
+      case FilePickerType.audio:
+        return file_picker.FileType.audio;
+      case FilePickerType.media:
+        return file_picker.FileType.media;
+      case FilePickerType.custom:
+        return file_picker.FileType.custom;
+      default:
+        return file_picker.FileType.any;
+    }
+  }
+  
+  /// 단일 파일 선택
+  static Future<file_picker.FilePickerResult?> pickFile({
+    String dialogTitle = '파일 선택',
     FilePickerType type = FilePickerType.any,
     List<String>? allowedExtensions,
-    bool allowMultiple = false,
-    bool withData = true,
-    int maxFileSize = 10 * 1024 * 1024, // 10MB
   }) async {
-    try {
-      if (kIsWeb) {
-        return await _pickFilesWeb(type, allowedExtensions, allowMultiple, maxFileSize);
-      } else {
-        return await _pickFilesNative(type, allowedExtensions, allowMultiple);
-      }
-    } catch (e) {
-      debugPrint('파일 선택 오류: $e');
-      return null;
-    }
+    return await file_picker.FilePicker.platform.pickFiles(
+      dialogTitle: dialogTitle,
+      type: _convertFileType(type),
+      allowedExtensions: type == FilePickerType.custom ? allowedExtensions : null,
+      allowMultiple: false,
+    );
   }
   
-  /// 웹 환경에서 파일 선택
-  static Future<FilePickerResult?> _pickFilesWeb(
-    FilePickerType type,
+  /// 다중 파일 선택
+  static Future<file_picker.FilePickerResult?> pickFiles({
+    String dialogTitle = '파일 선택',
+    FilePickerType type = FilePickerType.any,
     List<String>? allowedExtensions,
-    bool allowMultiple,
-    int maxFileSize,
-  ) async {
-    try {
-      final html.FileUploadInputElement input = html.FileUploadInputElement();
-      
-      // 허용할 파일 형식 설정
-      String accept = '';
-      if (type == FilePickerType.image) {
-        accept = 'image/*';
-      } else if (type == FilePickerType.video) {
-        accept = 'video/*';
-      } else if (type == FilePickerType.audio) {
-        accept = 'audio/*';
-      } else if (type == FilePickerType.custom && allowedExtensions != null) {
-        accept = allowedExtensions.map((ext) => '.$ext').join(',');
-      }
-      
-      input.accept = accept;
-      input.multiple = allowMultiple;
-      input.click();
-      
-      final files = await input.onChange.first.then((_) => input.files);
-      if (files == null || files.isEmpty) return null;
-      
-      List<PlatformFile> platformFiles = [];
-      
-      for (var file in files) {
-        // 파일 크기 체크
-        if (file.size > maxFileSize) {
-          debugPrint('파일 크기 초과: ${file.name} (${file.size} bytes)');
-          continue;
-        }
-        
-        final reader = html.FileReader();
-        reader.readAsArrayBuffer(file);
-        
-        final data = await reader.onLoad.first;
-        final bytes = (reader.result as Uint8List?);
-        
-        final name = file.name;
-        final size = file.size;
-        final extension = name.split('.').last;
-        
-        platformFiles.add(PlatformFile(
-          name: name,
-          size: size,
-          bytes: bytes,
-          extension: extension,
-        ));
-      }
-      
-      return FilePickerResult(platformFiles);
-    } catch (e) {
-      debugPrint('웹 파일 선택 오류: $e');
-      return null;
-    }
-  }
-  
-  /// 네이티브 환경에서 파일 선택
-  static Future<FilePickerResult?> _pickFilesNative(
-    FilePickerType type,
-    List<String>? allowedExtensions,
-    bool allowMultiple,
-  ) async {
-    try {
-      // 네이티브 플랫폼에 파일 선택 요청
-      final result = await _channel.invokeMethod('pickFiles', {
-        'type': type.toString(),
-        'allowedExtensions': allowedExtensions,
-        'allowMultiple': allowMultiple,
-      });
-      
-      if (result == null) return null;
-      
-      // 결과를 PlatformFile 리스트로 변환
-      final List<dynamic> files = result as List<dynamic>;
-      final List<PlatformFile> platformFiles = [];
-      
-      for (var file in files) {
-        final Map<String, dynamic> fileData = file as Map<String, dynamic>;
-        
-        platformFiles.add(PlatformFile(
-          name: fileData['name'] as String,
-          path: fileData['path'] as String?,
-          size: fileData['size'] as int,
-          extension: fileData['extension'] as String?,
-          uri: fileData['uri'] as String?,
-        ));
-      }
-      
-      return FilePickerResult(platformFiles);
-    } catch (e) {
-      debugPrint('네이티브 파일 선택 오류: $e');
-      return null;
-    }
+    bool allowMultiple = true,
+  }) async {
+    return await file_picker.FilePicker.platform.pickFiles(
+      dialogTitle: dialogTitle,
+      type: _convertFileType(type),
+      allowedExtensions: type == FilePickerType.custom ? allowedExtensions : null,
+      allowMultiple: kIsWeb ? allowMultiple : false,  // 웹에서는 여러 파일 허용, 모바일에서는 단일 파일
+    );
   }
   
   /// 디렉토리 경로 선택

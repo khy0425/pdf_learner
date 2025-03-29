@@ -49,7 +49,7 @@ class _ChatMessageBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: isUser
               ? theme.colorScheme.primary
-              : theme.colorScheme.surfaceVariant,
+              : theme.colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
         ),
         constraints: BoxConstraints(

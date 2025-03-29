@@ -3,33 +3,44 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../data/models/pdf_file_info.dart';
-import '../../services/storage/storage_service.dart';
 import '../../domain/repositories/pdf_repository.dart';
 import '../../core/utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 import '../../core/base/result.dart';
 import '../../core/base/base_viewmodel.dart';
 import '../../core/enums/pdf_file_status.dart';
-import 'package:cross_file/cross_file.dart';
 import '../../domain/models/pdf_document.dart';
-import '../../services/pdf/pdf_service.dart';
+import '../../domain/services/pdf_service.dart';
+import '../../services/storage/thumbnail_service.dart';
+import 'package:path/path.dart' as path;
+import 'package:injectable/injectable.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import '../../services/storage/storage_service.dart';
 
 /// PDF 파일 관리를 위한 ViewModel
+@injectable
 class PdfFileViewModel extends BaseViewModel {
   final PDFRepository _repository;
+  final PDFService _pdfService;
+  final ThumbnailService _thumbnailService;
+  final StorageService _storageService;
   List<PDFDocument> _pdfFiles = [];
   PdfFileStatus _status = PdfFileStatus.initial;
   double _downloadProgress = 0.0;
   
   // 생성자
-  PdfFileViewModel({required PDFRepository repository}) : _repository = repository {
+  PdfFileViewModel({
+    required PDFRepository repository,
+    required PDFService pdfService,
+    required ThumbnailService thumbnailService,
+    required StorageService storageService,
+  }) : 
+    _repository = repository,
+    _pdfService = pdfService,
+    _thumbnailService = thumbnailService,
+    _storageService = storageService {
     _loadFiles();
   }
   
@@ -68,10 +79,10 @@ class PdfFileViewModel extends BaseViewModel {
       final result = await FileUtils.pickPdfFile(context);
       
       if (result.isSuccess && result.getOrNull() != null) {
-        final xFile = result.getOrNull()!;
+        final xFile = result.getOrNull();
         
         // 파일 객체 생성
-        final file = File(xFile.path);
+        final file = File(xFile!.path);
         
         // repository를 통해 PDF 가져오기
         final importResult = await _repository.importPDF(file);
@@ -177,7 +188,7 @@ class PdfFileViewModel extends BaseViewModel {
         return Result.failure(saveResult.error!);
       }
       
-      final filePath = saveResult.data!;
+      final filePath = saveResult.data;
       
       // PDF 문서 생성
       final document = PDFDocument(
@@ -199,7 +210,7 @@ class PdfFileViewModel extends BaseViewModel {
         return Result.failure(saveDocResult.error!);
       }
       
-      final savedDocument = saveDocResult.data!;
+      final savedDocument = saveDocResult.data;
       
       // 목록에 추가
       if (!_pdfFiles.any((pdf) => pdf.id == savedDocument.id)) {
@@ -233,7 +244,7 @@ class PdfFileViewModel extends BaseViewModel {
         final index = _pdfFiles.indexWhere((file) => file.id == id);
         if (index != -1) {
           final updatedFile = _pdfFiles[index].copyWith(
-            isFavorite: result.data!,
+            isFavorite: result.data,
           );
           _pdfFiles[index] = updatedFile;
           notifyListeners();
@@ -305,13 +316,220 @@ class PdfFileViewModel extends BaseViewModel {
         // 로컬 상태 업데이트
         final index = _pdfFiles.indexWhere((file) => file.id == document.id);
         if (index != -1) {
-          _pdfFiles[index] = result.data!;
+          _pdfFiles[index] = result.data;
           notifyListeners();
         }
       }
       return result;
     } catch (e) {
       return Result.failure(Exception('문서 업데이트 실패: $e'));
+    }
+  }
+  
+  /// 파일 선택기를 통해 PDF 파일을 로드합니다.
+  Future<Result<PDFDocument>> loadPDFFile() async {
+    try {
+      setLoading(true);
+
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return Result.failure(Exception('파일이 선택되지 않았습니다.'));
+      }
+
+      final file = File(result.files.first.path!);
+      final fileName = path.basename(file.path);
+      final fileSize = await file.length();
+
+      // 문서 객체 생성
+      final document = PDFDocument(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: fileName,
+        filePath: file.path,
+        fileSize: fileSize,
+        pageCount: await _pdfService.getPageCount(file.path),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // 문서 저장
+      final saveResult = await _repository.saveDocument(document);
+      
+      if (saveResult.isFailure) {
+        return Result.failure(Exception(saveResult.error?.toString() ?? '문서 저장에 실패했습니다.'));
+      }
+
+      // 썸네일 생성
+      _generateThumbnail(document.id);
+
+      return Result.success(document);
+    } catch (e) {
+      return Result.failure(Exception('PDF 로드 중 오류가 발생했습니다: $e'));
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  /// URL에서 PDF를 다운로드합니다.
+  Future<Result<PDFDocument>> downloadPDFFromUrl(String url) async {
+    try {
+      setLoading(true);
+
+      // PDF 다운로드
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode != 200) {
+        return Result.failure(Exception('PDF 다운로드에 실패했습니다: ${response.statusCode}'));
+      }
+
+      // 임시 파일로 저장
+      final fileName = path.basename(url);
+      final tempDir = await _storageService.getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/$fileName');
+      await tempFile.writeAsBytes(response.bodyBytes);
+
+      // 영구 저장소로 복사
+      final docsDir = await _storageService.getDocumentsDirectory();
+      final targetPath = '${docsDir.path}/pdfs/$fileName';
+      final targetFile = File(targetPath);
+      
+      // 디렉토리가 없으면 생성
+      if (!await targetFile.parent.exists()) {
+        await targetFile.parent.create(recursive: true);
+      }
+      
+      // 파일 복사
+      await _storageService.copyFile(tempFile.path, targetPath);
+
+      // 문서 객체 생성
+      final document = PDFDocument(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: fileName,
+        filePath: targetPath,
+        fileSize: await targetFile.length(),
+        pageCount: await _pdfService.getPageCount(targetPath),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        downloadUrl: url,
+      );
+
+      // 문서 저장
+      final saveResult = await _repository.saveDocument(document);
+      
+      if (saveResult.isFailure) {
+        return Result.failure(Exception(saveResult.error?.toString() ?? '문서 저장에 실패했습니다.'));
+      }
+
+      // 썸네일 생성
+      _generateThumbnail(document.id);
+
+      return Result.success(document);
+    } catch (e) {
+      return Result.failure(Exception('PDF 다운로드 중 오류가 발생했습니다: $e'));
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  /// 문서의 썸네일을 생성합니다.
+  Future<void> _generateThumbnail(String documentId) async {
+    try {
+      // 첫 페이지에 대한 썸네일 생성
+      await _thumbnailService.generateThumbnail(documentId, 1);
+    } catch (e) {
+      print('썸네일 생성 중 오류가 발생했습니다: $e');
+    }
+  }
+  
+  /// 파일을 공유합니다.
+  Future<Result<void>> shareFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        return Result.failure(Exception('파일이 존재하지 않습니다.'));
+      }
+      
+      // 웹에서는 다른 방식으로 공유 처리
+      if (kIsWeb) {
+        return Result.success(null);
+      }
+      
+      // TODO: 공유 기능 구현
+      // await Share.shareFiles([filePath]);
+      
+      return Result.success(null);
+    } catch (e) {
+      return Result.failure(Exception('파일 공유 중 오류가 발생했습니다: $e'));
+    }
+  }
+  
+  // PDF 파일 추가 메서드 (웹용)
+  Future<Result<PDFDocument>> loadPdfFromDevice() async {
+    try {
+      setLoading(true);
+      
+      // 파일 선택 로직 (웹에서는 FilePicker 사용)
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+      
+      if (result == null || result.files.isEmpty) {
+        setLoading(false);
+        return Result.failure(Exception('파일이 선택되지 않았습니다.'));
+      }
+      
+      // 파일 정보 읽기
+      final file = result.files.first;
+      final bytes = file.bytes;
+      final fileName = file.name;
+      
+      if (bytes == null) {
+        setLoading(false);
+        return Result.failure(Exception('파일 데이터를 읽을 수 없습니다.'));
+      }
+      
+      // PDF 문서 객체 생성
+      final id = const Uuid().v4();
+      PDFDocument document = PDFDocument(
+        id: id,
+        title: fileName,
+        fileSize: bytes.length,
+        filePath: 'web_$id',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        status: PDFDocumentStatus.downloaded,
+      );
+      
+      // 파일 저장
+      final saveResult = await _repository.saveDocument(document);
+      
+      if (saveResult.isFailure) {
+        setLoading(false);
+        return Result.failure(Exception(saveResult.error?.toString() ?? '문서 저장에 실패했습니다.'));
+      }
+      
+      // 성공 반환
+      setLoading(false);
+      return Result.success(document);
+    } catch (e) {
+      setLoading(false);
+      return Result.failure(Exception('PDF 로드 중 오류가 발생했습니다: $e'));
+    }
+  }
+
+  // 썸네일 생성 (매개변수 수정)
+  Future<void> generateThumbnail(String documentId, String filePath) async {
+    try {
+      print('썸네일 생성 시작: $documentId, $filePath');
+      // documentId를 문자열로, pageNumber를 1(첫 페이지)로 고정
+      await _thumbnailService.generateThumbnail(documentId, 1);
+    } catch (e) {
+      debugPrint('썸네일 생성 중 오류: $e');
     }
   }
 } 

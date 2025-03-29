@@ -1,31 +1,60 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/base/base_viewmodel.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/di/dependency_injection.dart';
 
 /// 앱 테마 설정을 관리하는 ViewModel
 class ThemeViewModel extends ChangeNotifier {
   static const String _themeKey = 'app_theme';
   
   ThemeMode _themeMode = ThemeMode.system;
+  final SharedPreferences _prefs;
+  
+  // 실제 사용할 테마들
+  ThemeData _lightTheme = AppTheme.lightTheme;
+  ThemeData _darkTheme = AppTheme.darkTheme;
   
   // 누락된 getter 추가
   ThemeMode get themeMode => _themeMode;
-  ThemeData get lightTheme => _getLightTheme();
-  ThemeData get darkTheme => _getDarkTheme();
+  ThemeData get lightTheme => _lightTheme;
+  ThemeData get darkTheme => _darkTheme;
   
-  ThemeViewModel() {
-    _loadTheme();
+  ThemeViewModel({required SharedPreferences sharedPreferences}) 
+      : _prefs = sharedPreferences {
+    _init();
   }
   
-  /// 테마 설정 불러오기
-  Future<void> _loadTheme() async {
+  /// 초기화
+  Future<void> _init() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final themeModeIndex = prefs.getInt(_themeKey) ?? 0;
-      _themeMode = ThemeMode.values[themeModeIndex];
+      // 저장된 테마 모드 가져오기
+      final savedMode = _prefs.getString('themeMode');
+      
+      if (savedMode != null) {
+        switch (savedMode) {
+          case 'light':
+            _themeMode = ThemeMode.light;
+            break;
+          case 'dark':
+            _themeMode = ThemeMode.dark;
+            break;
+          default:
+            _themeMode = ThemeMode.system;
+            break;
+        }
+      } else {
+        // 기본값은 시스템 설정 사용
+        _themeMode = ThemeMode.system;
+      }
+      
+      // 상태바 스타일 설정
+      _updateSystemUI();
+      
       notifyListeners();
     } catch (e) {
-      debugPrint('테마 로드 중 오류: $e');
+      debugPrint('테마 초기화 오류: $e');
     }
   }
   
@@ -34,14 +63,27 @@ class ThemeViewModel extends ChangeNotifier {
     if (_themeMode == mode) return;
     
     _themeMode = mode;
-    notifyListeners();
     
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_themeKey, mode.index);
-    } catch (e) {
-      debugPrint('테마 저장 중 오류: $e');
+    // 설정 저장
+    String modeString;
+    switch (mode) {
+      case ThemeMode.light:
+        modeString = 'light';
+        break;
+      case ThemeMode.dark:
+        modeString = 'dark';
+        break;
+      default:
+        modeString = 'system';
+        break;
     }
+    
+    await _prefs.setString('themeMode', modeString);
+    
+    // 시스템 UI 업데이트
+    _updateSystemUI();
+    
+    notifyListeners();
   }
   
   /// 테마 모드 전환
@@ -56,81 +98,46 @@ class ThemeViewModel extends ChangeNotifier {
   /// 현재 테마 모드에 맞는 ThemeData 반환
   ThemeData get themeData {
     return _themeMode == ThemeMode.light 
-        ? _getLightTheme() 
-        : (_themeMode == ThemeMode.dark ? _getDarkTheme() : WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark ? _getDarkTheme() : _getLightTheme());
+        ? _lightTheme 
+        : (_themeMode == ThemeMode.dark ? _darkTheme : WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark ? _darkTheme : _lightTheme);
   }
   
-  ThemeData _getLightTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.blue,
-        brightness: Brightness.light,
-      ),
-      appBarTheme: const AppBarTheme(
-        centerTitle: true,
-        elevation: 0,
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      ),
-      cardTheme: CardTheme(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-      dialogTheme: DialogTheme(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-      ),
-      snackBarTheme: const SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  // 현재 실제 사용되는 테마 (다크모드 여부 고려)
+  ThemeData get currentTheme {
+    if (_themeMode == ThemeMode.system) {
+      return SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
+          ? _darkTheme
+          : _lightTheme;
+    }
+    return _themeMode == ThemeMode.dark ? _darkTheme : _lightTheme;
   }
   
-  ThemeData _getDarkTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.blue,
-        brightness: Brightness.dark,
-      ),
-      appBarTheme: const AppBarTheme(
-        centerTitle: true,
-        elevation: 0,
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      ),
-      cardTheme: CardTheme(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-      dialogTheme: DialogTheme(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-      ),
-      snackBarTheme: const SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  // 다크 모드 여부
+  bool get isDarkMode {
+    if (_themeMode == ThemeMode.system) {
+      return SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    }
+    return _themeMode == ThemeMode.dark;
+  }
+  
+  // 시스템 UI 업데이트 (상태바 색상 등)
+  void _updateSystemUI() {
+    final currentBrightness = isDarkMode ? Brightness.dark : Brightness.light;
+    
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarBrightness: currentBrightness,
+      statusBarIconBrightness: currentBrightness == Brightness.dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: currentBrightness == Brightness.dark ? Colors.black : Colors.white,
+      systemNavigationBarIconBrightness: currentBrightness == Brightness.dark ? Brightness.light : Brightness.dark,
+    ));
+  }
+  
+  // 커스텀 테마 적용 (옵션)
+  void applyCustomTheme(ThemeData lightTheme, ThemeData darkTheme) {
+    _lightTheme = lightTheme;
+    _darkTheme = darkTheme;
+    _updateSystemUI();
+    notifyListeners();
   }
 } 

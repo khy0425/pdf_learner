@@ -41,17 +41,17 @@ class SettingsViewModel extends BaseViewModel {
   
   /// 개인정보 처리방침 열기
   Future<void> openPrivacyPolicy() async {
-    const url = 'https://pdf-learner.web.app/privacy';
-    if (await canLaunch(url)) {
-      await launch(url);
+    final Uri url = Uri.parse('https://pdf-learner.web.app/privacy');
+    if (!await launchUrl(url)) {
+      setError('URL을 열 수 없습니다: $url');
     }
   }
   
   /// 서비스 이용약관 열기
   Future<void> openTermsOfService() async {
-    const url = 'https://pdf-learner.web.app/terms';
-    if (await canLaunch(url)) {
-      await launch(url);
+    final Uri url = Uri.parse('https://pdf-learner.web.app/terms');
+    if (!await launchUrl(url)) {
+      setError('URL을 열 수 없습니다: $url');
     }
   }
   

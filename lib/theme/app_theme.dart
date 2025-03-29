@@ -37,6 +37,21 @@ class AppTheme {
       900: Color(0xFF01579B),
     },
   );
+  
+  // 중성 컬러 (Neutral)
+  static const Color neutral100 = Color(0xFFF5F5F5);
+  static const Color neutral200 = Color(0xFFEEEEEE);
+  static const Color neutral300 = Color(0xFFE0E0E0);
+  static const Color neutral400 = Color(0xFFBDBDBD);
+  static const Color neutral500 = Color(0xFF9E9E9E);
+  static const Color neutral600 = Color(0xFF757575);
+  static const Color neutral700 = Color(0xFF616161);
+  static const Color neutral800 = Color(0xFF424242);
+  static const Color neutral900 = Color(0xFF212121);
+  
+  // 기본 색상 정의
+  static const Color primaryColor = Color(_primaryColorValue);
+  static const Color primaryDarkColor = Color(0xFF1976D2);
 
   // 라이트 테마
   static ThemeData light() {

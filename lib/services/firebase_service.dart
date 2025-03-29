@@ -496,4 +496,22 @@ class FirebaseService {
   User? getCurrentUser() {
     return _auth.currentUser;
   }
+
+  // Firestore에 문서 추가 공통 메서드
+  Future<DocumentReference?> addDocument(CollectionReference collection, Map<String, dynamic> data) async {
+    try {
+      // 타임스탬프 추가
+      final timestamp = DateTime.now();
+      final Map<String, dynamic> updatedData = {
+        ...data,
+        'createdAt': timestamp,
+        'updatedAt': timestamp,
+      };
+      
+      return await collection.add(updatedData);
+    } catch (e) {
+      debugPrint('Firestore 문서 추가 오류: $e');
+      return null;
+    }
+  }
 } 

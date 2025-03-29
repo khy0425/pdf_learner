@@ -12,10 +12,9 @@ import 'presentation/viewmodels/locale_viewmodel.dart';
 import 'presentation/viewmodels/pdf_viewmodel.dart';
 import 'presentation/viewmodels/auth_viewmodel.dart';
 import 'presentation/screens/home_screen.dart';
-import 'core/utils/web_storage_utils.dart';
-import '../../core/base/result.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf_learner_v2/core/utils/web_utils.dart';
+import 'core/base/result.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,7 +55,8 @@ void main() async {
   // 만료된 데이터 정리 (웹 환경에서만)
   if (kIsWeb) {
     try {
-      WebStorageUtils.instance.cleanupExpiredFiles();
+      final webUtils = WebUtils.instance;
+      webUtils.cleanupExpiredFiles();
     } catch (e) {
       debugPrint('만료된 데이터 정리 중 오류: $e');
     }
@@ -100,14 +100,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) => DependencyInjection.instance<ThemeViewModel>(),
+        ChangeNotifierProvider<ThemeViewModel>(
+          create: (_) => getIt<ThemeViewModel>(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => DependencyInjection.instance<LocaleViewModel>(),
+        ChangeNotifierProvider<LocaleViewModel>(
+          create: (_) => getIt<LocaleViewModel>(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => DependencyInjection.instance<PDFViewModel>(),
+        ChangeNotifierProvider<PDFViewModel>(
+          create: (_) => getIt<PDFViewModel>(),
         ),
       ],
       child: Consumer2<ThemeViewModel, LocaleViewModel>(

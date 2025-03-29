@@ -139,7 +139,7 @@ class _PdfStaticThumbnailState extends State<PdfStaticThumbnail> {
       );
     }
 
-    if (_hasError || _thumbnailData == null) {
+    if (_hasError || _thumbnailData == null || _thumbnailData!.isEmpty) {
       return const Center(
         child: Icon(Icons.broken_image, color: Colors.grey),
       );
@@ -167,31 +167,56 @@ class _RenderParams {
 
 /// PDF 페이지를 이미지로 렌더링 (분리된 isolate에서 실행)
 Future<Uint8List> _renderPdfPageToImage(_RenderParams params) async {
+  final Uint8List emptyResult = Uint8List(0);
+  
   try {
     // PDF 문서 로드
     final PdfDocument document = PdfDocument(inputBytes: params.pdfData);
     
-    // 페이지 번호 확인 (1부터 시작)
-    final int pageNumber = params.pageNumber < 1 || 
+    try {
+      // 페이지 번호 확인 (1부터 시작)
+      final int pageNumber = params.pageNumber < 1 || 
                            params.pageNumber > document.pages.count 
                            ? 1 : params.pageNumber;
-    
-    // 페이지 가져오기
-    final PdfPage page = document.pages[pageNumber - 1];
-    
-    // 페이지를 이미지로 변환
-    final PdfBitmap bitmap = await page.render(
-      width: page.size.width.toInt(),
-      height: page.size.height.toInt(),
-    );
-    
-    // 문서 닫기
-    document.dispose();
-    
-    return bitmap.bytes;
+      
+      // 페이지 가져오기
+      final PdfPage page = document.pages[pageNumber - 1];
+      
+      // 이미지 생성
+      // PDF 문서 페이지의 실제 크기를 사용
+      final targetWidth = page.size.width.toInt();
+      final targetHeight = page.size.height.toInt();
+      
+      try {
+        // 페이지 이미지 생성 (render 메서드 사용)
+        final PdfPageImage? pageImage = await page.render(
+          width: targetWidth,
+          height: targetHeight
+        );
+        
+        // 문서 닫기
+        document.dispose();
+        
+        if (pageImage == null) {
+          debugPrint('PDF 이미지 생성 실패: null 반환됨');
+          return emptyResult;
+        }
+        
+        // 이미지 바이트 배열 가져오기
+        final bytes = pageImage.bytes;
+        return bytes.isEmpty ? emptyResult : bytes;
+      } catch (e) {
+        document.dispose(); // 오류 발생 시 문서 닫기
+        debugPrint('PDF 이미지 생성 오류: $e');
+        return emptyResult;
+      }
+    } catch (e) {
+      document.dispose(); // 오류 발생 시 문서 닫기
+      debugPrint('PDF 페이지 접근 오류: $e');
+      return emptyResult;
+    }
   } catch (e) {
-    debugPrint('PDF 페이지 렌더링 오류: $e');
-    // 오류 발생 시 빈 이미지 반환
-    return Uint8List(0);
+    debugPrint('PDF 문서 로드 오류: $e');
+    return emptyResult;
   }
 } 

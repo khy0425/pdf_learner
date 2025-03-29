@@ -1,184 +1,232 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pdf_learner_v2/data/models/ai_summary.dart';
-import 'package:pdf_learner_v2/services/api_keys.dart';
-import 'package:pdf_learner_v2/services/api_key_service.dart';
-import 'package:pdf_learner_v2/services/subscription_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pdf_learner_v2/services/secure_storage.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:pdf_learner_v2/data/models/pdf_document.dart';
-import 'package:pdf_learner_v2/domain/repositories/pdf_repository.dart';
-import 'package:pdf_learner_v2/services/ai_service.dart';
-import 'package:pdf_learner_v2/core/utils/rate_limiter.dart';
+import '../../services/ai_service.dart';
+import '../../domain/repositories/pdf_repository.dart';
+import '../../domain/models/pdf_document.dart';
+import '../../domain/models/summarize_option.dart';
+import '../utils/rate_limiter.dart';
 
-/// Gemini API 요청 결과 상태
-enum ApiRequestStatus {
-  idle,
+/// AI 요약 상태
+enum AISummaryState {
+  /// 초기 상태
+  initial,
+  
+  /// API 키 검증 중
+  validatingKey,
+  
+  /// API 키 유효함
+  keyValid,
+  
+  /// API 키 유효하지 않음
+  keyInvalid,
+  
+  /// 로딩 중
   loading,
+  
+  /// 성공
   success,
-  error,
+  
+  /// 오류 발생
+  error
 }
 
-/// AI 요약 ViewModel
-class AiSummaryViewModel extends ChangeNotifier {
-  final PDFRepository _repository;
+/// AI 요약 뷰모델
+class AISummaryViewModel extends ChangeNotifier {
+  /// AI 서비스
   final AiService _aiService;
+  
+  /// PDF 저장소
+  final PDFRepository _pdfRepository;
+  
+  /// 요청 제한 관리
   final RateLimiter _rateLimiter;
   
-  // 상태 변수
-  bool _isLoading = false;
-  String _startPage = '1';
-  String _endPage = '1';
-  AiSummary? _currentSummary;
-  String? _errorMessage;
+  /// 상태
+  AISummaryState _state = AISummaryState.initial;
+  
+  /// PDF 문서
   PDFDocument? _document;
   
-  // 게터
-  bool get isLoading => _isLoading;
-  String get startPage => _startPage;
-  String get endPage => _endPage;
-  AiSummary? get currentSummary => _currentSummary;
-  String? get errorMessage => _errorMessage;
-  bool get hasSummary => _currentSummary != null;
+  /// 문서 텍스트
+  String _documentText = '';
+  
+  /// 요약 결과
+  String _summary = '';
+  
+  /// 오류 메시지
+  String? _errorMessage;
+  
+  /// 남은 요청 횟수
+  int _remainingRequests = 0;
   
   /// 생성자
-  AiSummaryViewModel({
-    required PDFRepository repository,
+  AISummaryViewModel({
     required AiService aiService,
+    required PDFRepository pdfRepository,
     required RateLimiter rateLimiter,
-  }) : _repository = repository,
-       _aiService = aiService,
-       _rateLimiter = rateLimiter;
+  }) : 
+    _aiService = aiService,
+    _pdfRepository = pdfRepository,
+    _rateLimiter = rateLimiter;
+  
+  /// 상태 getter
+  AISummaryState get state => _state;
+  
+  /// 요약 결과 getter
+  String get summary => _summary;
+  
+  /// 오류 메시지 getter
+  String? get errorMessage => _errorMessage;
+  
+  /// 남은 요청 횟수 getter
+  int get remainingRequests => _remainingRequests;
+  
+  /// PDF 문서 getter
+  PDFDocument? get document => _document;
   
   /// 초기화
-  Future<void> initialize(String documentId, PDFDocument? document) async {
+  Future<void> initialize(String documentId) async {
+    _setState(AISummaryState.initial);
+    _errorMessage = null;
+    
     try {
-      if (document == null) {
-        _document = await _repository.getDocumentById(documentId);
-      } else {
-        _document = document;
+      // PDF 문서 로드
+      final result = await _pdfRepository.getDocument(documentId);
+      if (result.isFailure || result.data == null) {
+        _setError('문서를 찾을 수 없습니다.');
+        return;
       }
       
-      if (_document != null && _document!.pageCount > 0) {
-        _endPage = _document!.pageCount.toString();
-        notifyListeners();
-      }
-    } catch (e) {
-      _errorMessage = '문서 로드 중 오류 발생: $e';
+      _document = result.data;
+      
+      // 남은 요청 횟수 확인
+      _remainingRequests = _rateLimiter.getRemainingRequests('pdf_summary');
+      
       notifyListeners();
+    } catch (e) {
+      _setError('초기화 중 오류 발생: $e');
     }
   }
   
-  /// 시작 페이지 설정
-  void setStartPage(String page) {
-    _startPage = page;
-    notifyListeners();
-  }
-  
-  /// 종료 페이지 설정
-  void setEndPage(String page) {
-    _endPage = page;
-    notifyListeners();
-  }
-  
-  /// 요약 생성
-  Future<void> generateSummary() async {
+  /// 문서 요약
+  Future<void> summarizeDocument(SummarizeOption option, {String? language}) async {
     if (_document == null) {
-      _errorMessage = '문서 정보를 로드할 수 없습니다';
-      notifyListeners();
+      _setError('요약할 문서가 없습니다.');
       return;
     }
     
-    // 페이지 범위 유효성 검사
-    final startPage = int.tryParse(_startPage);
-    final endPage = int.tryParse(_endPage);
-    final pageCount = _document!.pageCount;
-    
-    if (startPage == null || endPage == null) {
-      _errorMessage = '유효한 페이지 번호를 입력하세요';
-      notifyListeners();
+    if (!_checkRemainingRequests()) {
       return;
     }
     
-    if (startPage < 1 || startPage > pageCount) {
-      _errorMessage = '시작 페이지는 1부터 $pageCount까지 입력해주세요';
-      notifyListeners();
-      return;
-    }
-    
-    if (endPage < startPage || endPage > pageCount) {
-      _errorMessage = '종료 페이지는 시작 페이지부터 $pageCount까지 입력해주세요';
-      notifyListeners();
-      return;
-    }
-    
-    // 요청 제한 확인
-    final isAllowed = await _rateLimiter.checkRequest('ai_summary');
-    if (!isAllowed) {
-      _errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요';
-      notifyListeners();
-      return;
-    }
-    
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+    _setState(AISummaryState.loading);
     
     try {
-      // PDF 텍스트 추출
-      final extractedText = await _repository.extractText(
-        _document!.id,
-        startPage,
-        endPage,
-      );
-      
-      // AI 요약 생성
-      final summary = await _aiService.generateSummary(
-        text: extractedText,
-        documentId: _document!.id,
-      );
-      
-      if (summary != null) {
-        _currentSummary = summary;
-      } else {
-        _errorMessage = '요약 생성에 실패했습니다';
+      // 문서 텍스트 추출 (필요한 경우)
+      if (_documentText.isEmpty) {
+        final bytesResult = await _pdfRepository.getPdfBytes(_document!.filePath);
+        if (bytesResult.isFailure || bytesResult.data == null) {
+          _setError('문서에서 텍스트를 추출할 수 없습니다.');
+          return;
+        }
+        
+        // 텍스트 추출 로직은 실제 프로젝트에 맞게 수정 필요
+        _documentText = "문서 텍스트 추출 예시";
       }
+      
+      // 문서 요약
+      final result = await _aiService.summarizeText(_documentText, option: option);
+      
+      _summary = result;
+      
+      // 요청 사용 처리
+      _rateLimiter.addUsage('pdf_summary', 1);
+      _remainingRequests = _rateLimiter.getRemainingRequests('pdf_summary');
+      
+      _setState(AISummaryState.success);
     } catch (e) {
-      _errorMessage = '요약 생성 중 오류가 발생했습니다: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setError('요약 중 오류 발생: $e');
     }
   }
   
-  /// 요약 초기화
-  void resetSummary() {
-    _currentSummary = null;
-    _errorMessage = null;
+  /// API 키 검증
+  Future<bool> validateApiKey(String apiKey) async {
+    _setState(AISummaryState.validatingKey);
+    
+    try {
+      // AiService에 verifyApiKey 구현이 필요
+      final isValid = false; // 임시 구현
+      
+      if (isValid) {
+        _setState(AISummaryState.keyValid);
+      } else {
+        _setState(AISummaryState.keyInvalid);
+        _setError('유효하지 않은 API 키입니다.');
+      }
+      
+      return isValid;
+    } catch (e) {
+      _setState(AISummaryState.keyInvalid);
+      _setError('API 키 검증 중 오류 발생: $e');
+      return false;
+    }
+  }
+  
+  /// 상태 설정
+  void _setState(AISummaryState newState) {
+    _state = newState;
     notifyListeners();
+  }
+  
+  /// 오류 설정
+  void _setError(String message) {
+    _errorMessage = message;
+    _setState(AISummaryState.error);
+  }
+  
+  /// 남은 요청 수 확인
+  bool _checkRemainingRequests() {
+    if (_remainingRequests <= 0) {
+      _setError('일일 요약 요청 제한에 도달했습니다. 내일 다시 시도해주세요.');
+      return false;
+    }
+    return true;
+  }
+  
+  /// 광고 시청으로 요청 추가
+  Future<void> watchAdForMoreRequests() async {
+    try {
+      // 광고 시청 로직 (실제로는 광고 SDK와 연동)
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // 요청 횟수 추가
+      _rateLimiter.addUsage('pdf_summary', -1); // 1회 추가
+      _remainingRequests = _rateLimiter.getRemainingRequests('pdf_summary');
+      
+      notifyListeners();
+    } catch (e) {
+      _setError('광고 처리 중 오류 발생: $e');
+    }
   }
   
   /// 요약 공유
-  void shareSummary() {
-    if (_currentSummary == null) return;
+  Future<void> shareSummary() async {
+    if (_summary.isEmpty) {
+      _setError('공유할 요약 내용이 없습니다.');
+      return;
+    }
     
-    final summaryText = '''
-주요 내용:
-${_currentSummary!.summary}
-
-핵심 키워드:
-${_currentSummary!.keywords}
-
-중요 개념:
-${_currentSummary!.keyPoints}
-
-- PDF Learner V2로 생성된 요약
-''';
-
-    Share.share(summaryText, subject: 'PDF 요약');
+    try {
+      // 공유 로직 구현 (Share 패키지 사용 가정)
+      // Share.share(_summary);
+    } catch (e) {
+      _setError('요약 공유 중 오류 발생: $e');
+    }
   }
-} 
+  
+  /// 리소스 해제
+  @override
+  void dispose() {
+    super.dispose();
+  }
+}

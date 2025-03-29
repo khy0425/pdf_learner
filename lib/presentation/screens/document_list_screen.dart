@@ -110,10 +110,10 @@ class DocumentListScreen extends StatelessWidget {
         onPressed: () async {
           try {
             await pdfViewModel.pickAndAddPDF();
-            if (pdfViewModel.error.isNotEmpty) {
+            if (pdfViewModel.error != null && pdfViewModel.error!.isNotEmpty) {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(pdfViewModel.error)),
+                  SnackBar(content: Text(pdfViewModel.error!)),
                 );
               }
             }
@@ -375,7 +375,13 @@ class DocumentListScreen extends StatelessWidget {
               onPressed: () {
                 final newTitle = controller.text.trim();
                 if (newTitle.isNotEmpty) {
-                  viewModel.renameDocument(document, newTitle);
+                  // 내용 수정된 document 생성
+                  final updatedDoc = document.copyWith(
+                    title: newTitle,
+                    updatedAt: DateTime.now(),
+                  );
+                  // 문서 업데이트 호출
+                  viewModel.updateDocument(updatedDoc);
                   Navigator.pop(context);
                 }
               },
@@ -406,7 +412,7 @@ class DocumentListScreen extends StatelessWidget {
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               onPressed: () {
-                viewModel.deleteDocument(document);
+                viewModel.deleteDocument(document.id);
                 Navigator.pop(context);
               },
               child: const Text('삭제'),
