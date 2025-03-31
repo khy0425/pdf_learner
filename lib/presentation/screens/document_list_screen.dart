@@ -101,12 +101,24 @@ class DocumentListScreen extends StatelessWidget {
                             return _buildDocumentCard(context, document, pdfViewModel);
                           },
                           childCount: pdfViewModel.documents.length,
+                          findChildIndexCallback: (Key key) {
+                            final ValueKey<String> valueKey = key as ValueKey<String>;
+                            final String keyValue = valueKey.value;
+                            
+                            // DocumentId에서 키 값을 추출
+                            final String documentId = keyValue.split('_').last;
+                            
+                            // 문서 ID와 일치하는 인덱스 찾기
+                            int index = pdfViewModel.documents.indexWhere((doc) => doc.id == documentId);
+                            return index != -1 ? index : null;
+                          },
                         ),
                       ),
                     ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'document_list_add_pdf',
         onPressed: () async {
           try {
             await pdfViewModel.pickAndAddPDF();
@@ -135,6 +147,7 @@ class DocumentListScreen extends StatelessWidget {
   Widget _buildDocumentCard(
       BuildContext context, PDFDocument document, PDFViewModel viewModel) {
     return Card(
+      key: ValueKey('document_${document.id}'),
       elevation: 2,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(

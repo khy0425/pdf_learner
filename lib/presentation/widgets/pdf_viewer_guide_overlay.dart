@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/tutorial_provider.dart';
 
 class PDFViewerGuideOverlay extends StatefulWidget {
-  final GlobalKey menuBookKey;
-  final GlobalKey searchKey;
-  final GlobalKey summaryKey;
-  final GlobalKey quizKey;
-  final GlobalKey helpKey;
+  final Offset menuButtonPosition;
+  final Offset searchButtonPosition;
+  final Offset summaryButtonPosition;
+  final Offset quizButtonPosition;
+  final Offset helpButtonPosition;
+  final VoidCallback? onFinish;
 
   const PDFViewerGuideOverlay({
-    required this.menuBookKey,
-    required this.searchKey,
-    required this.summaryKey,
-    required this.quizKey,
-    required this.helpKey,
+    required this.menuButtonPosition,
+    required this.searchButtonPosition,
+    required this.summaryButtonPosition,
+    required this.quizButtonPosition,
+    required this.helpButtonPosition,
+    this.onFinish,
     super.key,
   });
 
@@ -29,69 +29,47 @@ class _PDFViewerGuideOverlayState extends State<PDFViewerGuideOverlay> {
   @override
   void initState() {
     super.initState();
-    // 초기 스텝은 빈 리스트로 시작
-    _steps = [];
-  }
-
-  // 버튼 위치를 찾는 함수 수정
-  Offset _findButtonPosition(GlobalKey key) {
-    try {
-      final RenderBox renderBox = key.currentContext?.findRenderObject() as RenderBox;
-      final Size size = renderBox.size;  // 버튼의 실제 크기 가져오기
-      final position = renderBox.localToGlobal(Offset.zero);
-      
-      // 버튼의 중앙 위치 계산
-      return Offset(
-        position.dx + (size.width / 2),
-        position.dy + (size.height / 2),
-      );
-    } catch (e) {
-      return const Offset(0, 0);
-    }
+    _initializeSteps();
   }
 
   // 가이드 스텝 초기화
-  void _initializeSteps(BuildContext context) {
-    if (_steps.isNotEmpty) return;
-
+  void _initializeSteps() {
     _steps = [
       GuideStep(
         title: '목차 보기',
         description: '문서의 목차를 확인하고 원하는 섹션으로 이동할 수 있습니다.',
         icon: Icons.menu_book,
-        position: _findButtonPosition(widget.menuBookKey),
+        position: widget.menuButtonPosition,
       ),
       GuideStep(
         title: '검색',
         description: 'Ctrl+F를 누르거나 이 버튼을 클릭하여 문서 내 검색이 가능합니다.',
         icon: Icons.search,
-        position: _findButtonPosition(widget.searchKey),
+        position: widget.searchButtonPosition,
       ),
       GuideStep(
         title: 'AI 요약',
         description: '현재 페이지의 내용을 AI가 요약해드립니다.',
         icon: Icons.summarize,
-        position: _findButtonPosition(widget.summaryKey),
+        position: widget.summaryButtonPosition,
       ),
       GuideStep(
         title: '퀴즈 생성',
         description: 'PDF 내용을 바탕으로 학습 퀴즈를 생성합니다.',
         icon: Icons.quiz,
-        position: _findButtonPosition(widget.quizKey),
+        position: widget.quizButtonPosition,
       ),
       GuideStep(
         title: '도우미',
         description: '이 버튼을 클릭하면 언제든지 이 가이드를 다시 볼 수 있습니다.',
         icon: Icons.help_outline,
-        position: _findButtonPosition(widget.helpKey),
+        position: widget.helpButtonPosition,
       ),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
-    _initializeSteps(context);
-    
     if (_currentStep >= _steps.length) return const SizedBox.shrink();
 
     final step = _steps[_currentStep];
@@ -122,13 +100,12 @@ class _PDFViewerGuideOverlayState extends State<PDFViewerGuideOverlay> {
               child: Container(color: Colors.black54),
             ),
           ),
-          // 하이라이트 표시 수정
+          // 하이라이트 표시
           Positioned(
-            // 버튼 중앙에서 원의 반지름만큼 뺀 위치
             left: step.position.dx - 25,
             top: step.position.dy - 25,
             child: Container(
-              width: 50,  // 버튼을 충분히 감싸도록 크기 증가
+              width: 50,
               height: 50,
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.1),
@@ -219,7 +196,9 @@ class _PDFViewerGuideOverlayState extends State<PDFViewerGuideOverlay> {
   }
 
   void _completeGuide() {
-    context.read<TutorialProvider>().completePDFViewerGuide();
+    if (widget.onFinish != null) {
+      widget.onFinish!();
+    }
   }
 }
 

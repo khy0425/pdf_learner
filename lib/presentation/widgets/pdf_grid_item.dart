@@ -51,19 +51,13 @@ class PdfGridItem extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   // 썸네일 이미지
-                  pdfFile.thumbnail != null
-                      ? Image.memory(
-                          pdfFile.thumbnail!,
+                  pdfFile.thumbnailPath != null && pdfFile.thumbnailPath!.isNotEmpty
+                      ? Image.file(
+                          File(pdfFile.thumbnailPath!),
                           fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => _buildDefaultThumbnail(),
                         )
-                      : Container(
-                          color: Colors.grey.shade200,
-                          child: const Icon(
-                            Icons.picture_as_pdf,
-                            size: 48,
-                            color: Colors.redAccent,
-                          ),
-                        ),
+                      : _buildDefaultThumbnail(),
                         
                   // 즐겨찾기 버튼
                   Positioned(
@@ -144,6 +138,17 @@ class PdfGridItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  Widget _buildDefaultThumbnail() {
+    return Container(
+      color: Colors.grey.shade200,
+      child: const Icon(
+        Icons.picture_as_pdf,
+        size: 48,
+        color: Colors.redAccent,
       ),
     );
   }

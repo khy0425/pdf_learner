@@ -12,14 +12,12 @@ class ThemeViewModel extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   final SharedPreferences _prefs;
   
-  // 실제 사용할 테마들
-  ThemeData _lightTheme = AppTheme.lightTheme;
-  ThemeData _darkTheme = AppTheme.darkTheme;
+  // 사용할 테마 - core/theme/app_theme.dart에서 가져옴
+  ThemeData get lightTheme => AppTheme.lightTheme;
+  ThemeData get darkTheme => AppTheme.darkTheme;
   
   // 누락된 getter 추가
   ThemeMode get themeMode => _themeMode;
-  ThemeData get lightTheme => _lightTheme;
-  ThemeData get darkTheme => _darkTheme;
   
   ThemeViewModel({required SharedPreferences sharedPreferences}) 
       : _prefs = sharedPreferences {
@@ -98,18 +96,18 @@ class ThemeViewModel extends ChangeNotifier {
   /// 현재 테마 모드에 맞는 ThemeData 반환
   ThemeData get themeData {
     return _themeMode == ThemeMode.light 
-        ? _lightTheme 
-        : (_themeMode == ThemeMode.dark ? _darkTheme : WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark ? _darkTheme : _lightTheme);
+        ? lightTheme 
+        : (_themeMode == ThemeMode.dark ? darkTheme : WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark ? darkTheme : lightTheme);
   }
   
   // 현재 실제 사용되는 테마 (다크모드 여부 고려)
   ThemeData get currentTheme {
     if (_themeMode == ThemeMode.system) {
       return SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
-          ? _darkTheme
-          : _lightTheme;
+          ? darkTheme
+          : lightTheme;
     }
-    return _themeMode == ThemeMode.dark ? _darkTheme : _lightTheme;
+    return _themeMode == ThemeMode.dark ? darkTheme : lightTheme;
   }
   
   // 다크 모드 여부
@@ -135,8 +133,8 @@ class ThemeViewModel extends ChangeNotifier {
   
   // 커스텀 테마 적용 (옵션)
   void applyCustomTheme(ThemeData lightTheme, ThemeData darkTheme) {
-    _lightTheme = lightTheme;
-    _darkTheme = darkTheme;
+    // 직접 테마를 관리하지 않고, AppTheme에서 정의된 테마 사용
+    // 필요한 경우 AppTheme 클래스에 커스텀 테마 적용 메서드 추가 필요
     _updateSystemUI();
     notifyListeners();
   }

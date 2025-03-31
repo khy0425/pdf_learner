@@ -16,6 +16,8 @@ import '../../core/base/result.dart';
 import '../../presentation/viewmodels/auth_viewmodel.dart';
 import '../../presentation/viewmodels/pdf_viewmodel.dart';
 import '../../presentation/viewmodels/pdf_file_viewmodel.dart';
+import '../../presentation/viewmodels/theme_viewmodel.dart';
+import '../../presentation/viewmodels/locale_viewmodel.dart';
 import '../../services/analytics/analytics_service.dart';
 import '../../services/analytics/analytics_service_impl.dart' as analytics_impl;
 import '../../services/firebase/firebase_service.dart';
@@ -84,7 +86,7 @@ void _registerServices() {
     )
   );
   
-  // ThumbnailService 등록
+  // ThumbnailService 등록 - 올바른 클래스 참조
   getIt.registerLazySingleton<ThumbnailService>(() => 
     ThumbnailServiceImpl(getIt<StorageService>())
   );
@@ -137,6 +139,20 @@ void _registerRepositories() {
 
 /// 뷰모델 의존성을 등록합니다.
 void _registerViewModels() {
+  // ThemeViewModel 등록 - 싱글톤으로 변경하여 항상 동일한 인스턴스 사용하도록 수정
+  getIt.registerLazySingleton<ThemeViewModel>(() => 
+    ThemeViewModel(
+      sharedPreferences: getIt<SharedPreferences>(),
+    )
+  );
+  
+  // LocaleViewModel 등록 - 싱글톤으로 변경
+  getIt.registerLazySingleton<LocaleViewModel>(() => 
+    LocaleViewModel(
+      sharedPreferences: getIt<SharedPreferences>(),
+    )
+  );
+  
   // 인증 뷰모델 등록
   getIt.registerFactory<AuthViewModel>(() => 
     AuthViewModel(

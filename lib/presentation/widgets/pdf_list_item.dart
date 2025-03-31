@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/pdf_file_info.dart';
 import '../viewmodels/pdf_file_viewmodel.dart';
 import '../../core/utils/file_utils.dart';
+import 'dart:io';
 
 /// PDF 목록 아이템 위젯
 class PdfListItem extends StatelessWidget {
@@ -55,19 +56,13 @@ class PdfListItem extends StatelessWidget {
                   color: Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: pdfFile.thumbnail != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          pdfFile.thumbnail!,
-                          fit: BoxFit.cover,
-                        ),
+                child: pdfFile.thumbnailPath != null && pdfFile.thumbnailPath!.isNotEmpty
+                    ? Image.file(
+                        File(pdfFile.thumbnailPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _buildDefaultThumbnail(),
                       )
-                    : const Icon(
-                        Icons.picture_as_pdf,
-                        size: 30,
-                        color: Colors.redAccent,
-                      ),
+                    : _buildDefaultThumbnail(),
               ),
               const SizedBox(width: 16),
               
@@ -167,5 +162,13 @@ class PdfListItem extends StatelessWidget {
   
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildDefaultThumbnail() {
+    return const Icon(
+      Icons.picture_as_pdf,
+      size: 30,
+      color: Colors.redAccent,
+    );
   }
 } 

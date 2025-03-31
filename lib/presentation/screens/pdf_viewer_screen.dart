@@ -1,8 +1,21 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:intl/intl.dart';
+import 'package:get_it/get_it.dart';
+
 import '../../domain/models/pdf_document.dart';
+import '../../domain/models/pdf_bookmark.dart';
+import '../widgets/bookmark_dialog.dart';
 import '../viewmodels/pdf_viewmodel.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../theme/app_theme.dart';
@@ -29,6 +42,9 @@ class PdfViewerScreen extends StatefulWidget {
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   /// PDF 제어 컨트롤러
   late PdfViewerController _pdfViewerController;
+  
+  /// PDF 뷰어 키 - 정적으로 선언하여 여러 인스턴스 생성 방지
+  static final GlobalKey<SfPdfViewerState> _pdfViewerScreenKey = GlobalKey();
   
   /// 현재 페이지
   int _currentPage = 1;
@@ -65,7 +81,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     
     // 뷰모델 접근
     final pdfViewModel = Provider.of<PDFViewModel>(context);
-    final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+    final authViewModel = Provider.of<AuthViewModel>(context);
     
     return Scaffold(
       appBar: AppBar(
@@ -210,6 +226,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           Expanded(
             child: SfPdfViewer.memory(
               widget.pdfBytes,
+              key: _pdfViewerScreenKey,
               controller: _pdfViewerController,
               canShowPasswordDialog: true,
               onPageChanged: (PdfPageChangedDetails details) {

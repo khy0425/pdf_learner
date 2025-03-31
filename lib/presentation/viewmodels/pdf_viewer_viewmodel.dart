@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/base/base_viewmodel.dart';
 import '../../core/base/result.dart';
@@ -104,7 +105,7 @@ class PDFViewerViewModel extends BaseViewModel {
         _localDataSource = localDataSource,
         _document = initialDocument,
         _documentId = documentId {
-    _init();
+    _initialize();
   }
   
   /// 현재 문서 getter
@@ -179,40 +180,15 @@ class PDFViewerViewModel extends BaseViewModel {
   /// PDF 파일 로드하기
   Future<Uint8List> loadPdf() async {
     if (_document == null) {
-      return Uint8List(0);
+      throw Exception('문서가 로드되지 않았습니다.');
     }
     
     try {
-      // URL인 경우 다운로드
-      if (_document!.filePath.startsWith('http://') || _document!.filePath.startsWith('https://')) {
-        final response = await http.get(Uri.parse(_document!.filePath));
-        if (response.statusCode == 200) {
-          return response.bodyBytes;
-        }
-      }
-      
-      // 로컬 파일인 경우
-      final file = File(_document!.filePath);
-      if (await file.exists()) {
-        return await file.readAsBytes();
-      }
+      final result = await _pdfService.loadPdf(_document!.filePath);
+      return result;
     } catch (e) {
-      debugPrint('PDF 로딩 오류: $e');
+      throw Exception('PDF 로드 실패: $e');
     }
-    
-    // 샘플 PDF 반환 (실패 시)
-    if (kIsWeb) {
-      try {
-        final response = await http.get(Uri.parse('assets/sample.pdf'));
-        if (response.statusCode == 200) {
-          return response.bodyBytes;
-        }
-      } catch (e) {
-        debugPrint('샘플 PDF 로딩 오류: $e');
-      }
-    }
-    
-    return Uint8List(0);
   }
   
   /// 즐겨찾기 토글
@@ -712,7 +688,7 @@ class PDFViewerViewModel extends BaseViewModel {
     }
   }
 
-  Future<void> _init() async {
+  Future<void> _initialize() async {
     _setStatus(PDFViewerStatus.loading);
     
     try {

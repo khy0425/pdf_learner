@@ -230,6 +230,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> with SingleTickerPr
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'mobile_home_add',
         onPressed: _showAddOptions,
         child: const Icon(Icons.add),
       ),
@@ -278,6 +279,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> with SingleTickerPr
                 onTap: (file) => _openPdf(context, file),
                 onFavoriteToggle: (file) => _toggleFavorite(file),
                 onDelete: (file) => _showDeleteDialog(file),
+                key: ValueKey('pdf_grid_${pdfFile.id}'),
               );
             },
           )
@@ -291,6 +293,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> with SingleTickerPr
                 onTap: (file) => _openPdf(context, file),
                 onFavoriteToggle: (file) => _toggleFavorite(file),
                 onDelete: (file) => _showDeleteDialog(file),
+                key: ValueKey('pdf_${pdfFile.id}'),
               );
             },
           );
@@ -307,7 +310,9 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> with SingleTickerPr
         pageCount: file.pageCount,
         size: file.size,
         fileSize: file.fileSize,
-        thumbnailUrl: file.thumbnail != null ? 'memory://${file.id}' : '',
+        thumbnailUrl: file.thumbnailPath != null && file.thumbnailPath!.isNotEmpty 
+            ? file.thumbnailPath 
+            : '',
       );
 
       // PDF 뷰어 페이지로 이동

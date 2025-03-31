@@ -5,6 +5,7 @@ import '../../presentation/viewmodels/pdf_viewer_viewmodel.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_adaptive_scaffold/flutter_adaptive_scaffold.dart';
 import 'dart:io';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 /// 데스크톱 홈 화면
 class DesktopHomeScreen extends StatefulWidget {
@@ -258,6 +259,7 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
       itemBuilder: (context, index) {
         final document = documents[index];
         return ListTile(
+          key: ValueKey('desktop_list_${document.id}'),
           leading: const Icon(Icons.picture_as_pdf),
           title: Text(document.title),
           subtitle: Text('${document.pageCount} 페이지 • ${_formatFileSize(document.fileSize)}'),
@@ -290,20 +292,37 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
     final sortedDocuments = [...documents]
       ..sort((a, b) => b.lastAccessedAt.compareTo(a.lastAccessedAt));
 
-    return ListView.builder(
-      itemCount: sortedDocuments.length,
-      itemBuilder: (context, index) {
-        final document = sortedDocuments[index];
-        return ListTile(
-          leading: const Icon(Icons.picture_as_pdf),
-          title: Text(document.title),
-          subtitle: Text('최근 조회: ${_formatDate(document.lastAccessedAt)}'),
-          trailing: Text('조회 ${document.accessCount}회'),
-          onTap: () async {
-            await pdfViewModel.openDocument(document);
-          },
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          AppLocalizations.of(context)!.recentDocuments,
+          color: Colors.blueGrey.shade700,
+        ),
+        const SizedBox(height: 12),
+        if (sortedDocuments.isEmpty)
+          _buildEmptyState(
+            message: AppLocalizations.of(context)!.noRecentDocuments,
+            icon: Icons.history,
+          )
+        else
+          SizedBox(
+            height: 220,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: sortedDocuments.length,
+              itemBuilder: (context, index) {
+                final document = sortedDocuments[index];
+                return Container(
+                  key: ValueKey('desktop_recent_${document.id}'),
+                  width: 160,
+                  margin: const EdgeInsets.only(right: 16),
+                  child: _buildDocumentCard(document),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -505,6 +524,81 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, {Color? color}) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: color ?? Colors.black,
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({String? message, IconData? icon}) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          icon ?? Icons.error,
+          size: 80,
+          color: Colors.grey,
+        ),
+        SizedBox(height: 16),
+        Text(
+          message ?? '데이터를 불러오는 중 오류가 발생했습니다',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDocumentCard(Document document) {
+    return Card(
+      elevation: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.network(
+            document.thumbnailUrl,
+            height: 120,
+            width: double.infinity,
+            fit: BoxFit.cover,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  document.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${document.pageCount} 페이지 • ${_formatFileSize(document.fileSize)}',
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],

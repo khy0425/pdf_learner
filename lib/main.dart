@@ -15,6 +15,7 @@ import 'presentation/screens/home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf_learner_v2/core/utils/web_utils.dart';
 import 'core/base/result.dart';
+import 'core/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,6 +110,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<PDFViewModel>(
           create: (_) => getIt<PDFViewModel>(),
         ),
+        ChangeNotifierProvider<AuthViewModel>(
+          create: (_) => getIt<AuthViewModel>(),
+        ),
       ],
       child: Consumer2<ThemeViewModel, LocaleViewModel>(
         builder: (context, themeViewModel, localeViewModel, child) {
@@ -116,8 +120,8 @@ class MyApp extends StatelessWidget {
             title: 'PDF Learner',
             debugShowCheckedModeBanner: false,
             themeMode: themeViewModel.themeMode,
-            theme: themeViewModel.lightTheme,
-            darkTheme: themeViewModel.darkTheme,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
             locale: localeViewModel.locale,
             supportedLocales: localeViewModel.supportedLocales,
             localizationsDelegates: const [

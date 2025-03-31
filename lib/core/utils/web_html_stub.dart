@@ -1,4 +1,5 @@
 /// dart:html을 대체하기 위한 비웹 환경 스텁 클래스
+import 'package:flutter/foundation.dart';
 
 /// HTML 스텁 구현 - 웹이 아닌 환경에서 사용됨
 class Window {
@@ -36,8 +37,6 @@ class LocalStorage {
 
 /// 전역 window 객체 스텁
 final Window window = Window();
-
-import 'package:flutter/foundation.dart';
 
 /// 웹 HTML 유틸리티 스텁 클래스
 /// 

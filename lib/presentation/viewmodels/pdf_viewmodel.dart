@@ -162,7 +162,7 @@ class PDFViewModel extends ChangeNotifier {
   
   /// PDF 문서 목록 가져오기
   Future<void> loadDocuments() async {
-    _setStatus(PDFStatus.loading);
+    _setLoading(true);
 
     try {
       // 미회원 사용자인 경우 만료된 문서 정리
@@ -179,6 +179,8 @@ class PDFViewModel extends ChangeNotifier {
       }
     } catch (e) {
       _setStatus(PDFStatus.error);
+    } finally {
+      _setLoading(false);
     }
   }
 

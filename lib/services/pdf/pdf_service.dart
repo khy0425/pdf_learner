@@ -315,4 +315,27 @@ class PDFServiceImpl implements PDFService {
       return Result.failure(Exception('PDF 다운로드 실패: $e'));
     }
   }
+
+  Future<Uint8List> loadPdf(String filePath) async {
+    try {
+      // URL인 경우 다운로드
+      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+        final response = await http.get(Uri.parse(filePath));
+        if (response.statusCode == 200) {
+          return response.bodyBytes;
+        }
+        throw Exception('PDF 다운로드 실패: ${response.statusCode}');
+      }
+      
+      // 로컬 파일인 경우
+      final file = File(filePath);
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+      throw Exception('PDF 파일을 찾을 수 없습니다: $filePath');
+    } catch (e) {
+      debugPrint('PDF 로딩 오류: $e');
+      throw Exception('PDF 로드 실패: $e');
+    }
+  }
 } 
