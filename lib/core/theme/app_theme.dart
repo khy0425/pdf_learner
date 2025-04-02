@@ -76,6 +76,7 @@ class AppTheme {
         color: neutral900,
         fontSize: 20,
         fontWeight: FontWeight.w600,
+        inherit: true,
       ),
       iconTheme: IconThemeData(color: neutral900),
     ),
@@ -101,6 +102,7 @@ class AppTheme {
         textStyle: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
+          inherit: true,
         ),
       ),
     ),
@@ -111,6 +113,7 @@ class AppTheme {
         textStyle: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w500,
+          inherit: true,
         ),
       ),
     ),
@@ -126,6 +129,7 @@ class AppTheme {
         textStyle: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
+          inherit: true,
         ),
       ),
     ),
@@ -152,6 +156,7 @@ class AppTheme {
       hintStyle: TextStyle(
         color: neutral500,
         fontSize: 16,
+        inherit: true,
       ),
     ),
     checkboxTheme: CheckboxThemeData(
@@ -203,6 +208,7 @@ class AppTheme {
       extendedTextStyle: TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w500,
+        inherit: true,
       ),
     ),
     tabBarTheme: TabBarTheme(
@@ -213,10 +219,12 @@ class AppTheme {
       labelStyle: TextStyle(
         fontSize: 15,
         fontWeight: FontWeight.w600,
+        inherit: true,
       ),
       unselectedLabelStyle: TextStyle(
         fontSize: 15,
         fontWeight: FontWeight.w500,
+        inherit: true,
       ),
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -228,9 +236,11 @@ class AppTheme {
       selectedLabelStyle: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w500,
+        inherit: true,
       ),
       unselectedLabelStyle: TextStyle(
         fontSize: 12,
+        inherit: true,
       ),
     ),
     dividerTheme: DividerThemeData(
@@ -239,79 +249,21 @@ class AppTheme {
       space: 1,
     ),
     textTheme: TextTheme(
-      displayLarge: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.bold,
-        fontSize: 32,
-      ),
-      displayMedium: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.bold,
-        fontSize: 28,
-      ),
-      displaySmall: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.bold,
-        fontSize: 24,
-      ),
-      headlineLarge: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.bold,
-        fontSize: 22,
-      ),
-      headlineMedium: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.w600,
-        fontSize: 20,
-      ),
-      headlineSmall: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.w600,
-        fontSize: 18,
-      ),
-      titleLarge: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.w600,
-        fontSize: 18,
-      ),
-      titleMedium: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.w500,
-        fontSize: 16,
-      ),
-      titleSmall: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.w500,
-        fontSize: 14,
-      ),
-      bodyLarge: TextStyle(
-        color: neutral800,
-        fontSize: 16,
-        height: 1.5,
-      ),
-      bodyMedium: TextStyle(
-        color: neutral800,
-        fontSize: 14,
-        height: 1.5,
-      ),
-      bodySmall: TextStyle(
-        color: neutral700,
-        fontSize: 12,
-        height: 1.5,
-      ),
-      labelLarge: TextStyle(
-        color: neutral900, 
-        fontWeight: FontWeight.w500,
-        fontSize: 14,
-      ),
-      labelMedium: TextStyle(
-        color: neutral900,
-        fontSize: 12,
-      ),
-      labelSmall: TextStyle(
-        color: neutral900,
-        fontSize: 11,
-      ),
+      displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: neutral900, inherit: true),
+      displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: neutral900, inherit: true),
+      displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: neutral900, inherit: true),
+      headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: neutral900, inherit: true),
+      headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: neutral900, inherit: true),
+      headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: neutral900, inherit: true),
+      titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: neutral900, inherit: true),
+      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: neutral900, inherit: true),
+      titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: neutral900, inherit: true),
+      bodyLarge: TextStyle(fontSize: 16, color: neutral900, inherit: true),
+      bodyMedium: TextStyle(fontSize: 14, color: neutral900, inherit: true),
+      bodySmall: TextStyle(fontSize: 12, color: neutral900, inherit: true),
+      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: neutral900, inherit: true),
+      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: neutral900, inherit: true),
+      labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: neutral900, inherit: true),
     ),
     // 추가: UPDF 스타일의 슬라이더 테마
     sliderTheme: SliderThemeData(
@@ -333,6 +285,7 @@ class AppTheme {
       textStyle: TextStyle(
         color: neutral800,
         fontSize: 14,
+        inherit: true,
       ),
     ),
   );
@@ -358,6 +311,7 @@ class AppTheme {
         color: Colors.white,
         fontSize: 20,
         fontWeight: FontWeight.w600,
+        inherit: true,
       ),
       iconTheme: IconThemeData(color: Colors.white),
     ),
@@ -383,6 +337,7 @@ class AppTheme {
         textStyle: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
+          inherit: true,
         ),
       ),
     ),
@@ -405,6 +360,7 @@ class AppTheme {
       hintStyle: TextStyle(
         color: Color(0xFF9E9E9E),
         fontSize: 16,
+        inherit: true,
       ),
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -416,85 +372,29 @@ class AppTheme {
       selectedLabelStyle: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w500,
+        inherit: true,
       ),
       unselectedLabelStyle: TextStyle(
         fontSize: 12,
+        inherit: true,
       ),
     ),
     textTheme: TextTheme(
-      displayLarge: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.bold,
-        fontSize: 32,
-      ),
-      displayMedium: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.bold,
-        fontSize: 28,
-      ),
-      displaySmall: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.bold,
-        fontSize: 24,
-      ),
-      headlineLarge: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.bold,
-        fontSize: 22,
-      ),
-      headlineMedium: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.w600,
-        fontSize: 20,
-      ),
-      headlineSmall: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.w600,
-        fontSize: 18,
-      ),
-      titleLarge: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.w600,
-        fontSize: 18,
-      ),
-      titleMedium: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.w500,
-        fontSize: 16,
-      ),
-      titleSmall: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.w500,
-        fontSize: 14,
-      ),
-      bodyLarge: TextStyle(
-        color: Color(0xFFE0E0E0),
-        fontSize: 16,
-        height: 1.5,
-      ),
-      bodyMedium: TextStyle(
-        color: Color(0xFFE0E0E0),
-        fontSize: 14,
-        height: 1.5,
-      ),
-      bodySmall: TextStyle(
-        color: Color(0xFFBDBDBD),
-        fontSize: 12,
-        height: 1.5,
-      ),
-      labelLarge: TextStyle(
-        color: Colors.white, 
-        fontWeight: FontWeight.w500,
-        fontSize: 14,
-      ),
-      labelMedium: TextStyle(
-        color: Colors.white,
-        fontSize: 12,
-      ),
-      labelSmall: TextStyle(
-        color: Colors.white,
-        fontSize: 11,
-      ),
+      displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, inherit: true),
+      displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, inherit: true),
+      displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, inherit: true),
+      headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, inherit: true),
+      headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, inherit: true),
+      headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, inherit: true),
+      titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white, inherit: true),
+      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white, inherit: true),
+      titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white, inherit: true),
+      bodyLarge: TextStyle(fontSize: 16, color: Color(0xFFE0E0E0), inherit: true),
+      bodyMedium: TextStyle(fontSize: 14, color: Color(0xFFE0E0E0), inherit: true),
+      bodySmall: TextStyle(fontSize: 12, color: Color(0xFFBDBDBD), inherit: true),
+      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white, inherit: true),
+      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white, inherit: true),
+      labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Colors.white, inherit: true),
     ),
     // 다크 모드에서도 동일하게 적용
     dialogTheme: DialogTheme(

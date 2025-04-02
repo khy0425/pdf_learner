@@ -542,6 +542,7 @@ class DocumentSearchDelegate extends SearchDelegate<PDFDocument?> {
       itemBuilder: (context, index) {
         final doc = results[index];
         return ListTile(
+          key: ValueKey('search_result_${doc.id}'),
           leading: Container(
             width: 40,
             height: 40,

@@ -8,6 +8,7 @@ import 'document_list_screen.dart';
 import 'pdf_viewer_screen.dart';
 import '../../core/localization/app_localizations.dart';
 import 'package:get_it/get_it.dart';
+import 'dart:io';
 
 /// 반응형 홈 스크린
 /// 
@@ -230,9 +231,10 @@ class HomeTab extends StatelessWidget {
                             : pdfViewModel.documents.length,
                         itemBuilder: (context, index) {
                           final document = pdfViewModel.documents[index];
-                          return Padding(
+                          return Container(
                             key: ValueKey('recent_${document.id}'),
-                            padding: const EdgeInsets.only(right: 12),
+                            width: 140,
+                            margin: const EdgeInsets.only(right: 12),
                             child: _buildDocumentCard(context, document),
                           );
                         },
@@ -280,6 +282,7 @@ class HomeTab extends StatelessWidget {
         title,
         style: textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.bold,
+          inherit: true,
         ),
       ),
     );
@@ -305,6 +308,7 @@ class HomeTab extends StatelessWidget {
             style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 16,
+              inherit: true,
             ),
           ),
         ],
@@ -333,9 +337,10 @@ class HomeTab extends StatelessWidget {
         itemCount: favoriteDocuments.length > 5 ? 5 : favoriteDocuments.length,
         itemBuilder: (context, index) {
           final document = favoriteDocuments[index];
-          return Padding(
+          return Container(
             key: ValueKey('favorite_${document.id}'),
-            padding: const EdgeInsets.only(right: 12),
+            width: 140,
+            margin: const EdgeInsets.only(right: 12),
             child: _buildDocumentCard(context, document),
           );
         },
@@ -393,31 +398,67 @@ class HomeTab extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   alignment: Alignment.center,
-                  child: document.thumbnail != null
+                  child: document.thumbnailPath != null && document.thumbnailPath!.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.memory(
-                            document.thumbnail,
+                          child: Image.file(
+                            File(document.thumbnailPath!),
                             fit: BoxFit.cover,
                             width: double.infinity,
                             height: double.infinity,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              color: Colors.grey.shade200,
+                              child: const Icon(
+                                Icons.picture_as_pdf,
+                                size: 48,
+                                color: Colors.redAccent,
+                              ),
+                            ),
                           ),
                         )
-                      : Icon(
-                          Icons.picture_as_pdf,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary,
+                      : Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(
+                            Icons.picture_as_pdf,
+                            size: 48,
+                            color: Colors.redAccent,
+                          ),
                         ),
                 ),
               ),
+              
               const SizedBox(height: 8),
+              
+              // 문서 제목
               Text(
-                document.title ?? '제목 없음',
+                document.title,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
+              ),
+              
+              const SizedBox(height: 4),
+              
+              // 문서 정보
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${document.pageCount}페이지',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  
+                  if (document.isFavorite)
+                    const Icon(
+                      Icons.favorite,
+                      size: 16,
+                      color: Colors.red,
+                    ),
+                ],
               ),
             ],
           ),

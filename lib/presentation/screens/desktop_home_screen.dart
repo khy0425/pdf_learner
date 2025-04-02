@@ -308,18 +308,22 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
         else
           SizedBox(
             height: 220,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: sortedDocuments.length,
-              itemBuilder: (context, index) {
-                final document = sortedDocuments[index];
-                return Container(
-                  key: ValueKey('desktop_recent_${document.id}'),
-                  width: 160,
-                  margin: const EdgeInsets.only(right: 16),
-                  child: _buildDocumentCard(document),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: sortedDocuments.length,
+                  itemBuilder: (context, index) {
+                    final document = sortedDocuments[index];
+                    return Container(
+                      key: ValueKey('desktop_recent_${document.id}'),
+                      width: 160,
+                      margin: const EdgeInsets.only(right: 16),
+                      child: _buildDocumentCard(document),
+                    );
+                  },
                 );
-              },
+              }
             ),
           ),
       ],
@@ -332,8 +336,8 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
       children: [
         ListTile(
           leading: const Icon(Icons.person),
-          title: const Text('계정 설정'),
-          subtitle: const Text('이메일 및 프로필 관리'),
+          title: const Text('계정 설정', style: TextStyle(inherit: true)),
+          subtitle: const Text('이메일 및 프로필 관리', style: TextStyle(inherit: true)),
           onTap: () {
             // TODO: 계정 설정 페이지로 이동
           },
@@ -341,8 +345,8 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.dark_mode),
-          title: const Text('테마 설정'),
-          subtitle: const Text('앱 테마 및 색상 설정'),
+          title: const Text('테마 설정', style: TextStyle(inherit: true)),
+          subtitle: const Text('앱 테마 및 색상 설정', style: TextStyle(inherit: true)),
           onTap: () {
             // TODO: 테마 설정 페이지로 이동
           },
@@ -350,8 +354,8 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.language),
-          title: const Text('언어 설정'),
-          subtitle: const Text('앱 언어 변경'),
+          title: const Text('언어 설정', style: TextStyle(inherit: true)),
+          subtitle: const Text('앱 언어 변경', style: TextStyle(inherit: true)),
           onTap: () {
             // TODO: 언어 설정 페이지로 이동
           },
@@ -359,8 +363,8 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.settings),
-          title: const Text('고급 설정'),
-          subtitle: const Text('앱 성능 및 저장 공간 설정'),
+          title: const Text('고급 설정', style: TextStyle(inherit: true)),
+          subtitle: const Text('앱 성능 및 저장 공간 설정', style: TextStyle(inherit: true)),
           onTap: () {
             // TODO: 고급 설정 페이지로 이동
           },
@@ -368,8 +372,8 @@ class _DesktopHomeScreenState extends State<DesktopHomeScreen> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.info),
-          title: const Text('앱 정보'),
-          subtitle: const Text('버전, 라이선스, 개인정보처리방침'),
+          title: const Text('앱 정보', style: TextStyle(inherit: true)),
+          subtitle: const Text('버전, 라이선스, 개인정보처리방침', style: TextStyle(inherit: true)),
           onTap: () {
             // TODO: 앱 정보 페이지로 이동
           },

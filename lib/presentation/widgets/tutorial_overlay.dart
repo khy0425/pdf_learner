@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/tutorial_provider.dart';
+import '../tutorial_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class TutorialOverlay extends StatefulWidget {
   final Widget child;
 
-  const TutorialOverlay({Key? key, required this.child}) : super(key: key);
+  const TutorialOverlay({
+    required Key key, 
+    required this.child,
+  }) : super(key: key);
 
   @override
   State<TutorialOverlay> createState() => _TutorialOverlayState();
@@ -42,25 +45,29 @@ class _TutorialOverlayState extends State<TutorialOverlay> with SingleTickerProv
     super.dispose();
   }
   
-  // 대상 위젯의 위치와 크기 얻기
-  void _updateTargetRect(BuildContext context, GlobalKey key) {
+  // BuildContext를 사용하여 위젯 위치 계산 (GlobalKey 사용하지 않음)
+  void _updateTargetRect(BuildContext widgetContext) {
     try {
-      RenderBox? renderBox = key.currentContext?.findRenderObject() as RenderBox?;
-      if (renderBox != null) {
-        final position = renderBox.localToGlobal(Offset.zero);
-        final size = renderBox.size;
+      if (widgetContext == null || !mounted) return;
+      
+      final RenderObject? renderObject = widgetContext.findRenderObject();
+      if (renderObject == null || !renderObject.attached) return;
+      
+      final RenderBox renderBox = renderObject as RenderBox;
+      final Offset offset = renderBox.localToGlobal(Offset.zero);
+      
+      if (mounted) {
         setState(() {
           _targetRect = Rect.fromLTWH(
-            position.dx,
-            position.dy,
-            size.width,
-            size.height,
+            offset.dx,
+            offset.dy,
+            renderBox.size.width,
+            renderBox.size.height,
           );
         });
       }
     } catch (e) {
-      print('위치 계산 오류: $e');
-      _targetRect = null;
+      debugPrint('위젯 위치 계산 중 오류: $e');
     }
   }
   
@@ -114,9 +121,11 @@ class _TutorialOverlayState extends State<TutorialOverlay> with SingleTickerProv
           return widget.child;
         }
         
-        // 대상 위젯의 위치 업데이트
+        // 포스트 프레임 콜백을 사용하여 위젯 위치 업데이트
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _updateTargetRect(context, currentStep.targetKey);
+          if (mounted) {
+            _updateTargetRect(context);
+          }
         });
         
         return Stack(
@@ -287,6 +296,7 @@ class _TutorialTooltip extends StatelessWidget {
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.purple,
+                    inherit: true,
                   ),
                 ),
               ),
@@ -315,6 +325,7 @@ class _TutorialTooltip extends StatelessWidget {
               fontSize: 14,
               color: Colors.black87,
               height: 1.4,
+              inherit: true,
             ),
           ),
           
@@ -377,12 +388,13 @@ class TutorialPage extends StatelessWidget {
         const SizedBox(height: 16),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(inherit: true),
         ),
         const SizedBox(height: 8),
         Text(
           description,
           textAlign: TextAlign.center,
+          style: const TextStyle(inherit: true),
         ),
       ],
     );

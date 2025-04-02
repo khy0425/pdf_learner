@@ -16,6 +16,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf_learner_v2/core/utils/web_utils.dart';
 import 'core/base/result.dart';
 import 'core/theme/app_theme.dart';
+import 'presentation/tutorial_provider.dart';
+
+// 전역 키 대신 유니크 키 사용 - 중복 키 문제 해결
+final rootScaffoldKey = UniqueKey();
+final homeScaffoldKey = UniqueKey();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,6 +105,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
+      key: rootScaffoldKey,
       providers: [
         ChangeNotifierProvider<ThemeViewModel>(
           create: (_) => getIt<ThemeViewModel>(),
@@ -112,6 +118,10 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<AuthViewModel>(
           create: (_) => getIt<AuthViewModel>(),
+        ),
+        // 튜토리얼 프로바이더 추가
+        ChangeNotifierProvider<TutorialProvider>(
+          create: (_) => TutorialProvider(),
         ),
       ],
       child: Consumer2<ThemeViewModel, LocaleViewModel>(
@@ -129,7 +139,7 @@ class MyApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: const InitialPage(), // 초기 페이지 또는 스플래시 화면
+            home: const InitialPage(),
           );
         },
       ),
@@ -227,7 +237,7 @@ class _InitialPageState extends State<InitialPage> {
                 Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
+                  style: const TextStyle(fontSize: 16, inherit: true),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -238,7 +248,7 @@ class _InitialPageState extends State<InitialPage> {
                     });
                     _loadInitialData();
                   },
-                  child: const Text('다시 시도'),
+                  child: const Text('다시 시도', style: TextStyle(inherit: true)),
                 ),
               ],
             ),
@@ -247,7 +257,7 @@ class _InitialPageState extends State<InitialPage> {
       );
     }
     
-    // 여기서 홈 화면 또는 로그인 화면으로 이동
-    return const HomeScreen();
+    // 여기서 홈 화면으로 이동 (key 지정)
+    return HomeScreen(key: homeScaffoldKey);
   }
 }

@@ -33,6 +33,7 @@ class DocumentGridView extends StatelessWidget {
           final document = documents[index];
           
           return DocumentCardWidget(
+            key: ValueKey('document_grid_${document.id}'),
             document: document,
             onTap: () => _openPdfViewer(context, document),
             onLongPress: () => onDocumentLongPress(document),

@@ -5,8 +5,15 @@ import '../providers/pdf_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/pdf_list_item.dart';
 import '../widgets/drag_drop_area.dart';
-import '../providers/tutorial_provider.dart';
+import '../tutorial_provider.dart';
 import '../widgets/tutorial_overlay.dart';
+
+// 고유 키 생성 - 중복 키 문제 해결
+final desktopHomeKey = UniqueKey();
+final helpButtonKey = UniqueKey();
+final themeButtonKey = UniqueKey();
+final sidebarKey = UniqueKey();
+final contentKey = UniqueKey();
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({super.key});
@@ -16,9 +23,13 @@ class DesktopHomePage extends StatefulWidget {
 }
 
 class _DesktopHomePageState extends State<DesktopHomePage> {
+  late UniqueKey _tutorialOverlayKey;
+  
   @override
   void initState() {
     super.initState();
+    _tutorialOverlayKey = UniqueKey();
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PDFProvider>().loadSavedPDFs();
     });
@@ -32,6 +43,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     return Consumer<TutorialProvider>(
       builder: (context, tutorialProvider, child) {
         return Stack(
+          key: desktopHomeKey,
           children: [
             Scaffold(
               appBar: AppBar(
@@ -47,6 +59,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        inherit: true,
                       ),
                     ),
                     Text(
@@ -54,12 +67,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.primary,
+                        inherit: true,
                       ),
                     ),
                   ],
                 ),
                 actions: [
                   IconButton(
+                    key: helpButtonKey,
                     icon: Icon(
                       Icons.help_outline,
                       color: colorScheme.primary,
@@ -69,6 +84,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                     padding: const EdgeInsets.all(8),
                   ),
                   IconButton(
+                    key: themeButtonKey,
                     icon: Icon(
                       context.watch<ThemeProvider>().themeMode == ThemeMode.dark
                           ? Icons.light_mode
@@ -101,6 +117,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                   children: [
                     // 사이드바
                     Container(
+                      key: sidebarKey,
                       width: 280,
                       decoration: BoxDecoration(
                         color: colorScheme.surface,
@@ -140,6 +157,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                                           style: textTheme.titleMedium?.copyWith(
                                             fontWeight: FontWeight.bold,
                                             color: colorScheme.primary,
+                                            inherit: true,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -176,6 +194,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                                           'PDF 파일이 없습니다',
                                           style: textTheme.bodyLarge?.copyWith(
                                             color: colorScheme.onSurfaceVariant,
+                                            inherit: true,
                                           ),
                                         ),
                                       ],
@@ -187,6 +206,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                                   itemCount: pdfProvider.pdfFiles.length,
                                   itemBuilder: (context, index) {
                                     return PDFListItem(
+                                      key: ValueKey('pdf_item_${pdfProvider.pdfFiles[index].id}'),
                                       pdfFile: pdfProvider.pdfFiles[index],
                                     );
                                   },
@@ -200,6 +220,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                     // 메인 컨텐츠
                     Expanded(
                       child: Container(
+                        key: contentKey,
                         decoration: BoxDecoration(
                           color: colorScheme.background.withOpacity(0.7),
                         ),
@@ -239,6 +260,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                                         style: textTheme.headlineMedium?.copyWith(
                                           color: colorScheme.primary,
                                           fontWeight: FontWeight.bold,
+                                          inherit: true,
                                         ),
                                       ),
                                       const SizedBox(height: 16),
@@ -246,6 +268,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                                         'PDF 파일을 드래그하여 놓거나\n파일 선택 버튼을 클릭하세요',
                                         style: textTheme.bodyLarge?.copyWith(
                                           color: colorScheme.onSurfaceVariant,
+                                          inherit: true,
                                         ),
                                         textAlign: TextAlign.center,
                                       ),
@@ -266,9 +289,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
             ),
             if (tutorialProvider.isFirstTime)
               TutorialOverlay(
-                onFinish: () {
-                  tutorialProvider.completeTutorial();
-                },
+                key: _tutorialOverlayKey,
+                child: Container(), // 실제 내용
               ),
           ],
         );
@@ -287,7 +309,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(width: 8),
-            const Text('AI PDF 학습 도우미 사용법'),
+            const Text('AI PDF 학습 도우미 사용법', style: TextStyle(inherit: true)),
           ],
         ),
         content: SizedBox(
@@ -346,7 +368,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('닫기'),
+            child: const Text('닫기', style: TextStyle(inherit: true)),
           ),
         ],
       ),
@@ -377,6 +399,7 @@ class _HelpSection extends StatelessWidget {
             style: theme.textTheme.titleMedium?.copyWith(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.bold,
+              inherit: true,
             ),
           ),
         ),
@@ -391,7 +414,7 @@ class _HelpSection extends StatelessWidget {
                 color: theme.colorScheme.primary,
               ),
               const SizedBox(width: 8),
-              Expanded(child: Text(item)),
+              Expanded(child: Text(item, style: const TextStyle(inherit: true))),
             ],
           ),
         )),

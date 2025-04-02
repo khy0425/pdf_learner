@@ -11,7 +11,8 @@ class LoginView extends StatefulWidget {
 }
 
 class _LoginViewState extends State<LoginView> {
-  final _formKey = GlobalKey<FormState>();
+  // 타임스탬프 기반 고유 키 사용
+  final _formKey = UniqueKey();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLogin = true; // true: 로그인, false: 회원가입

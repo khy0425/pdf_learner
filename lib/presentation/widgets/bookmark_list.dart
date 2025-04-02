@@ -43,6 +43,7 @@ class BookmarkList extends StatelessWidget {
                 fontSize: 16,
                 color: Colors.grey.shade600,
                 fontWeight: FontWeight.bold,
+                inherit: true,
               ),
             ),
             const SizedBox(height: 8),
@@ -51,6 +52,7 @@ class BookmarkList extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey.shade500,
+                inherit: true,
               ),
             ),
           ],
@@ -86,6 +88,7 @@ class BookmarkList extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,14 +97,12 @@ class BookmarkList extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      '${bookmark.pageNumber}',
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Icon(
+                      Icons.bookmark,
+                      size: 20,
+                      color: Colors.blue.shade700,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -111,57 +112,43 @@ class BookmarkList extends StatelessWidget {
                       children: [
                         Text(
                           bookmark.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
+                            inherit: true,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          formattedDate,
+                          '${bookmark.pageNumber} 페이지',
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontSize: 12,
+                            inherit: true,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  PopupMenuButton<String>(
-                    icon: Icon(
-                      Icons.more_vert,
-                      color: Colors.grey.shade700,
-                      size: 20,
-                    ),
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        onEditTap(bookmark);
-                      } else if (value == 'delete') {
-                        onDeleteTap(bookmark);
-                      }
-                    },
-                    itemBuilder: (BuildContext context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 20),
-                            SizedBox(width: 8),
-                            Text('수정'),
-                          ],
-                        ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 18),
+                        onPressed: () => onEditTap(bookmark),
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
                       ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 20),
-                            SizedBox(width: 8),
-                            Text('삭제'),
-                          ],
-                        ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.delete, size: 18),
+                        onPressed: () => onDeleteTap(bookmark),
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
                       ),
                     ],
                   ),
@@ -175,11 +162,13 @@ class BookmarkList extends StatelessWidget {
                     color: Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(4),
                   ),
+                  width: double.infinity,
                   child: Text(
-                    bookmark.note,
+                    bookmark.note.isNotEmpty ? bookmark.note : '메모 없음',
                     style: TextStyle(
                       color: Colors.grey.shade800,
                       fontSize: 14,
+                      inherit: true,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -191,21 +180,24 @@ class BookmarkList extends StatelessWidget {
                 Text(
                   '선택된 텍스트:',
                   style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
                     fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    inherit: true,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  bookmark.selectedText,
-                  style: TextStyle(
-                    color: Colors.grey.shade700,
-                    fontSize: 13,
-                    fontStyle: FontStyle.italic,
+                Container(
+                  width: double.infinity,
+                  child: Text(
+                    bookmark.selectedText,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      inherit: true,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ],

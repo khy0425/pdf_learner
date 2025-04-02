@@ -11,7 +11,8 @@ class ResetPasswordPage extends StatefulWidget {
 }
 
 class _ResetPasswordPageState extends State<ResetPasswordPage> {
-  final _formKey = GlobalKey<FormState>();
+  // 타임스탬프 기반 고유 키 사용
+  final _formKey = UniqueKey();
   final _emailController = TextEditingController();
 
   @override

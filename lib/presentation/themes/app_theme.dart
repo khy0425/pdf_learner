@@ -155,56 +155,56 @@ class AppTheme {
 // 앱에서 사용할 모든 텍스트 스타일 정의
 class AppTextStyles {
   // 헤더 스타일
-  static TextStyle h1 = TextStyle(
+  static TextStyle h1 = const TextStyle(
     fontSize: 24,
     fontWeight: FontWeight.bold,
     inherit: true,
   );
   
-  static TextStyle h2 = TextStyle(
+  static TextStyle h2 = const TextStyle(
     fontSize: 20,
     fontWeight: FontWeight.bold,
     inherit: true,
   );
   
-  static TextStyle h3 = TextStyle(
+  static TextStyle h3 = const TextStyle(
     fontSize: 18,
     fontWeight: FontWeight.bold,
     inherit: true,
   );
   
   // 본문 스타일
-  static TextStyle body = TextStyle(
+  static TextStyle body = const TextStyle(
     fontSize: 16,
     inherit: true,
   );
   
-  static TextStyle bodySmall = TextStyle(
+  static TextStyle bodySmall = const TextStyle(
     fontSize: 14,
     inherit: true,
   );
   
-  static TextStyle caption = TextStyle(
+  static TextStyle caption = const TextStyle(
     fontSize: 12,
     inherit: true,
   );
   
   // 강조 스타일
-  static TextStyle emphasis = TextStyle(
+  static TextStyle emphasis = const TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.w500,
     inherit: true,
   );
   
   // 버튼 스타일
-  static TextStyle button = TextStyle(
+  static TextStyle button = const TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.w500,
     inherit: true,
   );
   
   // 링크 스타일
-  static TextStyle link = TextStyle(
+  static TextStyle link = const TextStyle(
     fontSize: 16,
     decoration: TextDecoration.underline,
     inherit: true,

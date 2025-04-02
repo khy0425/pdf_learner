@@ -43,8 +43,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   /// PDF 제어 컨트롤러
   late PdfViewerController _pdfViewerController;
   
-  /// PDF 뷰어 키 - 정적으로 선언하여 여러 인스턴스 생성 방지
-  static final GlobalKey<SfPdfViewerState> _pdfViewerScreenKey = GlobalKey();
+  /// PDF 뷰어 키
+  final _pdfViewerScreenKey = UniqueKey();
   
   /// 현재 페이지
   int _currentPage = 1;
@@ -229,10 +229,15 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               key: _pdfViewerScreenKey,
               controller: _pdfViewerController,
               canShowPasswordDialog: true,
+              enableDoubleTapZooming: true,
+              pageSpacing: 4,
               onPageChanged: (PdfPageChangedDetails details) {
                 // 현재 페이지 정보 업데이트
                 final pdfViewModel = Provider.of<PDFViewModel>(context, listen: false);
                 pdfViewModel.saveLastReadPage(widget.document.id, details.newPageNumber);
+                setState(() {
+                  _currentPage = details.newPageNumber;
+                });
               },
               onDocumentLoaded: (PdfDocumentLoadedDetails details) {
                 // PDF 문서 로드 완료 시 처리
@@ -266,9 +271,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               },
             ),
             // 페이지 정보
-            Text(
-              '${_pdfViewerController.pageNumber} / ${widget.document.pageCount}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '${_pdfViewerController.pageNumber} / ${widget.document.pageCount}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, inherit: true),
+                ),
+              ),
             ),
             // 다음 페이지 버튼
             IconButton(
@@ -302,7 +311,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             Expanded(
               child: Text(
                 '이 문서는 만료되었습니다. 회원가입 후 문서를 영구적으로 저장하세요.',
-                style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.red.shade700, 
+                  fontWeight: FontWeight.bold,
+                  inherit: true,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -333,7 +346,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             Expanded(
               child: Text(
                 '이 문서는 $expirationDays일 후에 삭제됩니다. 회원가입하여 문서를 영구적으로 저장하세요.',
-                style: TextStyle(color: Colors.amber.shade800),
+                style: TextStyle(
+                  color: Colors.amber.shade800,
+                  inherit: true,
+                ),
               ),
             ),
             const SizedBox(width: 8),

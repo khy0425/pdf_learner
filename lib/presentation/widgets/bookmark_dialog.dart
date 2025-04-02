@@ -20,9 +20,6 @@ class BookmarkDialog extends StatefulWidget {
 }
 
 class _BookmarkDialogState extends State<BookmarkDialog> {
-  /// 폼 키
-  final _formKey = GlobalKey<FormState>();
-  
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -31,40 +28,32 @@ class _BookmarkDialogState extends State<BookmarkDialog> {
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 18,
+          inherit: true,
         ),
       ),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextFormField(
-              controller: widget.titleController,
-              decoration: const InputDecoration(
-                labelText: '제목',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return '제목을 입력해주세요';
-                }
-                return null;
-              },
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            controller: widget.titleController,
+            decoration: const InputDecoration(
+              labelText: '제목',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: widget.noteController,
-              decoration: const InputDecoration(
-                labelText: '메모',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              ),
-              maxLines: 4,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: widget.noteController,
+            decoration: const InputDecoration(
+              labelText: '메모',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
-          ],
-        ),
+            maxLines: 4,
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -73,12 +62,19 @@ class _BookmarkDialogState extends State<BookmarkDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              Navigator.of(context).pop({
-                'title': widget.titleController.text,
-                'note': widget.noteController.text,
-              });
+            // 직접 유효성 검사
+            if (widget.titleController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('제목을 입력해주세요')),
+              );
+              return;
             }
+            
+            // 유효한 경우 결과 반환
+            Navigator.of(context).pop({
+              'title': widget.titleController.text,
+              'note': widget.noteController.text,
+            });
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blue,

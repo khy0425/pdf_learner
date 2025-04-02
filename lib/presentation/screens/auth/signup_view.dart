@@ -19,7 +19,8 @@ class SignUpView extends StatefulWidget {
 }
 
 class _SignUpViewState extends State<SignUpView> {
-  final _formKey = GlobalKey<FormState>();
+  // 타임스탬프 기반 고유 키 사용
+  final _formKey = UniqueKey();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();

@@ -16,8 +16,8 @@ class PdfFileInfo {
   /// 마지막 수정 시간
   final DateTime? lastModified;
   
-  /// 썸네일 데이터
-  final Uint8List? thumbnail;
+  /// 썸네일 경로
+  final String? thumbnailPath;
   
   /// 선택 여부
   final bool isSelected;
@@ -82,7 +82,7 @@ class PdfFileInfo {
     required this.name,
     required this.size,
     this.lastModified,
-    this.thumbnail,
+    this.thumbnailPath,
     this.isSelected = false,
     this.isFavorite = false,
     this.id = '',
@@ -120,7 +120,7 @@ class PdfFileInfo {
   
   /// 파일 인스턴스에서 생성
   factory PdfFileInfo.fromFile(File file, {
-    Uint8List? thumbnail,
+    String? thumbnailPath,
     bool isSelected = false,
     bool isFavorite = false,
     String? id,
@@ -134,7 +134,7 @@ class PdfFileInfo {
       name: fileName,
       size: file.lengthSync(),
       lastModified: file.lastModifiedSync(),
-      thumbnail: thumbnail,
+      thumbnailPath: thumbnailPath,
       isSelected: isSelected,
       isFavorite: isFavorite,
       id: id ?? '',
@@ -151,7 +151,7 @@ class PdfFileInfo {
     String? name,
     int? size,
     DateTime? lastModified,
-    Uint8List? thumbnail,
+    String? thumbnailPath,
     bool? isSelected,
     bool? isFavorite,
     String? id,
@@ -177,7 +177,7 @@ class PdfFileInfo {
       name: name ?? this.name,
       size: size ?? this.size,
       lastModified: lastModified ?? this.lastModified,
-      thumbnail: thumbnail ?? this.thumbnail,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
       isSelected: isSelected ?? this.isSelected,
       isFavorite: isFavorite ?? this.isFavorite,
       id: id ?? this.id,

@@ -11,6 +11,7 @@ class ThemeViewModel extends ChangeNotifier {
   
   ThemeMode _themeMode = ThemeMode.system;
   final SharedPreferences _prefs;
+  bool _isChangingTheme = false; // 테마 변경 중 상태 표시
   
   // 사용할 테마 - core/theme/app_theme.dart에서 가져옴
   ThemeData get lightTheme => AppTheme.lightTheme;
@@ -47,7 +48,7 @@ class ThemeViewModel extends ChangeNotifier {
         _themeMode = ThemeMode.system;
       }
       
-      // 상태바 스타일 설정
+      // 상태바 스타일 설정 (빌드 과정에서 호출되지 않도록 초기화 시에만 실행)
       _updateSystemUI();
       
       notifyListeners();
@@ -56,10 +57,11 @@ class ThemeViewModel extends ChangeNotifier {
     }
   }
   
-  /// 테마 모드 설정
+  /// 테마 모드 설정 - 안전하게 처리
   Future<void> setThemeMode(ThemeMode mode) async {
-    if (_themeMode == mode) return;
+    if (_themeMode == mode || _isChangingTheme) return;
     
+    _isChangingTheme = true;
     _themeMode = mode;
     
     // 설정 저장
@@ -78,19 +80,27 @@ class ThemeViewModel extends ChangeNotifier {
     
     await _prefs.setString('themeMode', modeString);
     
-    // 시스템 UI 업데이트
-    _updateSystemUI();
-    
-    notifyListeners();
+    // 지연 처리하여 빌드 사이클 충돌 방지
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 시스템 UI 업데이트
+      _updateSystemUI();
+      notifyListeners();
+      _isChangingTheme = false;
+    });
   }
   
-  /// 테마 모드 전환
+  /// 테마 모드 전환 - 빌드 중 setState 방지를 위한 개선
   Future<void> toggleTheme() async {
-    final newMode = _themeMode == ThemeMode.light 
-        ? ThemeMode.dark 
-        : (_themeMode == ThemeMode.dark ? ThemeMode.system : ThemeMode.light);
+    if (_isChangingTheme) return;
     
-    await setThemeMode(newMode);
+    // 다음 프레임에서 처리하여 빌드 중 상태 변경 방지
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final newMode = _themeMode == ThemeMode.light 
+          ? ThemeMode.dark 
+          : (_themeMode == ThemeMode.dark ? ThemeMode.system : ThemeMode.light);
+      
+      setThemeMode(newMode);
+    });
   }
   
   /// 현재 테마 모드에 맞는 ThemeData 반환
@@ -133,9 +143,16 @@ class ThemeViewModel extends ChangeNotifier {
   
   // 커스텀 테마 적용 (옵션)
   void applyCustomTheme(ThemeData lightTheme, ThemeData darkTheme) {
-    // 직접 테마를 관리하지 않고, AppTheme에서 정의된 테마 사용
-    // 필요한 경우 AppTheme 클래스에 커스텀 테마 적용 메서드 추가 필요
-    _updateSystemUI();
-    notifyListeners();
+    if (_isChangingTheme) return;
+    
+    _isChangingTheme = true;
+    // 지연 처리하여 빌드 사이클 충돌 방지
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 직접 테마를 관리하지 않고, AppTheme에서 정의된 테마 사용
+      // 필요한 경우 AppTheme 클래스에 커스텀 테마 적용 메서드 추가 필요
+      _updateSystemUI();
+      notifyListeners();
+      _isChangingTheme = false;
+    });
   }
 } 

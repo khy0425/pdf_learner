@@ -15,7 +15,8 @@ class ApiKeyManagementView extends StatefulWidget {
 }
 
 class _ApiKeyManagementViewState extends State<ApiKeyManagementView> {
-  final _formKey = GlobalKey<FormState>();
+  // 타임스탬프 기반 고유 키 사용
+  final _formKey = UniqueKey();
   final _apiKeyController = TextEditingController();
   String? _userProvidedApiKey;
   bool _isLoading = false;

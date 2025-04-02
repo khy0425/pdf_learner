@@ -263,23 +263,28 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> with SingleTickerPr
     }
 
     return _isGridView
-        ? GridView.builder(
-            padding: const EdgeInsets.all(8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.7,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            itemCount: documents.length,
-            itemBuilder: (context, index) {
-              final pdfFile = documents[index];
-              return PdfGridItem(
-                pdfFile: pdfFile,
-                onTap: (file) => _openPdf(context, file),
-                onFavoriteToggle: (file) => _toggleFavorite(file),
-                onDelete: (file) => _showDeleteDialog(file),
-                key: ValueKey('pdf_grid_${pdfFile.id}'),
+        ? LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+              return GridView.builder(
+                padding: const EdgeInsets.all(8),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 0.7,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: documents.length,
+                itemBuilder: (context, index) {
+                  final pdfFile = documents[index];
+                  return PdfGridItem(
+                    pdfFile: pdfFile,
+                    onTap: (file) => _openPdf(context, file),
+                    onFavoriteToggle: (file) => _toggleFavorite(file),
+                    onDelete: (file) => _showDeleteDialog(file),
+                    key: ValueKey('pdf_grid_${pdfFile.id}'),
+                  );
+                },
               );
             },
           )

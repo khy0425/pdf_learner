@@ -23,7 +23,8 @@ class GeminiApiKeyView extends StatefulWidget {
 }
 
 class _GeminiApiKeyViewState extends State<GeminiApiKeyView> {
-  final _formKey = GlobalKey<FormState>();
+  // 타임스탬프 기반 고유 키 사용
+  final _formKey = UniqueKey();
   final _apiKeyController = TextEditingController();
   bool _isApiKeyVisible = false;
   bool _isLoading = false;
